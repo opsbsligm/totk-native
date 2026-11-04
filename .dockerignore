@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!requirements-build.lock
+!tools/
+tools/**
+!tools/build_deps.sh
