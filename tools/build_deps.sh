@@ -84,8 +84,8 @@ if [[ "$PART" == all || "$PART" == ffmpeg ]] && [ ! -f "$P/lib/libavcodec.so" ];
     unpack ffmpeg-9.0.2-git.tar.gz ffmpeg
     (cd "$W/ffmpeg" && ./configure --prefix="$P" "${FF_CROSS[@]}" --arch="$ARCH" --target-os=linux \
         --enable-shared --disable-static --enable-pic \
-        --disable-autodetect --disable-programs --enable-ffmpeg --enable-muxer=null --enable-encoder=wrapped_avframe,pcm_s16le --disable-doc --disable-network --disable-avdevice --enable-avfilter \
-        --enable-swresample --enable-filter=aformat,anull,atrim,format,null,trim,aresample --disable-everything \
+        --disable-everything --disable-autodetect --disable-programs --enable-ffmpeg --enable-muxer=null --enable-encoder=wrapped_avframe,pcm_s16le --disable-doc --disable-network --disable-avdevice --enable-avfilter \
+        --enable-swresample --enable-filter=aformat,anull,atrim,format,null,trim,aresample \
         --enable-protocol=file --enable-demuxer=matroska,mov \
         --enable-decoder=vp9,vp8,vorbis,opus,h264,aac --enable-parser=vp9,vp8,vorbis,opus,h264,aac \
         && make -j"$JOBS" && make install)

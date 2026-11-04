@@ -21,7 +21,7 @@ variables:
   GITLAB_ADVANCED_SAST_ENABLED: "true"
   GITLAB_ADVANCED_SAST_CPP_ENABLED: "true"
 default:
-  tags: [安全扫描]
+  tags: [native-games]
   timeout: 40 minutes
 
 native-unit:
@@ -37,11 +37,10 @@ native-unit:
 native-build:
   needs: []
   tags: [native-games]
-  image: native-games/toolchain:e40e026f8befe2010687
+  image: native-games/toolchain:10b59487b9b121945f05
   script:
     - mkdir -p out/home
     - export HOME="$CI_PROJECT_DIR/out/home"
-    - python3 tools/check_toolchain.py
     - export NATIVE_SOURCE_CHECK="/tmp/native-source-${CI_JOB_ID}"
     - mkdir -p "$NATIVE_SOURCE_CHECK/source"
     - trap 'rm -rf "$NATIVE_SOURCE_CHECK"' EXIT
@@ -52,10 +51,11 @@ native-build:
     - mkdir -p out/compiler-policy
     - cd out/compiler-policy && python3 ../../tools/test_compile_policy.py && cd ../..
     - python3 tools/audit_linux_runtime.py --build out/public/runtime --evidence out/public/link-audit
+    - python3 .gitlab/prepare_cpp_scan.py --source "$NATIVE_SOURCE_CHECK/source" --build out/public --output out/cppscan
   artifacts:
     when: always
     expire_in: 7 days
-    paths: [out/public/logs/, out/public/link-audit/]
+    paths: [out/public/logs/, out/public/link-audit/, out/cppscan.tar.gz]
 
 container_scanning:
   image: registry.gitlab.com/security-products/container-scanning@sha256:f86aa7593f200e76a7fae6fb9a65d1fafefa009060d47d93fba7490de9e79528
@@ -63,7 +63,7 @@ container_scanning:
   needs: []
   variables:
     GIT_STRATEGY: fetch
-    CS_native-games/toolchain:e40e026f8befe2010687: "archive://out/toolchain.tar.gz"
+    CS_IMAGE: "archive://out/toolchain.tar.gz"
     CS_DISABLE_LANGUAGE_VULNERABILITY_SCAN: "false"
   before_script:
     - ruby .gitlab/fetch_toolchain.rb
@@ -80,6 +80,16 @@ gitlab-advanced-sast:
   allow_failure: false
 
 gitlab-advanced-sast-cpp:
+  needs:
+    - job: native-build
+      artifacts: true
+  variables:
+    SAST_COMPILATION_DATABASE: "out/cppscan/compile_commands.json"
+  before_script:
+    - tar -xzf out/cppscan.tar.gz -C out
+  artifacts:
+    when: always
+    paths: [out/cppscan/coverage-input.json]
   image: registry.gitlab.com/security-products/clangsa@sha256:9aff93a28ad09aaffd1701747e350d643ce31e3f6f8a561541e6d95021fb32f3
   allow_failure: false
 

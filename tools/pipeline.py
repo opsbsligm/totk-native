@@ -80,6 +80,8 @@ def main():
     a.work = a.work.resolve()
     a.work.mkdir(parents=True, exist_ok=True)
     (a.work / 'home').mkdir(exist_ok=True)
+    from check_toolchain import main as check_toolchain
+    check_toolchain()
     if a.command == 'runtime':
         runtime(a.work, a.jobs)
         return

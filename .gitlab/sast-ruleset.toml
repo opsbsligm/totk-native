@@ -1,0 +1,6 @@
+[gitlab-advanced-sast-cpp]
+  description = "Match analysis workers to the isolated runner CPU quota; retain all bundled checkers"
+  [[gitlab-advanced-sast-cpp.passthrough]]
+    mode = "append"
+    type = "file"
+    value = ".gitlab/clangsa-resources.yml"
