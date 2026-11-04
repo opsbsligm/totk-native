@@ -5,7 +5,7 @@ usage: python tools/pack_romfs.py <romfs folder> <out dir> [--threads 16]
 Why one file: opening a file costs ~5 ms cold on Windows (measured on 304 243 files of TOTK 1.4.3: 17 MiB/s one by one,
 110 MiB/s with 16 threads, one image read 446 MiB/s), so the game and the build tools read one image instead of
 hundreds of thousands of files. The folder is read with --threads readers, in order, a batch at a time.
-Prints the content hash: SHA-256 over the SHA-256 of every file in path order (tools/setup.py compares it with the
+Prints the content hash: SHA-256 over the SHA-256 of every file in path order (tools/setup_windows.py compares it with the
 version the port is made for). Game-derived data: stays out of git.
 """
 import argparse

@@ -1,4 +1,4 @@
-"""Does this PC have a graphics card the game can run on? Asked before the build (tools/setup.py, step check).
+"""Does this PC have a graphics card the game can run on? Asked before the build (tools/setup_windows.py, step check).
 
 The game needs what src/vk/vk.c asks for: Vulkan 1.3 with VK_EXT_shader_object, VK_EXT_external_memory_host and
 VK_KHR_swapchain. A Radeon RX 570 (Polaris, Windows) builds for 40 minutes and then stops at start with "Vulkan 1.3

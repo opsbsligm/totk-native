@@ -2,7 +2,7 @@
 
 usage: python tools/build_game.py [--generated data/generated] [--target probe_cpu] [-j N] [--cpus N]
 The ultratears target links UltraTears.exe in the game folder itself (its debug symbols: build/UltraTears.pdb).
-Run in the game folder (tools/setup.py does): the generated C is in data/ (derived from the game), objects and
+Run in the game folder (tools/setup_windows.py does): the generated C is in data/ (derived from the game), objects and
 executables go to build/; neither is ever in git.
 """
 import argparse

@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -18,6 +19,24 @@ def module(name, relative):
 
 
 class Boundaries(unittest.TestCase):
+    def test_totk_launch_preserves_measured_clock_and_uncapped_interval(self):
+        entry = module('totk_launch', 'packaging/run.py')
+        class LaunchCaptured(Exception):
+            pass
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            directory = Path(tmp)
+            (directory / 'bundle.json').write_text(json.dumps(dict(schema=1, version='1.4.3', files={})))
+            with patch.object(entry, 'ROOT', directory), patch.dict(os.environ,
+                    {'XDG_DATA_HOME': str(directory / 'state'), 'XDG_CACHE_HOME': str(directory / 'cache')}, clear=True), \
+                 patch.object(entry.os, 'chdir'), patch.object(entry.os, 'execvpe', side_effect=LaunchCaptured) as execute, \
+                 patch.object(entry.sys, 'argv', ['run.py']):
+                with self.assertRaises(LaunchCaptured):
+                    entry.main()
+                env = execute.call_args.args[2]
+                for name in ('TOTK_UNCAPPED', 'TOTK_UNCAPPED_INTERVAL', 'TOTK_REALTIME', 'TOTK_FPS60', 'TOTK_STEAMDECK_UI'):
+                    self.assertEqual(env[name], '1', name)
+                self.assertEqual(env['TOTK_UNCAPPED_HZ'], '60')
+
     def test_build_outputs_cannot_overlap_checkout(self):
         entry = module('entry', 'build.py')
         for path in (ROOT, ROOT / 'out', ROOT.parent):

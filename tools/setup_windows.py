@@ -3,7 +3,7 @@
 From a Git checkout the build goes to dist\\, or to --output <folder>: the tracked source files are copied there. In a
 builder package or a source folder without Git setup runs in place. Build tools this PC lacks are downloaded into
 deps\\ from where they are published (tools/deps_install.py, pinned in tools/deps.json); a builder package has them.
-usage: python tools/setup.py [--output <build folder>] [--dump <folder with exefs\\ and romfs\\>] [--cpus N]
+usage: python tools/setup_windows.py [--output <build folder>] [--dump <folder with exefs\\ and romfs\\>] [--cpus N]
 The dump is game\\ in the checkout/build folder unless --dump names another (remembered for later runs); run it again
 to resume, or to rebuild what changed after an update of the port.
 The dump: the ExeFS and RomFS of The Legend of Zelda: Tears of the Kingdom with update 1.4.3 applied, as plain files,
@@ -173,7 +173,7 @@ def build_from_checkout(a):
     except (Fail, deps_install.DepsError) as e:
         say(f'\nERROR preparing the build folder: {e}')
         return 1
-    cmd = [str(py), str(home / 'tools/setup.py'), '--in-place', '--cpus', str(a.cpus),
+    cmd = [str(py), str(home / 'tools/setup_windows.py'), '--in-place', '--cpus', str(a.cpus),
            '--dump', str(choose_dump(home, a.dump))]
     if a.only:
         cmd += ['--only', a.only]
@@ -412,7 +412,7 @@ def step_textures(dump, state, cpus):
 
 def step_finish(dump, state, cpus):
     fonts = dump / 'sysdata/fonts'
-    lines = ['# Written by tools/setup.py: where UltraTears finds its data (relative to this folder).',
+    lines = ['# Written by tools/setup_windows.py: where UltraTears finds its data (relative to this folder).',
              'exefs=data/exefs', 'romfs=data/romfs', 'shaderpack=data/shaders/translated.pack', 'compiled=data/shaders/compiled.bin',
              'textures=data/textures',
              'saves=userdata']
@@ -472,7 +472,7 @@ def main():
     if is_checkout() and not a.in_place:
         sys.exit(build_from_checkout(a))
     if a.output:
-        ap.error('--output is used only when setup.py is run from a Git checkout')
+        ap.error('--output is used only when setup_windows.py is run from a Git checkout')
     # The build runs on a Python 3.14 with the build's packages (deps_install.python_for), whichever Python started
     # setup: a source folder without Git (GitHub's Download ZIP) went on with the player's own, which may lack them or
     # be a version they do not install on. Then the rest of the tools, installed when this PC lacks them.
@@ -483,7 +483,7 @@ def main():
         sys.exit(1)
     if pathlib.Path(sys.executable).resolve() != py.resolve() and not os.environ.get('ULTRATEARS_SETUP_OWN_PYTHON'):
         env = dict(os.environ, PYTHONNOUSERSITE='1', ULTRATEARS_SETUP_OWN_PYTHON='1')
-        sys.exit(subprocess.run([str(py), str(ROOT / 'tools/setup.py')] + sys.argv[1:], cwd=ROOT, env=env).returncode)
+        sys.exit(subprocess.run([str(py), str(ROOT / 'tools/setup_windows.py')] + sys.argv[1:], cwd=ROOT, env=env).returncode)
     try:
         deps_install.ensure_tools(ROOT)
     except deps_install.DepsError as e:

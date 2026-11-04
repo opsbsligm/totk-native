@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpulse-dev libasound2-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev libibus-1.0-dev \
     libvulkan-dev libssl-dev libopus-dev libvpx-dev libzstd-dev zlib1g-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && for t in clang clang++ ld.lld llvm-ar llvm-nm llvm-ranlib llvm-strip; do ln -sf $t-18 /usr/local/bin/$t; done
+    && for t in clang clang++ ld.lld llvm-ar llvm-nm llvm-ranlib llvm-strip; do ln -sf /usr/bin/$t-18 /usr/local/bin/$t; done
 
 FROM system AS generator
 COPY requirements-build.lock /opt/requirements-build.lock
@@ -22,7 +22,13 @@ ENV PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin
 FROM system AS native-deps
 ARG JOBS=2
 COPY tools/build_deps.sh /opt/build_deps.sh
-RUN --mount=type=bind,from=distfiles,target=/distfiles,ro mkdir -p /opt/native-deps && bash /opt/build_deps.sh x86_64 \
+RUN --mount=type=bind,from=distfiles,target=/distfiles,ro mkdir -p /opt/native-deps && bash /opt/build_deps.sh x86_64 headers \
+    && rm -rf /opt/native-deps/build/linux/src /opt/native-deps/build/linux/x86_64/deps-build
+RUN --mount=type=bind,from=distfiles,target=/distfiles,ro mkdir -p /opt/native-deps && bash /opt/build_deps.sh x86_64 sdl \
+    && rm -rf /opt/native-deps/build/linux/src /opt/native-deps/build/linux/x86_64/deps-build
+RUN --mount=type=bind,from=distfiles,target=/distfiles,ro mkdir -p /opt/native-deps && bash /opt/build_deps.sh x86_64 ffmpeg \
+    && rm -rf /opt/native-deps/build/linux/src /opt/native-deps/build/linux/x86_64/deps-build
+RUN --mount=type=bind,from=distfiles,target=/distfiles,ro mkdir -p /opt/native-deps && bash /opt/build_deps.sh x86_64 shaderc \
     && rm -rf /opt/native-deps/build/linux/src /opt/native-deps/build/linux/x86_64/deps-build
 
 FROM native-deps AS toolchain

@@ -45,7 +45,9 @@ def main():
         p.error('Use an x86_64 Linux build host, including Steam Deck Desktop Mode')
     if not shutil.which('docker'):
         p.error('Docker with a running daemon is required')
-    a.work.mkdir(parents=True, exist_ok=True)
+    a.work.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if a.work.stat().st_uid == os.getuid():
+        a.work.chmod(a.work.stat().st_mode | 0o700)
     free = shutil.disk_usage(a.work).free // 2**30
     required = 100 if a.command == 'build' else 10
     if free < required:
@@ -53,6 +55,7 @@ def main():
     print(f'Work: {a.work}; free: {free} GiB; estimated additional peak: {required} GiB', flush=True)
     image = image_name()
     if a.command == 'doctor':
+        subprocess.run(['docker', 'buildx', 'version'], check=True)
         subprocess.run(['docker', 'info', '--format', '{{.OSType}}/{{.Architecture}}'], check=True)
         if a.dump:
             for name in ('exefs', 'romfs'):

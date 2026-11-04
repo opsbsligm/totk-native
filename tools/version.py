@@ -1,8 +1,8 @@
 """The port's version: one source, the git tag v<version> on the release commit.
 
   - a release: the tag on HEAD (tools/make_package.py and tools/public_tree.py refuse an untagged HEAD);
-  - a builder package or an output folder made by tools/setup.py has no .git: VERSION.txt at its root says it
-    ("UltraTears <version> (commit <hash>)", written by make_package.py / setup.py);
+  - a builder package or an output folder made by tools/setup_windows.py has no .git: VERSION.txt at its root says it
+    ("UltraTears <version> (commit <hash>)", written by make_package.py / setup_windows.py);
   - a clone: git describe, e.g. 0.1.0-3-gabc1234-dirty between releases;
   - a source ZIP from GitHub (no .git): tools/archive-version.txt, which git archive fills in (.gitattributes:
     export-subst) with the commit and its describe.

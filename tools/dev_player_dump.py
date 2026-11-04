@@ -1,8 +1,8 @@
 """Development: lay out the development extraction as a player's dump (a folder with exefs/ and romfs/ of plain files),
-to test tools/setup.py and the RomFS folder mode as a player would meet them.
+to test tools/setup_windows.py and the RomFS folder mode as a player would meet them.
 
 usage: python tools/dev_player_dump.py --src <extraction: exefs/ and romfs/ with romfs.bin> [--out game]
-Game-derived data: written to game/ (ignored by git, where tools/setup.py looks for the dump) or --out, never in git.
+Game-derived data: written to game/ (ignored by git, where tools/setup_windows.py looks for the dump) or --out, never in git.
 """
 import argparse
 import json

@@ -17,7 +17,7 @@ BASES = {'main': (0x0800000000, 0x0804000000),
 
 def expected():
     values = {}
-    for node in ast.parse((ROOT / 'tools/setup.py').read_text()).body:
+    for node in ast.parse((ROOT / 'tools/setup_windows.py').read_text()).body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             name = node.targets[0].id
             if name in ('EXEFS', 'ROMFS_FILES', 'ROMFS_BYTES', 'ROMFS_CONTENT'):

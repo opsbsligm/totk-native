@@ -2,7 +2,7 @@
 
 tools/deps.json pins every download (URL, size, hash); nothing of it is in git and nothing comes from an UltraTears
 release. Each part is used from the PC when it is already there, else installed into deps/:
-  - Python 3.14 with lz4, capstone and unicorn: the Python running setup.py when it is 3.14+ and has them, else
+  - Python 3.14 with lz4, capstone and unicorn: the Python running setup_windows.py when it is 3.14+ and has them, else
     deps/python (python.org's NuGet package, the wheels from PyPI unpacked into it; no pip, no compiler);
   - clang, lld, ninja and the libraries the port links (MSYS2 CLANG64): deps/clang64, ULTRS_CLANG64 or
     C:/msys64/clang64 when it has them, else deps/clang64 from repo.msys2.org;
@@ -216,7 +216,7 @@ def install_python(home):
     m = manifest()
     own = (home / 'deps/python').resolve()
     if pathlib.Path(sys.executable).resolve().is_relative_to(own):
-        raise DepsError('deps\\python is outdated but is the Python running setup: start setup.py with another Python')
+        raise DepsError('deps\\python is outdated but is the Python running setup: start setup_windows.py with another Python')
     cache = home / 'deps/downloads'
     say(f'  Python {m["python"]["version"]} with {", ".join(PACKAGES)} -> deps\\python')
     files = fetch_all([m['python']] + m['wheels'], cache, 'Python')

@@ -2,7 +2,7 @@
 
 usage: python tools/make_package.py [--home dist] [--python <Python 3.14>] [--no-zip]
 The version is the tag v<x.y.z> on HEAD (tools/version.py): tag the release commit first.
-Run on the developer's machine after a complete build in the game folder --home (tools/setup.py --output: its build/build.ninja
+Run on the developer's machine after a complete build in the game folder --home (tools/setup_windows.py --output: its build/build.ninja
 and objects tell which parts of clang64 the build reads) and tools/build_xlate.py (dev-local/build/shaders):
   - the source: the public tree of HEAD (tools/public_tree.py: what git tracks, without the internal notes), so nothing
     made from the game can slip in;
@@ -49,9 +49,9 @@ rem UltraTears: build the game from your own dump. Put your extracted exefs and 
 rem run this file (or drag a dump folder kept elsewhere onto it). Run it again to resume, or after an update.
 cd /d "%~dp0"
 if "%~1"=="" (
-  "deps\python\python.exe" tools\setup.py
+  "deps\python\python.exe" tools\setup_windows.py
 ) else (
-  "deps\python\python.exe" tools\setup.py --dump "%~1"
+  "deps\python\python.exe" tools\setup_windows.py --dump "%~1"
 )
 echo.
 pause
@@ -183,7 +183,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--python', type=pathlib.Path, default=pathlib.Path(sys.base_prefix))
     ap.add_argument('--no-zip', action='store_true')
-    ap.add_argument('--home', type=pathlib.Path, default=ROOT / 'dist')   # tools/setup.py's default output
+    ap.add_argument('--home', type=pathlib.Path, default=ROOT / 'dist')   # tools/setup_windows.py's default output
     a = ap.parse_args()
     if git('status', '--porcelain', '--untracked-files=no').strip():
         sys.exit('the working tree has uncommitted changes: commit first, the package must be the commit it names')
@@ -193,7 +193,7 @@ def main():
     home, xlate = a.home.resolve(), ROOT / 'dev-local/build/shaders/ultrs-shaders.exe'
     for need in (home / 'UltraTears.exe', home / 'build/build.ninja', xlate):
         if not need.is_file():
-            sys.exit(f'{need} is missing: build first (tools/setup.py --output, tools/build_xlate.py)')
+            sys.exit(f'{need} is missing: build first (tools/setup_windows.py --output, tools/build_xlate.py)')
     name = f'UltraTears-builder-{a.version}-windows-x86_64'
     out = ROOT / 'dev-local/dist' / name
     if out.exists():

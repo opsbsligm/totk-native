@@ -15,11 +15,16 @@ workflow:
     - if: '$CI_COMMIT_BRANCH'
 
 stages: [test]
+variables:
+  AST_ENABLE_MR_PIPELINES: "true"
+  GITLAB_ADVANCED_SAST_ENABLED: "true"
+  GITLAB_ADVANCED_SAST_CPP_ENABLED: "true"
 default:
   tags: [安全扫描]
   timeout: 40 minutes
 
 native-unit:
+  needs: []
   tags: [gitlab--duo]
   image: local.gitlab-ci.invalid/gitlab-org/duo-workflow/default-docker-image/workflow-generic-image:v0.0.23
   script:
@@ -29,8 +34,9 @@ native-unit:
     - python3 -B -m unittest discover -s "$CI_PROJECT_DIR/tests" -v
 
 native-build:
+  needs: []
   tags: [local, homelab]
-  image: native-games/toolchain:4186fb985a5276ae3530
+  image: native-games/toolchain:0ecac47aaee7f435e9cc
   variables:
     HOME: "$CI_PROJECT_DIR/out/home"
   script:
@@ -44,6 +50,15 @@ native-build:
 
 semgrep-sast:
   image: registry.gitlab.com/security-products/semgrep@sha256:6438917354ac62eebd1a85ba7dcd6d597f1bf4613ec6ea9eb61892cf4c3b4732
+  allow_failure: false
+
+gitlab-advanced-sast:
+  allow_failure: false
+
+gitlab-advanced-sast-cpp:
+  allow_failure: false
+
+gitlab-advanced-sast-ext:
   allow_failure: false
 
 secret_detection:
