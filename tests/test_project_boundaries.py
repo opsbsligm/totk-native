@@ -37,6 +37,16 @@ class Boundaries(unittest.TestCase):
                     self.assertEqual(env[name], '1', name)
                 self.assertEqual(env['TOTK_UNCAPPED_HZ'], '60')
 
+    def test_launcher_rejects_the_other_game_profile(self):
+        entry = module('profile_launch', 'packaging/run.py')
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            directory = Path(tmp)
+            (directory / 'bundle.json').write_text(json.dumps(dict(schema=1, version='1.6.0', files={})))
+            with patch.object(entry, 'ROOT', directory), patch.object(entry.sys, 'argv', ['run.py', '--verify']):
+                with self.assertRaises(SystemExit) as failure:
+                    entry.main()
+                self.assertEqual(failure.exception.code, 2)
+
     def test_build_outputs_cannot_overlap_checkout(self):
         entry = module('entry', 'build.py')
         for path in (ROOT, ROOT / 'out', ROOT.parent):
