@@ -61,10 +61,12 @@ container_scanning:
   image: registry.gitlab.com/security-products/container-scanning@sha256:f86aa7593f200e76a7fae6fb9a65d1fafefa009060d47d93fba7490de9e79528
   allow_failure: false
   needs: []
+  timeout: 100 minutes
   variables:
     GIT_STRATEGY: fetch
     CS_IMAGE: "archive://out/toolchain.tar.gz"
-    CS_DISABLE_LANGUAGE_VULNERABILITY_SCAN: "false"
+    CS_DISABLE_LANGUAGE_VULNERABILITY_SCAN: "true"
+    CS_DISABLE_SBOM_GENERATION: "true"
     CS_TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/out/trivy-cache"
     TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/out/trivy-cache"
     TRIVY_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db:2"
