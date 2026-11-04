@@ -1,6 +1,7 @@
 include:
   - template: Jobs/SAST.gitlab-ci.yml
   - template: Jobs/Secret-Detection.gitlab-ci.yml
+  - template: Jobs/Container-Scanning.gitlab-ci.yml
   - template: Jobs/Dependency-Scanning.v2.gitlab-ci.yml
     inputs:
       allow_failure: false
@@ -37,10 +38,9 @@ native-build:
   needs: []
   tags: [native-games]
   image: native-games/toolchain:e40e026f8befe2010687
-  variables:
-    HOME: "$CI_PROJECT_DIR/out/home"
   script:
     - mkdir -p out/home
+    - export HOME="$CI_PROJECT_DIR/out/home"
     - python3 tools/check_toolchain.py
     - export NATIVE_SOURCE_CHECK="/tmp/native-source-${CI_JOB_ID}"
     - mkdir -p "$NATIVE_SOURCE_CHECK/source"
@@ -56,6 +56,17 @@ native-build:
     when: always
     expire_in: 7 days
     paths: [out/public/logs/, out/public/link-audit/]
+
+container_scanning:
+  image: registry.gitlab.com/security-products/container-scanning@sha256:f86aa7593f200e76a7fae6fb9a65d1fafefa009060d47d93fba7490de9e79528
+  allow_failure: false
+  needs: []
+  variables:
+    GIT_STRATEGY: fetch
+    CS_native-games/toolchain:e40e026f8befe2010687: "archive://out/toolchain.tar.gz"
+    CS_DISABLE_LANGUAGE_VULNERABILITY_SCAN: "false"
+  before_script:
+    - ruby .gitlab/fetch_toolchain.rb
 
 dependency-scanning:
   image: registry.gitlab.com/security-products/dependency-scanning@sha256:50ecac454e31b3177c9119b85141592b57c2ee3835e051d77ac72c0c5a77980f
