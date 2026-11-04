@@ -53,6 +53,7 @@ def bundle_libraries(binary, directory):
     subprocess.run(['patchelf', '--set-rpath', '$ORIGIN/lib', str(binary)], check=True)
 
 
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--work', type=Path, required=True)
@@ -64,61 +65,34 @@ def main():
     verify(work, 'code')
     verify(work, 'assets')
     profile = json.loads((ROOT / 'UPSTREAM.json').read_text())
-    totk = profile['game_version'] == '1.4.3'
     target = work / 'package'
     staging = work / 'package.new'
     if target.exists() or staging.exists():
         p.error('Package already exists; move it aside explicitly before creating a replacement')
     staging.mkdir()
     try:
-        if totk:
-            from font_inputs import validate_shared_fonts
-            validate_shared_fonts(dump / 'fonts')
-            from linux_inputs import check_exefs, verify_generated
-            check_exefs(dump / 'exefs')
-            verify_generated(work / 'data/generated', dump / 'exefs')
-            receipt = json.loads((work / 'game/ultratears.build.json').read_text())
-            if receipt['binary_sha256'] != digest(work / 'game/ultratears'):
-                raise ValueError('Game executable differs from successful build receipt')
-            executable = 'ultratears'
-            shutil.copy2(work / 'game' / executable, staging / executable)
-            (staging / 'data').mkdir()
-            for name in ('romfs', 'shaders', 'textures'):
-                copy_tree(work / 'data' / name, staging / 'data' / name)
-            copy_tree(dump / 'exefs', staging / 'data/exefs')
-            copy_tree(dump / 'fonts', staging / 'data/fonts')
-            fonts = ['0-standard', '1-chinese-simplified', '2-chinese-simplified-extension',
-                     '3-chinese-traditional', '4-korean', '5-nintendo-extension']
-            for name in fonts:
-                font = staging / 'data/fonts' / (name + '.bfttf')
-                if not font.is_file() or not 12 <= font.stat().st_size < 64 * 2**20:
-                    raise ValueError('Missing or invalid shared font: ' + name)
-            shutil.copy2(ROOT / 'packaging/motion_session.py', staging / 'motion_session.py')
-        else:
-            from legacy_sdk7 import verify_exefs
-            verify_exefs(dump / 'exefs', ['main', 'subsdk0', 'sdk'])
-            executable = 'savagewind'
-            shutil.copy2(work / 'game' / executable, staging / executable)
-            (staging / 'data').mkdir()
-            for name in ('exefs', 'romfs'):
-                copy_tree(dump / name, staging / 'data' / name)
-            for name in ('aoc1', 'aoc2'):
-                if (dump / name).is_dir():
-                    copy_tree(dump / name, staging / 'data' / name)
-            if (staging / 'data/romfs/System/Version.txt').read_text().strip() != '1.6.0':
-                raise ValueError('Expected BOTW 1.6.0 RomFS')
-            for suffix in ('so', 'so.id'):
-                shutil.copy2(work / 'game' / ('swgame.' + suffix), staging / 'data' / ('swgame.' + suffix))
-            for font in (ROOT / 'third_party/fonts').rglob('*'):
-                if font.is_file() and font.suffix in ('.ttf', '.otf'):
-                    shutil.copy2(font, staging / font.name)
-                elif font.is_file() and font.suffix == '.txt':
-                    target = staging / 'licenses/fonts' / font.relative_to(ROOT / 'third_party/fonts')
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(font, target)
-            shutil.copy2('/usr/share/fonts/truetype/wqy/wqy-microhei.ttc', staging / 'wqy-microhei.ttc')
-            shutil.copy2('/usr/share/doc/fonts-wqy-microhei/copyright', staging / 'WenQuanYi-LICENSE.txt')
-            copy_tree(ROOT / 'third_party/luts', staging / 'colour-luts')
+        from font_inputs import validate_shared_fonts
+        validate_shared_fonts(dump / 'fonts')
+        from linux_inputs import check_exefs, verify_generated
+        check_exefs(dump / 'exefs')
+        verify_generated(work / 'data/generated', dump / 'exefs')
+        receipt = json.loads((work / 'game/ultratears.build.json').read_text())
+        if receipt['binary_sha256'] != digest(work / 'game/ultratears'):
+            raise ValueError('Game executable differs from successful build receipt')
+        executable = 'ultratears'
+        shutil.copy2(work / 'game' / executable, staging / executable)
+        (staging / 'data').mkdir()
+        for name in ('romfs', 'shaders', 'textures'):
+            copy_tree(work / 'data' / name, staging / 'data' / name)
+        copy_tree(dump / 'exefs', staging / 'data/exefs')
+        copy_tree(dump / 'fonts', staging / 'data/fonts')
+        fonts = ['0-standard', '1-chinese-simplified', '2-chinese-simplified-extension',
+                 '3-chinese-traditional', '4-korean', '5-nintendo-extension']
+        for name in fonts:
+            font = staging / 'data/fonts' / (name + '.bfttf')
+            if not font.is_file() or not 12 <= font.stat().st_size < 64 * 2**20:
+                raise ValueError('Missing or invalid shared font: ' + name)
+        shutil.copy2(ROOT / 'packaging/motion_session.py', staging / 'motion_session.py')
         bundle_libraries(staging / executable, staging / 'lib')
         shutil.copytree(ROOT / 'licenses', staging / 'licenses', dirs_exist_ok=True)
         for package in ('libssl3t64', 'libvpx9', 'libopus0', 'libzstd1', 'zlib1g'):

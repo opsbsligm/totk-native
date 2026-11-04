@@ -35,6 +35,6 @@ python3 build.py build --dump /mnt/my-dump --work /mnt/totk-build
 python3 build.py runtime --work /mnt/totk-public-check
 ```
 
-这个命令编译公共运行时，CI 也执行它；它不等于完整游戏构建。GitLab 的 MR 流程要求测试、安全扫描和指定审查者通过后合并。游戏资源不进入 CI。分享源码请使用本仓库或 Git 源码归档；个人生成的 `package/` 包含游戏派生内容，与可分享源码包分开。
+这个命令编译公共运行时，CI 也执行它；它不等于完整游戏构建。GitLab 的 MR 流程要求测试、安全扫描和指定审查者通过后合并。游戏资源不进入 CI。分享源码请克隆本仓库，或用 `python3 tools/export_source.py --output /mnt/totk-source.tar.gz` 导出含校验清单的源码包；解压后无需 `.git` 即可构建。个人生成的 `package/` 包含游戏派生内容，与可分享源码包分开。
 
 依赖与许可见 [NOTICE.md](NOTICE.md)、[UPSTREAM.json](UPSTREAM.json) 和 [docs/build.md](docs/build.md)。

@@ -42,7 +42,13 @@ native-build:
   script:
     - mkdir -p out/home
     - python3 tools/check_toolchain.py
-    - python3 tools/pipeline.py runtime --work "$CI_PROJECT_DIR/out/public" --jobs 2
+    - export NATIVE_SOURCE_CHECK="/tmp/native-source-${CI_JOB_ID}"
+    - mkdir -p "$NATIVE_SOURCE_CHECK/source"
+    - trap 'rm -rf "$NATIVE_SOURCE_CHECK"' EXIT
+    - python3 tools/export_source.py --output "$NATIVE_SOURCE_CHECK/source.tar.gz"
+    - tar -xzf "$NATIVE_SOURCE_CHECK/source.tar.gz" -C "$NATIVE_SOURCE_CHECK/source"
+    - python3 "$NATIVE_SOURCE_CHECK/source/tools/check_source.py"
+    - python3 "$NATIVE_SOURCE_CHECK/source/tools/pipeline.py" runtime --work "$CI_PROJECT_DIR/out/public" --jobs 2
     - mkdir -p out/compiler-policy
     - cd out/compiler-policy && python3 ../../tools/test_compile_policy.py && cd ../..
     - python3 tools/audit_linux_runtime.py --build out/public/runtime --evidence out/public/link-audit
