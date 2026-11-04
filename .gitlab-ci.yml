@@ -69,6 +69,7 @@ container_scanning:
     TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/out/trivy-cache"
   before_script:
     - mkdir -p out/trivy-cache
+    - trivy image --download-db-only
     - ruby .gitlab/fetch_toolchain.rb
 
 dependency-scanning:
