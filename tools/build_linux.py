@@ -18,6 +18,7 @@ import sys
 import tempfile
 
 from linux_inputs import UPSTREAM, check_exefs, digest, verify_generated
+from source_tree import revision
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -205,7 +206,7 @@ def main():
         includes.insert(0, '-I'+os.environ['ULTRS_VULKAN_INCLUDE'])
     common = ['-D_GNU_SOURCE', '-D_FILE_OFFSET_BITS=64', '-O1', '-gline-tables-only', '-fno-strict-aliasing',
               '-march=x86-64-v3', '-fPIC', '-pthread', *includes, *[x for x in flags if not x.startswith(('-l', '-L', '-Wl,'))]]
-    version_text = '#define ULTRS_VERSION "linux-development"\n#define ULTRS_COMMIT "0c9ce8a-native-port"\n'
+    version_text = '#define ULTRS_VERSION "1.4.3-linux"\n#define ULTRS_COMMIT "' + revision(ROOT)[:12] + '"\n'
     version_header = out / 'version.h'
     if not version_header.exists() or version_header.read_text() != version_text:
         version_header.write_text(version_text)

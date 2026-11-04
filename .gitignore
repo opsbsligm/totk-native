@@ -61,3 +61,5 @@ third_party/totk_xlate/
 *.bin
 *.pack
 *.webm
+
+/source-manifest.json

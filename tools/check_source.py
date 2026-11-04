@@ -1,14 +1,14 @@
 """Parse public Python sources and reject game artifacts in the tracked source set."""
 import ast
 from pathlib import Path
-import subprocess
+from source_tree import source_files
 
 ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN = {'.nsp', '.nsz', '.xci', '.xcz', '.nca', '.nso', '.keys', '.bfttf', '.webm'}
 
 
 def main():
-    names = subprocess.check_output(['git', '-c', 'safe.directory=' + str(ROOT), '-C', str(ROOT), 'ls-files', '-z']).decode().split('\0')
+    names = source_files(ROOT)
     count = 0
     for name in filter(None, names):
         path = ROOT / name

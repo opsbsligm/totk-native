@@ -106,7 +106,9 @@ def main():
                     log(f'[deck-motion-session] IMU lease unavailable: {error}')
         if pending:
             return 128 + pending
-        child = subprocess.Popen([str(target)])
+        session_fd = os.environ.get('NATIVE_SESSION_FD')
+        inherited = (int(session_fd),) if session_fd is not None else ()
+        child = subprocess.Popen([str(target)], pass_fds=inherited)
         if pending:
             child.send_signal(pending)
         attempts = 0

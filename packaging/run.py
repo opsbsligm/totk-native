@@ -135,7 +135,9 @@ def main():
     cache = xdg('XDG_CACHE_HOME', '.cache') / ('totk-native' if totk else 'botw-native')
     data.mkdir(parents=True, exist_ok=True, mode=0o700)
     cache.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with (data / 'native-session.lock').open('a') as lock:
+    lock_path = data / ('session.lock' if totk else 'native-launch/instance.lock')
+    lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with lock_path.open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -152,6 +154,7 @@ def main():
                 TOTK_FPS60='1', TOTK_REALTIME='1', TOTK_UNCAPPED_INTERVAL='1',
                 TOTK_STEAMDECK_UI='1').items():
                 env.setdefault(key, value)
+            env['NATIVE_SESSION_FD'] = str(lock.fileno())
             cmd = [sys.executable, str(ROOT / 'motion_session.py'), str(ROOT / 'game.sh')]
             # game.sh receives only package-controlled arguments; game options remain on the ELF command line.
             if game_args:

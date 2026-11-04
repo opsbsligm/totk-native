@@ -1,6 +1,7 @@
 """Assemble a private, portable directory from verified local build outputs."""
 import argparse
 from build_receipts import verify
+from source_tree import ensure_clean, revision, archive_sources
 import hashlib
 import json
 import os
@@ -58,9 +59,8 @@ def main():
     p.add_argument('--dump', type=Path, required=True)
     a = p.parse_args()
     work, dump = a.work.resolve(), a.dump.resolve()
-    if subprocess.check_output(['git', '-c', 'safe.directory=' + str(ROOT), '-C', str(ROOT), 'status', '--porcelain']):
-        p.error('Commit reviewed source changes before packaging; source archive must match the build')
-    commit = subprocess.check_output(['git', '-c', 'safe.directory=' + str(ROOT), '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
+    ensure_clean(ROOT)
+    commit = revision(ROOT)
     verify(work, 'code')
     verify(work, 'assets')
     profile = json.loads((ROOT / 'UPSTREAM.json').read_text())
@@ -72,6 +72,8 @@ def main():
     staging.mkdir()
     try:
         if totk:
+            from font_inputs import validate_shared_fonts
+            validate_shared_fonts(dump / 'fonts')
             from linux_inputs import check_exefs, verify_generated
             check_exefs(dump / 'exefs')
             verify_generated(work / 'data/generated', dump / 'exefs')
@@ -98,25 +100,38 @@ def main():
             executable = 'savagewind'
             shutil.copy2(work / 'game' / executable, staging / executable)
             (staging / 'data').mkdir()
-            for name in ('exefs', 'romfs', 'aoc1', 'aoc2'):
+            for name in ('exefs', 'romfs'):
                 copy_tree(dump / name, staging / 'data' / name)
+            for name in ('aoc1', 'aoc2'):
+                if (dump / name).is_dir():
+                    copy_tree(dump / name, staging / 'data' / name)
             if (staging / 'data/romfs/System/Version.txt').read_text().strip() != '1.6.0':
                 raise ValueError('Expected BOTW 1.6.0 RomFS')
             for suffix in ('so', 'so.id'):
                 shutil.copy2(work / 'game' / ('swgame.' + suffix), staging / 'data' / ('swgame.' + suffix))
             for font in (ROOT / 'third_party/fonts').rglob('*'):
-                if font.is_file() and font.suffix in ('.ttf', '.otf', '.txt'):
+                if font.is_file() and font.suffix in ('.ttf', '.otf'):
                     shutil.copy2(font, staging / font.name)
+                elif font.is_file() and font.suffix == '.txt':
+                    target = staging / 'licenses/fonts' / font.relative_to(ROOT / 'third_party/fonts')
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(font, target)
+            shutil.copy2('/usr/share/fonts/truetype/wqy/wqy-microhei.ttc', staging / 'wqy-microhei.ttc')
+            shutil.copy2('/usr/share/doc/fonts-wqy-microhei/copyright', staging / 'WenQuanYi-LICENSE.txt')
             copy_tree(ROOT / 'third_party/luts', staging / 'colour-luts')
         bundle_libraries(staging / executable, staging / 'lib')
+        shutil.copytree(ROOT / 'licenses', staging / 'licenses', dirs_exist_ok=True)
+        for package in ('libssl3t64', 'libvpx9', 'libopus0', 'libzstd1', 'zlib1g'):
+            copyright = Path('/usr/share/doc') / package / 'copyright'
+            if copyright.is_file():
+                shutil.copy2(copyright, staging / 'licenses' / (package + '-copyright.txt'))
         for rel in ('run.py', 'run.sh', 'game.sh'):
             shutil.copy2(ROOT / 'packaging' / rel, staging / rel)
         for rel in ('run.sh', 'game.sh', executable):
             (staging / rel).chmod(0o755)
         for name in ('LICENSE', 'NOTICE.md', 'UPSTREAM.json'):
             shutil.copy2(ROOT / name, staging / name)
-        subprocess.run(['git', '-c', 'safe.directory=' + str(ROOT), '-C', str(ROOT), 'archive', '--format=tar.gz',
-                        '--output=' + str(staging / 'source.tar.gz'), commit], check=True)
+        archive_sources(ROOT, staging / 'source.tar.gz')
         manifest = dict(schema=1, source_commit=commit, version=profile['game_version'],
             private_game_content=True, hardware_validated=False,
             files={path.relative_to(staging).as_posix(): dict(size=path.stat().st_size, sha256=digest(path))

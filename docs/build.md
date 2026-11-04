@@ -8,6 +8,6 @@
 - `--stage code` 不代表资源已通过；`runtime` 不读取游戏输入。只有全部阶段通过才能得到 `package/`，失败会保留对应日志与未发布暂存目录。
 - `package/run.sh --verify` 完整验证可能需要读取数十 GiB；普通启动只复核可执行代码和依赖摘要及资源长度。
 - 错误输入、缺少字体、损坏影片、生成/编译失败必须中止，不能用旧对象或空资源补位。已知个人 BOTW 输入中存在损坏影片，不能把它纳入可发布的通过记录。
-- 只分享源码时，使用 `git archive --format=tar.gz HEAD > ../totk-native-source.tar.gz`；不要归档工作目录或个人游戏包。
+- 只分享源码时，使用 `python3 tools/export_source.py --output ../totk-native-source.tar.gz`；不要归档工作目录或个人游戏包。
 
 此处的构建命令是原生 Linux 路线。`docs/upstream/` 中保留的 Windows/macOS 用法和历史状态不作为本项目 Linux 交付的验证结论。

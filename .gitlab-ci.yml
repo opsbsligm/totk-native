@@ -35,30 +35,39 @@ native-unit:
 
 native-build:
   needs: []
-  tags: [local, homelab]
-  image: native-games/toolchain:0ecac47aaee7f435e9cc
+  tags: [native-games]
+  image: native-games/toolchain:e40e026f8befe2010687
   variables:
     HOME: "$CI_PROJECT_DIR/out/home"
   script:
     - mkdir -p out/home
+    - python3 tools/check_toolchain.py
     - python3 tools/pipeline.py runtime --work "$CI_PROJECT_DIR/out/public" --jobs 2
+    - mkdir -p out/compiler-policy
+    - cd out/compiler-policy && python3 ../../tools/test_compile_policy.py && cd ../..
     - python3 tools/audit_linux_runtime.py --build out/public/runtime --evidence out/public/link-audit
   artifacts:
     when: always
     expire_in: 7 days
     paths: [out/public/logs/, out/public/link-audit/]
 
+dependency-scanning:
+  image: registry.gitlab.com/security-products/dependency-scanning@sha256:50ecac454e31b3177c9119b85141592b57c2ee3835e051d77ac72c0c5a77980f
+
 semgrep-sast:
   image: registry.gitlab.com/security-products/semgrep@sha256:6438917354ac62eebd1a85ba7dcd6d597f1bf4613ec6ea9eb61892cf4c3b4732
   allow_failure: false
 
 gitlab-advanced-sast:
+  image: registry.gitlab.com/security-products/gitlab-advanced-sast@sha256:8208104eda122edace1e61a11e182260ab8db2c77ed72da53501300f8ed51166
   allow_failure: false
 
 gitlab-advanced-sast-cpp:
+  image: registry.gitlab.com/security-products/clangsa@sha256:9aff93a28ad09aaffd1701747e350d643ce31e3f6f8a561541e6d95021fb32f3
   allow_failure: false
 
 gitlab-advanced-sast-ext:
+  image: registry.gitlab.com/security-products/gitlab-advanced-sast-ext@sha256:b8f0507aab668350963bc9ded1d615c97db46a47fe336c0c6ec9cb69cee63f1f
   allow_failure: false
 
 secret_detection:

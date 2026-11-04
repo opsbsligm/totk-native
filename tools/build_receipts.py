@@ -2,7 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
-import subprocess
+from source_tree import source_files
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -13,7 +13,7 @@ def sha(path):
 
 
 def source_stamp():
-    names = subprocess.check_output(['git', '-c', 'safe.directory=' + str(ROOT), '-C', str(ROOT), 'ls-files', '-z']).decode().split('\0')
+    names = source_files(ROOT)
     result = hashlib.sha256()
     for name in sorted(filter(None, names)):
         if name.startswith(('docs/', 'tests/', '.gitlab/')) or name in ('README.md', '.gitlab-ci.yml', 'CONTRIBUTING.md'):

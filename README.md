@@ -4,7 +4,7 @@
 
 ## 构建与运行
 
-需要 x86_64 Linux、Python 3.11+、Docker（含 Buildx / BuildKit）、至少 100 GiB 可用空间。默认最多使用 2 核和 8 GiB 内存；首次工具链构建需要访问官方依赖源。SteamOS 系统分区保持只读，所有依赖装在容器里。
+需要 x86_64 Linux、Python 3.11+、Docker（含 Buildx / BuildKit）、至少 100 GiB 可用空间。默认最多使用 2 核和 8 GiB 内存；首次工具链构建需要访问官方依赖源。建议在 Linux 电脑或 NAS 上构建，再复制运行包到 Deck；运行包在 Deck 上无需 Docker。所有构建依赖装在容器里。
 
 先准备自己提供的、已解密且应用 1.4.3 更新的目录：`exefs/`、`romfs/`。`fonts/`：自行提取的 6 个系统共享字体 BFTTF，名称见 `src/host/shared_font.c`。支持解包 RomFS；转换后的输入格式见构建文档。 不接受其他版本混用，不下载或分发游戏、密钥、系统字体、存档或生成的游戏代码。
 

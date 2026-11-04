@@ -84,8 +84,8 @@ if [[ "$PART" == all || "$PART" == ffmpeg ]] && [ ! -f "$P/lib/libavcodec.so" ];
     unpack ffmpeg-9.0.2-git.tar.gz ffmpeg
     (cd "$W/ffmpeg" && ./configure --prefix="$P" "${FF_CROSS[@]}" --arch="$ARCH" --target-os=linux \
         --enable-shared --disable-static --enable-pic \
-        --disable-autodetect --disable-programs --enable-ffmpeg --enable-muxer=null --enable-encoder=wrapped_avframe,pcm_s16le --disable-doc --disable-network --disable-avdevice --disable-avfilter \
-        --disable-swresample --disable-everything \
+        --disable-autodetect --disable-programs --enable-ffmpeg --enable-muxer=null --enable-encoder=wrapped_avframe,pcm_s16le --disable-doc --disable-network --disable-avdevice --enable-avfilter \
+        --enable-swresample --enable-filter=aformat,anull,atrim,format,null,trim,aresample --disable-everything \
         --enable-protocol=file --enable-demuxer=matroska,mov \
         --enable-decoder=vp9,vp8,vorbis,opus,h264,aac --enable-parser=vp9,vp8,vorbis,opus,h264,aac \
         && make -j"$JOBS" && make install)
@@ -96,7 +96,19 @@ fi
 # its DEPS file pins the glslang / SPIRV-Tools / SPIRV-Headers commits (utils/git-sync-deps clones them)
 if [[ "$PART" == all || "$PART" == shaderc ]] && [ ! -f "$P/lib/libshaderc_shared.so" ]; then
     unpack shaderc-2026.3.tar.gz shaderc
-    (cd "$W/shaderc" && python3 utils/git-sync-deps)
+    # Production-only shaderc graph; test libraries are not part of this toolchain.
+    fetch https://codeload.github.com/KhronosGroup/glslang/tar.gz/168d452a4f460d24b588fed08477a81c44ee27a1 \
+          c167b2474af06cbab93abae8249efaf88fb79a09f30488e2a24d399e4258ce7a glslang-168d452a4f460d24b588fed08477a81c44ee27a1.tar.gz
+    mkdir -p "$W/shaderc/third_party/glslang"
+    tar -xf "$S/glslang-168d452a4f460d24b588fed08477a81c44ee27a1.tar.gz" -C "$W/shaderc/third_party/glslang" --strip-components 1
+    fetch https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/29981f65241605e08b0ede4cfeb999fe3b723c6a \
+          232899f1ad4104fb5bc377b94596c7621575eee62ad9a9e8f929b63a7dd8a7ad spirv-headers-29981f65241605e08b0ede4cfeb999fe3b723c6a.tar.gz
+    mkdir -p "$W/shaderc/third_party/spirv-headers"
+    tar -xf "$S/spirv-headers-29981f65241605e08b0ede4cfeb999fe3b723c6a.tar.gz" -C "$W/shaderc/third_party/spirv-headers" --strip-components 1
+    fetch https://codeload.github.com/KhronosGroup/SPIRV-Tools/tar.gz/b707790a898e44038547df54580022fc1cf89c3d \
+          05d8af89737bde57571c48dbd36714c9f520a69623e14de72c3be6b600e277d6 spirv-tools-b707790a898e44038547df54580022fc1cf89c3d.tar.gz
+    mkdir -p "$W/shaderc/third_party/spirv-tools"
+    tar -xf "$S/spirv-tools-b707790a898e44038547df54580022fc1cf89c3d.tar.gz" -C "$W/shaderc/third_party/spirv-tools" --strip-components 1
     cmake -S "$W/shaderc" -B "$W/shaderc/build" -G Ninja "${CMAKE_CROSS[@]}" -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$P" -DCMAKE_INSTALL_LIBDIR=lib -DSHADERC_SKIP_TESTS=ON -DSHADERC_SKIP_EXAMPLES=ON \
         -DSHADERC_SKIP_COPYRIGHT_CHECK=ON -DSPIRV_SKIP_TESTS=ON -DSPIRV_SKIP_EXECUTABLES=ON -DENABLE_GLSLANG_BINARIES=OFF \

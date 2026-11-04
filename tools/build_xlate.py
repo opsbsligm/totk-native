@@ -38,7 +38,7 @@ def main():
                DOTNET_CLI_TELEMETRY_OPTOUT='1', DOTNET_NOLOGO='1', DOTNET_SKIP_FIRST_TIME_EXPERIENCE='1')
     proj = ROOT / 'third_party/shader_translator/ultrs-shaders.csproj'
     rc = subprocess.run([a.dotnet, 'publish', str(proj), '-c', 'Release', '-r', a.rid, '--self-contained', 'true',
-                         '-p:PublishSingleFile=true', '-p:InvariantGlobalization=true',
+                         '-p:PublishSingleFile=true', '-p:InvariantGlobalization=true', '-p:RestoreLockedMode=true',
                          '-p:IncludeNativeLibrariesForSelfExtract=true',
                          f'-p:RyuSrc={ROOT / "third_party/maxwell_shader"}',
                          '-o', str(out), '-nologo', '-v:q', f'-maxcpucount:{a.jobs}',

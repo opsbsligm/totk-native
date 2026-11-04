@@ -81,6 +81,9 @@ def main():
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     before = source_stamp()
     dump = Path('/input')
+    if a.stage in ('assets', 'package', 'all'):
+        from font_inputs import validate_shared_fonts
+        validate_shared_fonts(dump / 'fonts')
     receipt = a.work / 'build-complete.json'
     receipt.unlink(missing_ok=True)
     if a.stage in ('code', 'all'):
