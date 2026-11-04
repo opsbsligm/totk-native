@@ -122,7 +122,7 @@ def startup_package(name):
 def inventory(rom, modules=None):
     """rom: a tools/romfs.RomFS; modules: {name: image bytes} of the game modules (main, subsdk0, sdk).
     -> shaders {key: (stage, control, code, source path)}, startup (keys translated for the default bind state)."""
-    import compression.zstd as zstd
+    import zstd_codec as zstd
     shaders, startup = {}, set()
     dictionaries = {}
     for raw in sarc(zstd.decompress(rom.read('Pack/ZsDic.pack.zs'))).values():

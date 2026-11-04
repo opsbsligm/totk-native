@@ -44,7 +44,13 @@ def code(work, dump, jobs):
     data = work / 'data'
     data.mkdir(exist_ok=True)
     tool(work, 'input-check', 'prepare_linux_game.py', '--dump', dump, '--data', data, '--stage', 'check')
-    tool(work, 'generate', 'prepare_linux_game.py', '--dump', dump, '--data', data, '--stage', 'lift')
+    from linux_inputs import verify_generated
+    try:
+        verify_generated(data / 'generated', dump / 'exefs')
+    except (OSError, ValueError):
+        tool(work, 'generate', 'prepare_linux_game.py', '--dump', dump, '--data', data, '--stage', 'lift')
+    else:
+        print('Reusing generated C after full input, lifter and output hash verification', flush=True)
     tool(work, 'game', 'build_linux.py', '--target', 'game', '--exefs', dump / 'exefs',
          '--generated', data / 'generated', '--out', work / 'game', '--jobs', jobs)
 
