@@ -6,7 +6,7 @@ include:
     inputs:
       allow_failure: false
       max_scan_depth: -1
-      pipcompile_lockfile_file_name_pattern: "requirements-build.lock"
+      pipcompile_lockfile_file_name_pattern: "pipcompile.lock.txt"
 
 workflow:
   rules:
@@ -30,6 +30,7 @@ native-unit:
   image: native-games/toolchain:c0a18e93d70c048d8fee
   script:
     - python3 tools/check_source.py
+    - python3 .gitlab/check_dependency_coverage.py --input-only
     - mkdir -p out/public-tests
     - cd out/public-tests
     - python3 -B -m unittest discover -s "$CI_PROJECT_DIR/tests" -v
@@ -80,7 +81,20 @@ container_scanning:
     paths: [out/container-scan.log, gl-container-scanning-report.json, gl-sbom-report.cdx.json]
 
 dependency-scanning:
+  before_script:
+    - cp .gitlab/pipcompile.lock.txt pipcompile.lock.txt
   image: ${NATIVE_SECURITY_PREFIX}/dependency-scanning@sha256:dee4eff3ebca66a1112477142c902e62462ee53e0a8dc4292cdfa2ed459aae21
+
+dependency-coverage:
+  needs:
+    - job: dependency-scanning
+      artifacts: true
+  image: native-games/toolchain:c0a18e93d70c048d8fee
+  script:
+    - python3 .gitlab/check_dependency_coverage.py
+  artifacts:
+    when: always
+    paths: [out/dependency-coverage.json]
 
 semgrep-sast:
   image: ${NATIVE_SECURITY_PREFIX}/semgrep@sha256:bde285a2219a3397142bdf2e93d513b179a98ec8762208cc52242f0929abe552
