@@ -1405,10 +1405,16 @@ static uint8_t *dump_copy(VkCommandBuffer cb, vkb_image *im, uint32_t layer, uin
 }
 // <dir>/<prefix><serial>_<format>_<w>x<h>.bmp (float formats Reinhard-mapped) and value statistics in the log.
 static void dump_save(const char *dir, const char *prefix, const vkb_image *im, const uint8_t *px, uint32_t bpp) {
-    uint32_t w = im->width, h = im->height, size = w * h * 4;
+    enum { BMP_HEADER_SIZE = 54 };
+    uint32_t w = im->width, h = im->height;
+    // BMP stores signed dimensions and a 32-bit total file size.
+    if (!px || !w || !h || w > INT32_MAX || h > INT32_MAX ||
+        w > (UINT32_MAX - BMP_HEADER_SIZE) / 4 / h) return;
+    uint32_t pixels = w * h;
+    uint32_t size = pixels * 4;
     uint8_t *out = malloc(size);
     if (!out) return;
-    for (uint32_t p = 0; p < w * h; p++) {
+    for (uint32_t p = 0; p < pixels; p++) {
         const uint8_t *s = px + (size_t)p * bpp;
         uint8_t *o = out + (size_t)p * 4;   // BMP: B G R A
         switch (im->format) {
@@ -1432,33 +1438,38 @@ static void dump_save(const char *dir, const char *prefix, const vkb_image *im, 
     }
     if (im->format == VK_FORMAT_R16_SFLOAT) {   // a table (light falloff): its corners and middle row
         const uint16_t *h16 = (const uint16_t *)px;
-        char row[512];
-        int rn = 0;
-        for (uint32_t x = 0; x < w && rn < 480; x += w / 16 ? w / 16 : 1) rn += snprintf(row + rn, sizeof row - rn, " %.4g", half_to_float(h16[(size_t)(h / 2) * w + x]));
+        char row[512] = "";
+        size_t rn = 0;
+        for (uint32_t x = 0; x < w && rn < 480; x += w / 16 ? w / 16 : 1) {
+            size_t remaining = sizeof row - rn;
+            int n = snprintf(row + rn, remaining, " %.4g", half_to_float(h16[(size_t)(h / 2) * w + x]));
+            if (n < 0 || (size_t)n >= remaining) break;
+            rn += (size_t)n;
+        }
         VLOG("[dump] %stexture %llu R16F %ux%u: row %u:%s; corners %g %g %g %g", prefix, (unsigned long long)im->serial, w, h, h / 2, row,
              half_to_float(h16[0]), half_to_float(h16[w - 1]), half_to_float(h16[(size_t)(h - 1) * w]), half_to_float(h16[(size_t)h * w - 1]));
     }
     if (im->format == VK_FORMAT_R32_SFLOAT || im->format == VK_FORMAT_D32_SFLOAT || im->format == VK_FORMAT_D32_SFLOAT_S8_UINT) {   // single channel: the values
         double sum = 0; float lo = 3e38f, hi = -3e38f;
-        for (uint32_t p = 0; p < w * h; p++) { float v; memcpy(&v, px + (size_t)p * 4, 4); sum += v; if (v < lo) lo = v; if (v > hi) hi = v; }
+        for (uint32_t p = 0; p < pixels; p++) { float v; memcpy(&v, px + (size_t)p * 4, 4); sum += v; if (v < lo) lo = v; if (v > hi) hi = v; }
         VLOG("[dump] %stexture %llu %s %ux%u: min %g mean %g max %g, centre %g", prefix, (unsigned long long)im->serial,
-             im->format == VK_FORMAT_R32_SFLOAT ? "R32F" : "depth", w, h, lo, sum / (w * h), hi, ((const float *)px)[(size_t)(h / 2) * w + w / 2]);
+             im->format == VK_FORMAT_R32_SFLOAT ? "R32F" : "depth", w, h, lo, sum / pixels, hi, ((const float *)px)[(size_t)(h / 2) * w + w / 2]);
     }
     char path[1024];
     snprintf(path, sizeof path, "%s/%s%llu_%02x_%ux%u.bmp", dir, prefix, (unsigned long long)im->serial, im->d.format, w, h);
     FILE *f = fopen(path, "wb");
     if (f) {
-        uint8_t hdr[54] = {'B', 'M'};
-        uint32_t v = 54 + size; memcpy(hdr + 2, &v, 4);
-        v = 54; memcpy(hdr + 10, &v, 4);
+        uint8_t hdr[BMP_HEADER_SIZE] = {'B', 'M'};
+        uint32_t v = BMP_HEADER_SIZE + size; memcpy(hdr + 2, &v, 4);
+        v = BMP_HEADER_SIZE; memcpy(hdr + 10, &v, 4);
         v = 40; memcpy(hdr + 14, &v, 4);
         memcpy(hdr + 18, &w, 4);
         int32_t nh = -(int32_t)h; memcpy(hdr + 22, &nh, 4);
         hdr[26] = 1; hdr[28] = 32;
         memcpy(hdr + 34, &size, 4);
-        fwrite(hdr, 1, sizeof hdr, f);
-        fwrite(out, 1, size, f);
-        fclose(f);
+        bool written = fwrite(hdr, sizeof hdr, 1, f) == 1 &&
+                       fwrite(out, size, 1, f) == 1;
+        if (fclose(f) != 0 || !written) VLOG("[dump] incomplete BMP: %s", path);
     }
     free(out);
 }

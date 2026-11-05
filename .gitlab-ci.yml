@@ -60,6 +60,7 @@ native-build:
     paths: [out/public/logs/, out/public/link-audit/, out/cppscan.tar.gz]
 
 container_scanning:
+  tags: [native-games-origin]
   timeout: 100 minutes
   image: ${NATIVE_SECURITY_PREFIX}/container-scanning@sha256:f30b58af2ad924c82cd709b18d6594e007b492cf9e3fe6b223ff9b4d23f539e3
   allow_failure: false
