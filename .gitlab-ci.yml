@@ -58,6 +58,7 @@ native-build:
     paths: [out/public/logs/, out/public/link-audit/, out/cppscan.tar.gz]
 
 container_scanning:
+  timeout: 100 minutes
   image: registry.gitlab.com/security-products/container-scanning@sha256:f86aa7593f200e76a7fae6fb9a65d1fafefa009060d47d93fba7490de9e79528
   allow_failure: false
   needs: []
