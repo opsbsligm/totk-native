@@ -232,7 +232,7 @@ def main():
     ui_flags=['-DIMGUI_IMPL_VULKAN_NO_PROTOTYPES','-I'+str(ROOT/'third_party/imgui'),'-I'+str(ROOT/'third_party/imgui/backends')]
     lines.extend(['rule cxxui','  command = '+shlex.quote(cxx)+' '+shlex.join([*common,*ui_flags])+' -std=c++17 -fno-exceptions -fno-rtti -MD -MF $out.d -c $in -o $out',
                   '  depfile = $out.d','  deps = gcc'])
-    objects = []
+    objects = []; host_objects=[]; guest_objects=[]
     for i, source in enumerate(ordinary + generated + ui_sources):
         if not source.is_file():
             ap.error('Missing source: '+str(source))
@@ -249,6 +249,7 @@ def main():
             optimization = [] if recipe == ('-O0',) else ['-O1']
             lines.append('  recovery_clang_args = '+shlex.join([*optimization, *recipe]))
         objects.append(obj)
+        (guest_objects if source in generated else host_objects).append(obj)
     target = out/('libultratears-runtime.a' if args.target == 'runtime' else 'ultratears')
     lines.append(f'build {ninja_path(target)}: {"ar" if args.target == "runtime" else "link"} '+' '.join(ninja_path(o) for o in objects))
     lines.append('default '+ninja_path(target))
@@ -262,11 +263,18 @@ def main():
                                                         for p in recovery),
                       'ninja_tmpdir': str(temporary)}), flush=True)
     if not args.generate_only:
+        from compiler_cache import prepare,complete,guest_abi
+        from build_receipts import source_stamp
+        cache_inputs=dict(host=source_stamp(),guest=guest_abi(ROOT,[
+            'src/runtime/cpu.h','src/runtime/simd.h','src/runtime/simd_fp.h','src/host/nd_totk_timing.h']))
+        state=prepare(out,cache_inputs,host_objects,guest_objects)
         if args.target == 'game':
             # A failed new build must not leave an old receipt next to a changed ELF.
             target.with_suffix('.build.json').unlink(missing_ok=True)
         code = subprocess.call(['ninja', '-f', str(build), '-j', str(args.jobs), '-k', '0'],
                                env={**os.environ, 'TMPDIR': str(temporary)})
+        if code == 0:
+            complete(state,cache_inputs)
         if code == 0 and args.target == 'game':
             try:
                 write_game_build_record(target, args.generated, args.exefs, generated_stamp,
