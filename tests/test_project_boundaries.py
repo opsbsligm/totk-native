@@ -72,20 +72,16 @@ class Boundaries(unittest.TestCase):
                     with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'manifest path'):
                         entry.checked_files({'files': {name: files['ultratears']}}, True)
 
-    def test_normal_launch_rejects_same_length_executable_module_changes(self):
+    def test_normal_launch_rejects_same_length_executable_and_font_changes(self):
         entry = module('exefs_launch', 'packaging/run.py')
-        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
-            root = Path(tmp)
-            path = root / 'data/exefs/main'
-            path.parent.mkdir(parents=True)
-            original = b'healthy module'
-            path.write_bytes(original)
-            manifest = {'files': {'data/exefs/main': dict(size=len(original), sha256=hashlib.sha256(original).hexdigest())}}
-            with patch.object(entry, 'ROOT', root):
-                entry.checked_files(manifest, False)
-                path.write_bytes(b'changed module')
-                with self.assertRaisesRegex(ValueError, 'checksum'):
-                    entry.checked_files(manifest, False)
+        for relative in ('data/exefs/main','data/fonts/0-standard.bfttf'):
+            with self.subTest(file=relative), tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+                root=Path(tmp);path=root/relative;path.parent.mkdir(parents=True)
+                original=b'healthy module';path.write_bytes(original)
+                manifest={'files':{relative:dict(size=len(original),sha256=hashlib.sha256(original).hexdigest())}}
+                with patch.object(entry,'ROOT',root):
+                    entry.checked_files(manifest,False);path.write_bytes(b'changed module')
+                    with self.assertRaisesRegex(ValueError,'checksum'):entry.checked_files(manifest,False)
 
     def test_game_inputs_are_not_present_in_public_tree(self):
         for name in ('extracted', 'generated', 'data', 'game', 'Keys'):

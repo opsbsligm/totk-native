@@ -5,6 +5,8 @@
 
 #include "hle.h"
 #include "rt.h"
+#include "../host/native_cheats.h"
+#include "lz4.h"
 
 Module g_modules[MAX_MODULES];
 int g_nmodules;
@@ -16,29 +18,6 @@ enum { R_ABS64 = 257, R_GLOB_DAT = 1025, R_JUMP_SLOT = 1026, R_RELATIVE = 1027 }
 
 typedef struct { uint32_t name; uint8_t info, other; uint16_t shndx; uint64_t value, size; } Elf64Sym;
 typedef struct { uint64_t off, info; int64_t addend; } Elf64Rela;
-
-static size_t lz4_decompress(const uint8_t *src, size_t srclen, uint8_t *dst, size_t dstlen) {
-    const uint8_t *s = src, *se = src + srclen;
-    uint8_t *d = dst, *de = dst + dstlen;
-    while (s < se) {
-        uint8_t tok = *s++;
-        size_t lit = tok >> 4;
-        if (lit == 15) { uint8_t b; do { b = *s++; lit += b; } while (b == 255); }
-        if (d + lit > de || s + lit > se) break;
-        memcpy(d, s, lit);
-        d += lit; s += lit;
-        if (s >= se) break;
-        size_t off = s[0] | (s[1] << 8);
-        s += 2;
-        size_t ml = tok & 15;
-        if (ml == 15) { uint8_t b; do { b = *s++; ml += b; } while (b == 255); }
-        ml += 4;
-        uint8_t *m = d - off;
-        if (m < dst || d + ml > de) break;
-        while (ml--) *d++ = *m++;
-    }
-    return d - dst;
-}
 
 static uint8_t *read_file(const char *path, size_t *len) {
     FILE *f = fopen(path, "rb");
@@ -68,14 +47,24 @@ static void load_nso(Module *m, const char *path, uint64_t base) {
     size_t len;
     uint8_t *raw = read_file(path, &len);
     if (!raw || len < 0x100 || memcmp(raw, "NSO0", 4)) FATAL("cannot load %s\n", path);
+    char id[65];
+    for(int i=0;i<32;i++) snprintf(id+2*i,3,"%02x",raw[0x40+i]);
     uint32_t flags = *(uint32_t *)(raw + 0xC);
     uint32_t seg[3][3];  // file_off, mem_off, size
     for (int i = 0; i < 3; i++) memcpy(seg[i], raw + 0x10 + i * 0x10, 12);
     uint32_t bss = *(uint32_t *)(raw + 0x3C);
-    uint64_t size = (seg[2][1] + seg[2][2] + bss + 0xFFF) & ~0xFFFull;
+    uint64_t size = ((uint64_t)seg[2][1] + seg[2][2] + bss + 0xFFF) & ~0xFFFull;
+    if (base < MAIN_BASE || base >= HLE_BASE || size > HLE_BASE-base)
+        FATAL("%s: NSO image outside module region\n",path);
+    for(int i=0;i<3;i++)
+        if ((uint64_t)seg[i][1]+seg[i][2]+(i==2 ? bss : 0) > size)
+            FATAL("%s: NSO segment outside image\n",path);
     plat_commit(base, size);  // inside the guest window: zero-filled, read/write
     for (int i = 0; i < 3; i++) {
         uint32_t csize = *(uint32_t *)(raw + 0x60 + i * 4);
+        uint32_t file_size=flags & (1<<i) ? csize : seg[i][2];
+        if (seg[i][0]>len || file_size>len-seg[i][0])
+            FATAL("%s: NSO segment outside file\n",path);
         uint8_t *dst = (uint8_t *)base + seg[i][1];
         if (flags & (1 << i)) {
             size_t got = lz4_decompress(raw + seg[i][0], csize, dst, seg[i][2]);
@@ -90,6 +79,11 @@ static void load_nso(Module *m, const char *path, uint64_t base) {
     m->text_off = seg[0][1]; m->text_size = seg[0][2];
     m->ro_off = seg[1][1];   m->ro_size = seg[1][2];
     m->data_off = seg[2][1]; m->data_size = seg[2][2] + bss;
+    if (!strcmp(m->name,"main")) {
+        nd_cheats_bind("totk-1.4.3",id,base,base+m->data_off,m->data_size);
+        const char *cheats=getenv("NATIVE_CHEATS_FILE");
+        nd_cheats_load(cheats && *cheats ? cheats : "native-cheats.txt");
+    }
 
     uint32_t mod0 = *(uint32_t *)(base + 4);
     uint64_t mod = base + mod0;

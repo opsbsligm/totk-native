@@ -7,3 +7,7 @@ uv --no-config tool run --isolated --python 3.11 --with pip==26.3 --from pip-too
   pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url \
   --no-emit-trusted-host --output-file .gitlab/pipcompile.lock.txt requirements-build.lock
 python3 .gitlab/check_dependency_coverage.py --input-only
+
+# Maintainer art dependencies are scanned in their own directory.
+uv --no-config pip compile --python-version 3.11 --generate-hashes --no-emit-index-url \
+  --output-file .gitlab/art/pipcompile.lock.txt requirements-art.in

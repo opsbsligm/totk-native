@@ -1,4 +1,5 @@
 #include "deck_motion.h"
+#include "control_bar.h"
 #include <string.h>
 extern int runtime_gyro_enabled(void);
 // The window (milestone 3.2): SDL3 on the process's main thread — window, keyboard, game controllers with rumble —
@@ -58,8 +59,9 @@ static void pad_update(void) {
             {SDL_GAMEPAD_BUTTON_START, 1024}, {SDL_GAMEPAD_BUTTON_BACK, 2048}, {SDL_GAMEPAD_BUTTON_DPAD_LEFT, 4096},
             {SDL_GAMEPAD_BUTTON_DPAD_UP, 8192}, {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, 16384},
             {SDL_GAMEPAD_BUTTON_DPAD_DOWN, 32768}};
+        uint32_t suppressed=nd_control_suppressed_pad_buttons();
         for (unsigned i = 0; i < sizeof map / sizeof *map; i++)
-            if (SDL_GetGamepadButton(pad, map[i].b)) s.buttons |= map[i].bit;
+            if (!(suppressed&(1u<<map[i].b)) && SDL_GetGamepadButton(pad, map[i].b)) s.buttons |= map[i].bit;
         if (SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16384) s.buttons |= 256;
         if (SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16384) s.buttons |= 512;
         s.lx = stick(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX), 0);
@@ -68,6 +70,7 @@ static void pad_update(void) {
         s.ry = stick(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY), 1);
         s.connected = 1;
     }
+    if (nd_control_captured()) s=(RuntimeGamepadState){0};
     runtime_gamepad_set(&s);
 }
 
@@ -114,6 +117,10 @@ static void pad_attached(void) {
     const char *axes = getenv("TOTK_GYRO_AXES");
     if (runtime_motion_axes(axes) < 0)
         fprintf(stderr, "[totk] invalid TOTK_GYRO_AXES ignored\n");
+    if (runtime_gyro_enabled() && nd_deck_motion_start()) {
+        fprintf(stderr, "[totk] native Deck IMU selected; no mouse or stick gyro mapping\n");
+        return;
+    }
     if (SDL_GamepadHasSensor(pad, SDL_SENSOR_GYRO) && SDL_GamepadHasSensor(pad, SDL_SENSOR_ACCEL) &&
         SDL_SetGamepadSensorEnabled(pad, SDL_SENSOR_GYRO, true) && SDL_SetGamepadSensorEnabled(pad, SDL_SENSOR_ACCEL, true)) {
         pad_uses_sdl_motion = 1;
@@ -208,6 +215,10 @@ _Noreturn void window_loop(void) {
                         dprintf(STDERR_FILENO, "[totk-input-sdl] focus event=%u\n", e.type);
                     }
                 }
+                if (nd_control_event(&e,window)) {
+                    if(e.type==SDL_EVENT_GAMEPAD_BUTTON_DOWN || e.type==SDL_EVENT_GAMEPAD_BUTTON_UP || e.type==SDL_EVENT_GAMEPAD_AXIS_MOTION) pad_update();
+                    continue;
+                }
                 switch (e.type) {
                 case SDL_EVENT_QUIT:
                     fprintf(stderr, "[totk] window closed\n");
@@ -240,6 +251,7 @@ _Noreturn void window_loop(void) {
                 }
             } while (SDL_PollEvent(&e));
         }
+        nd_control_apply_window(window);
         title_update();
     }
 }

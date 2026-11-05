@@ -8,7 +8,9 @@ static _Atomic float step_seconds = 1.0f / 60.0f;
 float nd_totk_step(float hz) {
     return atomic_load_explicit(&step_seconds, memory_order_acquire) * hz;
 }
+extern void nd_cheats_apply_pending(void) __attribute__((weak));
 void runtime_frame_step_update(uint64_t now) {
+    if(nd_cheats_apply_pending) nd_cheats_apply_pending();
     static uint64_t previous;
     static double samples[5];
     static unsigned count, next;

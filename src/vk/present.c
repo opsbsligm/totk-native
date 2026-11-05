@@ -5,6 +5,7 @@
 // Mailbox when the surface offers it (the newest frame wins, no tearing), FIFO otherwise.
 #include "present.h"
 #include "vk.h"
+#include "../host/control_bar.h"
 
 #include <SDL3/SDL.h>
 #include <math.h>
@@ -23,6 +24,7 @@ static VkSwapchainKHR swapchain;
 static VkFormat format;
 static VkExtent2D extent;
 static VkImage images[MAX_IMAGES];
+static VkImageView views[MAX_IMAGES];
 static uint32_t nimages;
 static VkSemaphore image_ready[FRAMES], render_done[MAX_IMAGES];
 static VkFence in_flight[FRAMES];
@@ -53,7 +55,15 @@ static int create_present_objects(void) {
 }
 
 static void destroy_swapchain(void) {
-    for (uint32_t i = 0; i < nimages; i++) vk.vkDestroySemaphore(vkc.device, render_done[i], NULL);
+    nd_control_device_reset();
+    for (uint32_t i=0;i<nimages;i++) {
+        if (views[i]) vk.vkDestroyImageView(vkc.device,views[i],NULL);
+        views[i]=VK_NULL_HANDLE;
+    }
+    for (uint32_t i = 0; i < nimages; i++) {
+        if(render_done[i]) vk.vkDestroySemaphore(vkc.device, render_done[i], NULL);
+        render_done[i]=VK_NULL_HANDLE;
+    }
     if (swapchain) vk.vkDestroySwapchainKHR(vkc.device, swapchain, NULL);
     swapchain = VK_NULL_HANDLE;
     nimages = 0;
@@ -74,6 +84,7 @@ static int create_swapchain(void) {
     vk.vkGetPhysicalDeviceSurfaceFormatsKHR(vkc.gpu, vkc.surface, &nf, NULL);
     VkSurfaceFormatKHR *fm = calloc(nf ? nf : 1, sizeof *fm);
     vk.vkGetPhysicalDeviceSurfaceFormatsKHR(vkc.gpu, vkc.surface, &nf, fm);
+    if (!nf || !fm) { free(fm); return 0; }
     VkSurfaceFormatKHR pick = fm[0];
     for (uint32_t i = 0; i < nf; i++)
         if ((fm[i].format == VK_FORMAT_B8G8R8A8_UNORM || fm[i].format == VK_FORMAT_R8G8B8A8_UNORM) &&
@@ -97,8 +108,15 @@ static int create_swapchain(void) {
     if (!vk_check(vk.vkCreateSwapchainKHR(vkc.device, &ci, NULL, &swapchain), "vkCreateSwapchainKHR")) return 0;
     nimages = MAX_IMAGES;
     vk.vkGetSwapchainImagesKHR(vkc.device, swapchain, &nimages, images);
+    for(uint32_t i=0;i<nimages;i++) {
+        VkImageViewCreateInfo view={VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=images[i],
+            .viewType=VK_IMAGE_VIEW_TYPE_2D,.format=format,
+            .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+        if(!vk_check(vk.vkCreateImageView(vkc.device,&view,NULL,&views[i]),"control image view")) {destroy_swapchain();return 0;}
+    }
     VkSemaphoreCreateInfo si = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    for (uint32_t i = 0; i < nimages; i++) vk.vkCreateSemaphore(vkc.device, &si, NULL, &render_done[i]);
+    for (uint32_t i = 0; i < nimages; i++)
+        if(!vk_check(vk.vkCreateSemaphore(vkc.device,&si,NULL,&render_done[i]),"present semaphore")) {destroy_swapchain();return 0;}
     LOG("swapchain %ux%u, %u images, %s", extent.width, extent.height, nimages,
         mode == VK_PRESENT_MODE_MAILBOX_KHR ? "mailbox" : "fifo");
     return 1;
@@ -217,7 +235,7 @@ static int present_one(uint64_t n, unsigned slot, out_t *out) {
     if (out) {
         // source rectangle: the game's crop (NVN WindowCrop; 0 size = the whole texture)
         int sx = out->crop[0], sy = out->crop[1], sw = out->crop[2], sh = out->crop[3];
-        if (sw <= 0 || sh <= 0 || sx + sw > (int)out->w || sy + sh > (int)out->h) { sx = sy = 0; sw = (int)out->w; sh = (int)out->h; }
+        if (sx<0 || sy<0 || sw<=0 || sh<=0 || (uint64_t)sx+(uint64_t)sw>out->w || (uint64_t)sy+(uint64_t)sh>out->h) { sx = sy = 0; sw = (int)out->w; sh = (int)out->h; }
         double scale = (double)extent.width / sw < (double)extent.height / sh ? (double)extent.width / sw : (double)extent.height / sh;
         int dw = (int)(sw * scale + 0.5), dh = (int)(sh * scale + 0.5), dx = ((int)extent.width - dw) / 2, dy = ((int)extent.height - dh) / 2;
         barrier(cb, images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -227,8 +245,12 @@ static int present_one(uint64_t n, unsigned slot, out_t *out) {
         vk.vkCmdBlitImage(cb, out->img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           1, &b, VK_FILTER_LINEAR);
     }
-    barrier(cb, images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            VK_ACCESS_TRANSFER_WRITE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    barrier(cb, images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+    nd_control_draw(cb,views[idx],format,extent.width,extent.height);
+    barrier(cb, images[idx], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     vk.vkEndCommandBuffer(cb);
     // wait for the swapchain image and, with a game frame, for the replayer's copy into the output image
     VkSemaphoreSubmitInfo waits[2] = {
