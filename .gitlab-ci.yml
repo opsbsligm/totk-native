@@ -59,7 +59,7 @@ native-build:
 
 container_scanning:
   timeout: 100 minutes
-  image: registry.gitlab.com/security-products/container-scanning@sha256:f86aa7593f200e76a7fae6fb9a65d1fafefa009060d47d93fba7490de9e79528
+  image: registry.gitlab.com/security-products/container-scanning@sha256:f30b58af2ad924c82cd709b18d6594e007b492cf9e3fe6b223ff9b4d23f539e3
   allow_failure: false
   needs: []
   variables:
@@ -73,14 +73,14 @@ container_scanning:
     - ruby .gitlab/prepare_scanner_cache.rb
 
 dependency-scanning:
-  image: registry.gitlab.com/security-products/dependency-scanning@sha256:50ecac454e31b3177c9119b85141592b57c2ee3835e051d77ac72c0c5a77980f
+  image: registry.gitlab.com/security-products/dependency-scanning@sha256:dee4eff3ebca66a1112477142c902e62462ee53e0a8dc4292cdfa2ed459aae21
 
 semgrep-sast:
-  image: registry.gitlab.com/security-products/semgrep@sha256:6438917354ac62eebd1a85ba7dcd6d597f1bf4613ec6ea9eb61892cf4c3b4732
+  image: registry.gitlab.com/security-products/semgrep@sha256:bde285a2219a3397142bdf2e93d513b179a98ec8762208cc52242f0929abe552
   allow_failure: false
 
 gitlab-advanced-sast:
-  image: registry.gitlab.com/security-products/gitlab-advanced-sast@sha256:8208104eda122edace1e61a11e182260ab8db2c77ed72da53501300f8ed51166
+  image: registry.gitlab.com/security-products/gitlab-advanced-sast@sha256:a4f2e8941901de686a9214ad06a781f55202b5dcdc9f2fd3274c39ba4e4491a7
   allow_failure: false
 
 gitlab-advanced-sast-cpp:
@@ -100,9 +100,9 @@ gitlab-advanced-sast-cpp:
   allow_failure: false
 
 gitlab-advanced-sast-ext:
-  image: registry.gitlab.com/security-products/gitlab-advanced-sast-ext@sha256:b8f0507aab668350963bc9ded1d615c97db46a47fe336c0c6ec9cb69cee63f1f
+  image: registry.gitlab.com/security-products/gitlab-advanced-sast-ext@sha256:046eb419b1e2acb992013c649cd8932ff05dfa14f8c35335a96201f1f7522f64
   allow_failure: false
 
 secret_detection:
-  image: registry.gitlab.com/security-products/secrets@sha256:dd2449c8bf1fdb25c7e81b7128c9ada36e0b4f10c8763bd71c3a2ca8cda9e51a
+  image: registry.gitlab.com/security-products/secrets@sha256:05e8567c4e4bdfaec379c3c2f867204b32b0226636b5380642d8d4f87a66ad93
   allow_failure: false
