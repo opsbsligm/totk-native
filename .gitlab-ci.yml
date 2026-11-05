@@ -84,6 +84,7 @@ gitlab-advanced-sast:
   allow_failure: false
 
 gitlab-advanced-sast-cpp:
+  timeout: 90 minutes
   needs:
     - job: native-build
       artifacts: true
