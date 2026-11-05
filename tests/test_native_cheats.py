@@ -17,6 +17,7 @@ class NativeCheats(unittest.TestCase):
 #include "native_cheats.h"
 #include <assert.h>
 #include <stdio.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -50,6 +51,8 @@ int main(int argc,char **argv) {
     nd_cheats_request(0,0);nd_cheats_apply_pending();assert(words[0]==12);assert(strstr(nd_cheats_error(),"changed"));
     assert(words[1]==20 && words[2]==30 && words[3]==40);
     bind();unlink(p);assert(symlink("no-such-file",p)==0);assert(nd_cheats_load(p)==0);assert(nd_cheats_count()==0);
+    unlink(p);assert(mkfifo(p,0600)==0);alarm(2);
+    assert(nd_cheats_load(p)<0);alarm(0);assert(nd_cheats_count()==0);unlink(p);
     return 0;
 }
 ''')

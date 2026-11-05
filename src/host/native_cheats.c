@@ -51,7 +51,7 @@ static int hex_value(const char *text,uint64_t *out) {
 int nd_cheats_load(const char *path) {
     pthread_mutex_lock(&mutex);
     if(count) {pthread_mutex_unlock(&mutex);return 0;} // never replace live definitions
-    int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);
+    int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK);
     struct stat st;
     if(fd<0) {pthread_mutex_unlock(&mutex);return 0;}
     if(fstat(fd,&st) || !S_ISREG(st.st_mode) || st.st_uid!=geteuid() || (st.st_mode&0077) || st.st_size>16384) {
