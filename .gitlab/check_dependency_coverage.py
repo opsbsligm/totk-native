@@ -54,7 +54,7 @@ def main():
     expected = {'pipcompile.lock.txt': validate_input()}
     art = ROOT / '.gitlab/art/pipcompile.lock.txt'
     if art.exists():
-        expected['.gitlab/art/pipcompile.lock.txt'] = {p: v['version'] for p, v in requirements(art).items()}
+        expected['art/pipcompile.lock.txt'] = {p: v['version'] for p, v in requirements(art).items()}
     if args.input_only:
         print('Scan lock preserves all locked package versions and original artifact hashes')
         return

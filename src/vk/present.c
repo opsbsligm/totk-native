@@ -81,10 +81,10 @@ static int create_swapchain(void) {
     }
     if (!extent.width || !extent.height) return 0;
     uint32_t nf = 0;
-    vk.vkGetPhysicalDeviceSurfaceFormatsKHR(vkc.gpu, vkc.surface, &nf, NULL);
+    if (!vk_check(vk.vkGetPhysicalDeviceSurfaceFormatsKHR(vkc.gpu, vkc.surface, &nf, NULL), "surface format count") || !nf) return 0;
     VkSurfaceFormatKHR *fm = calloc(nf ? nf : 1, sizeof *fm);
-    vk.vkGetPhysicalDeviceSurfaceFormatsKHR(vkc.gpu, vkc.surface, &nf, fm);
-    if (!nf || !fm) { free(fm); return 0; }
+    if (!fm) return 0;
+    if (!vk_check(vk.vkGetPhysicalDeviceSurfaceFormatsKHR(vkc.gpu, vkc.surface, &nf, fm), "surface formats") || !nf) { free(fm); return 0; }
     VkSurfaceFormatKHR pick = fm[0];
     for (uint32_t i = 0; i < nf; i++)
         if ((fm[i].format == VK_FORMAT_B8G8R8A8_UNORM || fm[i].format == VK_FORMAT_R8G8B8A8_UNORM) &&
@@ -106,8 +106,10 @@ static int create_swapchain(void) {
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = caps.currentTransform,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, .presentMode = mode, .clipped = VK_TRUE};
     if (!vk_check(vk.vkCreateSwapchainKHR(vkc.device, &ci, NULL, &swapchain), "vkCreateSwapchainKHR")) return 0;
-    nimages = MAX_IMAGES;
-    vk.vkGetSwapchainImagesKHR(vkc.device, swapchain, &nimages, images);
+    uint32_t available=0;
+    if(!vk_check(vk.vkGetSwapchainImagesKHR(vkc.device,swapchain,&available,NULL),"swapchain image count") || !available || available>MAX_IMAGES) {destroy_swapchain();return 0;}
+    if(!vk_check(vk.vkGetSwapchainImagesKHR(vkc.device,swapchain,&available,images),"swapchain images") || !available || available>MAX_IMAGES) {destroy_swapchain();return 0;}
+    nimages=available;
     for(uint32_t i=0;i<nimages;i++) {
         VkImageViewCreateInfo view={VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=images[i],
             .viewType=VK_IMAGE_VIEW_TYPE_2D,.format=format,

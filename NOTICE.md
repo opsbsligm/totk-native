@@ -11,3 +11,5 @@ Linux 依赖源、版本和下载摘要在 `tools/build_deps.sh`；Python 依赖
 ## Application control bar
 
 Dear ImGui sources and Vulkan backend are MIT, copied byte-for-byte from the independently pinned BOTW source snapshot `Revivedx/SavageWindRecomp@4249c880bc6b09ad0207fc3f6e7595346f08d232`. Copyright and license are retained in `third_party/imgui/LICENSE.txt`. The new original Deck vector drawings and application integration are maintained in this repository.
+
+本项目新增的 sensor-only Deck IMU 读取器、解码器和版本绑定数据补丁模块以 MIT 发布；原生运动的数据格式参考和验证范围见 `docs/native-motion.md`。这不改变其他上游文件的许可证。
