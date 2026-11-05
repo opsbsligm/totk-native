@@ -644,7 +644,8 @@ static unsigned delete_recursive(const char *path) {
 }
 static unsigned open_directory(uint64_t *out, const char *path, int mode) {
     if (romfs_owns(path)) { fprintf(stderr, "[totk] OpenDirectory on RomFS %s\n", path); runtime_fail("RomFS directory listing not implemented"); }
-    char p[1100];
+    /* Resolve against the exact capacity retained in the directory handle. */
+    char p[sizeof dirs[0].path];
     unsigned r = host_path(path, p, sizeof p);
     if (r) return r;
     if (!out || mode < 1 || mode > 3) return R_INVALID_ARGUMENT;

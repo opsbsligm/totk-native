@@ -65,8 +65,11 @@ container_scanning:
     GIT_STRATEGY: fetch
     CS_IMAGE: "archive://out/toolchain.tar.gz"
     CS_DISABLE_LANGUAGE_VULNERABILITY_SCAN: "false"
+    CS_TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/out/trivy-cache"
+    TMPDIR: "$CI_PROJECT_DIR/out/trivy-tmp"
   before_script:
     - ruby .gitlab/fetch_toolchain.rb
+    - ruby .gitlab/prepare_scanner_cache.rb
 
 dependency-scanning:
   image: registry.gitlab.com/security-products/dependency-scanning@sha256:50ecac454e31b3177c9119b85141592b57c2ee3835e051d77ac72c0c5a77980f
@@ -86,10 +89,10 @@ gitlab-advanced-sast-cpp:
   variables:
     SAST_COMPILATION_DATABASE: "out/cppscan/compile_commands.json"
   before_script:
-    - tar -xzf out/cppscan.tar.gz -C out
+    - python3 .gitlab/unpack_cpp_scan.py
   artifacts:
     when: always
-    paths: [out/cppscan/coverage-input.json]
+    paths: [out/cppscan/coverage-input.json, gl-sast-report.json]
   image: registry.gitlab.com/security-products/clangsa@sha256:9aff93a28ad09aaffd1701747e350d643ce31e3f6f8a561541e6d95021fb32f3
   allow_failure: false
 
