@@ -2846,7 +2846,12 @@ static unsigned present_ticks(const win_t *o) {   /* display ticks per game fram
     if (m == MFX_30) { int hz = g_paced_hz > 0 ? g_paced_hz : 60; return (unsigned)(hz >= 45 ? (hz + 15) / 30 : 1); }
     return g_display_mode || (uncapped_now() && !dm_detclock_enabled() && uncapped_interval_on()) || o->interval <= 0 ? 1u : (unsigned)o->interval;
 }
+extern int nd_control_fps_limit(void) __attribute__((weak));
 static uint64_t present_period(const win_t *o) {
+    if(nd_control_fps_limit && uncapped_now() && !dm_detclock_enabled()) {
+        int cap=nd_control_fps_limit();
+        if(cap>=30 && cap<=120) return 1000000000ull/(unsigned)cap;
+    }
     unsigned itv = present_ticks(o); int m = mfx_enabled(), hz = g_uncapped && !uncapped_now() ? g_paced_hz : g_hz;
     { static int was = -1; if (was >= 0 && m != was)
         LOG("[nvn] present cadence changed: %s", m == MFX_30 ? (mfx_own_clock() ? "30+30 interpolation: game runs at 30 fps on its own clock" : "30+30 interpolation: display-driven 30 fps") :

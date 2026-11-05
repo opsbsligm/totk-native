@@ -1067,7 +1067,7 @@ static void slow_upload_log(const vkb_image *im, const char *why, uint64_t t0, u
 }
 // Exact original ASTC identity, checked before either cached BC7 or CPU decoding.
 // Authored art is compiled in; no runtime font/image path or new compatibility layer.
-const char ultrs_steamdeck_art_v1[] = "nativedeck-steamdeck-art-v1-3c843d31847ea01e9cddc58e407f9665ab64c030a30def184885601b2135088f-unified-inclined-v1";
+const char ultrs_steamdeck_art_v2[] = "totk-native-steamdeck-vector-v2-preserved-callout-anchors";
 static uint8_t deck_rgba[2][ND_DECK_BYTES];
 static pthread_once_t deck_art_once = PTHREAD_ONCE_INIT;
 static void deck_art_init(void) {

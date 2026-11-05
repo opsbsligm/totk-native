@@ -6,7 +6,7 @@
 
 需要 x86_64 Linux、Python 3.11+、Docker（含 Buildx / BuildKit）、至少 100 GiB 可用空间。默认最多使用 2 核和 8 GiB 内存；首次工具链构建需要访问官方依赖源。建议在 Linux 电脑或 NAS 上构建，再复制运行包到 Deck；运行包在 Deck 上无需 Docker。所有构建依赖装在容器里。
 
-先准备自己提供的、已解密且应用 1.4.3 更新的目录：`exefs/`、`romfs/`。`fonts/`：自行提取的 6 个系统共享字体 BFTTF，名称见 `src/host/shared_font.c`。支持解包 RomFS；转换后的输入格式见构建文档。 不接受其他版本混用，不下载或分发游戏、密钥、系统字体、存档或生成的游戏代码。
+先准备自己提供的、已解密且应用 1.4.3 更新的目录：`exefs/`、`romfs/`。`fonts/`：自行提取的 6 个系统共享字体 BFTTF，名称见 `src/host/shared_font.c`。支持解包 RomFS；转换后的输入格式见构建文档。 不接受其他版本混用，公开源码包不含游戏、密钥、系统字体、存档或生成的游戏代码；自有数据可以保存为项目私有的加密恢复制品，见 [个人恢复](docs/private-recovery.md)。
 
 ```sh
 git clone https://gitlab.example.com:8445/codex/totk-native.git
@@ -40,3 +40,9 @@ python3 build.py runtime --work /mnt/totk-public-check
 验证范围与已知限制见 [docs/validation.md](docs/validation.md)。
 
 依赖与许可见 [NOTICE.md](NOTICE.md)、[UPSTREAM.json](UPSTREAM.json) 和 [docs/build.md](docs/build.md)。
+
+## 掌机应用控制
+
+F1 或 Minus+Plus 打开可折叠的边缘控制栏；应用菜单用 Deck A 确认、B 返回，游戏玩法映射保持不变。原生 IMU、已接通的画面选项、金手指导入边界和验证状态见 [应用控制](docs/application-controls.md)。固定版本游戏菜单也使用物理 A 确认、B 取消；已验证的软件范围与实机验收边界见 [菜单输入](docs/menu-confirm.md)。
+
+维护者重新生成按键图示：安装 `.gitlab/art/pipcompile.lock.txt` 中带哈希的开发依赖后执行 `python3 tools/draw_deck_art.py`。普通编译使用已提交的图示，不依赖这些绘图包；它们也纳入依赖扫描。

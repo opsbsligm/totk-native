@@ -25,7 +25,7 @@ def checked_files(manifest, full):
             raise ValueError('Package file is a symlink: ' + name)
         if not path.is_file() or path.stat().st_size != expected['size']:
             raise ValueError('Missing or truncated package file: ' + name)
-        if full or name == 'ultratears' or name.startswith(('lib/', 'data/exefs/')) or path.suffix in ('.py', '.sh'):
+        if full or name == 'ultratears' or name.startswith(('lib/', 'data/exefs/', 'data/fonts/')) or path.suffix in ('.py', '.sh'):
             with path.open('rb') as stream:
                 if hashlib.file_digest(stream, 'sha256').hexdigest() != expected['sha256']:
                     raise ValueError('Package file checksum mismatch: ' + name)

@@ -1,0 +1,8 @@
+Local static review of the pinned TOTK 1.4.3 NSO; no guest executable launched.
+main+0x20d1c00 resolves MessageDialogScreen via ScreenMgr *(main+0x3acf960), count +8, screen array +0x10.
+main+0x9db390 looks up the same definition table for frontend requests; main+0x9db47c stores the created screen in that same manager array (includes title/frontend).
+main+0x87250c sets UIScreen+0x20 to its owning ScreenMgr.
+main+0x28ff680 checks signed priority at +0x16d >=0 and lifecycle state +0x16e ==2; adjacent closing predicate confirms negative priority/closing state semantics.
+menu_profile.h contains 22 explicit interactive screen types. Each name getter was verified as ADRP x0 / ADD x0 / RET to its exact type name. Local data relocations associate it with the type descriptor; the primary vtable was independently confirmed by constructor STR/STP at object offset zero for all 22 classes.
+Name/type-descriptor pins, bounded process_vm_readv(self), parent owner, array count/address stability and exact vtable whitelist protect interpretation.
+No game code or full decompilation is distributed in the repository. The adapter and transition policy are original MIT code. Static facts and synthetic-memory regression do not validate gameplay experience.

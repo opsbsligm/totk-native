@@ -52,6 +52,9 @@ def main():
     parser.add_argument('--sbom-dir', type=Path, default=ROOT / 'sca-artifacts')
     args = parser.parse_args()
     expected = {'pipcompile.lock.txt': validate_input()}
+    art = ROOT / '.gitlab/art/pipcompile.lock.txt'
+    if art.exists():
+        expected['art/pipcompile.lock.txt'] = {p: v['version'] for p, v in requirements(art).items()}
     if args.input_only:
         print('Scan lock preserves all locked package versions and original artifact hashes')
         return

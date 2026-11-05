@@ -1,7 +1,8 @@
+/* SPDX-License-Identifier: MIT */
 /* Steam Deck report coordinates/scales follow SDL 3.2.30's public Steam Deck
  * backend, composed with UltraTears' SDL-to-Switch sensor rotation. This is an
  * independent sensor-only decoder, not SDL's controller configuration code.
- * See SOURCES.md for the exact public reference and byte layout. */
+ * See docs/native-motion.md for the public reference and byte layout. */
 #include "deck_motion.h"
 
 static int signed_le16(const unsigned char *p) {
