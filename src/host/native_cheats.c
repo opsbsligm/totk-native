@@ -32,6 +32,22 @@ void nd_cheats_bind(const char *id,const char *hash,uint64_t module_base,uint64_
     snprintf(game,sizeof game,"%s",id);snprintf(build,sizeof build,"%s",hash);
     pthread_mutex_unlock(&mutex);
 }
+static int hex_value(const char *text,uint64_t *out) {
+    if(!text || !*text) return 0;
+    if(text[0]=='0' && (text[1]=='x' || text[1]=='X')) text+=2;
+    if(!*text) return 0;
+    uint64_t value=0;
+    while(*text) {
+        unsigned char c=(unsigned char)*text++;unsigned d;
+        if(c>='0' && c<='9') d=c-'0';
+        else if(c>='a' && c<='f') d=c-'a'+10;
+        else if(c>='A' && c<='F') d=c-'A'+10;
+        else return 0;
+        if(value>(UINT64_MAX-d)/16) return 0;
+        value=value*16+d;
+    }
+    *out=value;return 1;
+}
 int nd_cheats_load(const char *path) {
     pthread_mutex_lock(&mutex);
     if(count) {pthread_mutex_unlock(&mutex);return 0;} // never replace live definitions
@@ -48,8 +64,13 @@ int nd_cheats_load(const char *path) {
     size_t loaded=0;
     while(good && fgets(line,sizeof line,f)) {
         if(line[0]=='#' || line[0]=='\n') continue;
-        char label[49];unsigned long long offset;unsigned before,after;
-        if(loaded>=LIMIT || sscanf(line,"%48[A-Za-z0-9_-] %llx %x %x %c",label,&offset,&before,&after,&extra)!=4 ||
+        if(!strchr(line,'\n') && !feof(f)) {fail("Cheat line is too long");good=0;break;}
+        char *next=NULL,*label=strtok_r(line," \t\r\n",&next);
+        if(!label) continue;
+        char *address=strtok_r(NULL," \t\r\n",&next),*expected=strtok_r(NULL," \t\r\n",&next),*replacement=strtok_r(NULL," \t\r\n",&next);
+        uint64_t offset,before,after;
+        if(loaded>=LIMIT || strlen(label)>48 || strspn(label,"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")!=strlen(label) ||
+           strtok_r(NULL," \t\r\n",&next) || !hex_value(address,&offset) || !hex_value(expected,&before) || !hex_value(replacement,&after) || before>UINT32_MAX || after>UINT32_MAX ||
            offset>UINT64_MAX-base || base+offset<start || bytes<4 || base+offset-start>bytes-4 || ((base+offset)&3)) {
             fail("Unsupported cheat line or address outside the game's writable data");good=0;break;
         }

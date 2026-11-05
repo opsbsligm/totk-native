@@ -32,6 +32,15 @@ int main(int argc,char **argv) {
     fixture(p,"NATIVE_CHEATS_V1 synthetic wrong-build\nPatch 0 a b\n");assert(nd_cheats_load(p)<0);
     fixture(p,"NATIVE_CHEATS_V1 synthetic abc\nBad 10 28 32\n");assert(nd_cheats_load(p)<0);
     fixture(p,"NATIVE_CHEATS_V1 synthetic abc\nBad 1 a b\n");assert(nd_cheats_load(p)<0);
+    fixture(p,"NATIVE_CHEATS_V1 synthetic abc\nBad 0 10000000a b\n");assert(nd_cheats_load(p)<0);assert(nd_cheats_count()==0);
+    fixture(p,"NATIVE_CHEATS_V1 synthetic abc\nBad 0 a 10000000b\n");assert(nd_cheats_load(p)<0);
+    fixture(p,"NATIVE_CHEATS_V1 synthetic abc\nBad -1 a b\n");assert(nd_cheats_load(p)<0);
+    fixture(p,"NATIVE_CHEATS_V1 synthetic abc\nBad 10000000000000000 a b\n");assert(nd_cheats_load(p)<0);
+    fixture(p,"NATIVE_CHEATS_V1 synthetic abc\nBad 0 -a b\n");assert(nd_cheats_load(p)<0);
+    fixture(p,"NATIVE_CHEATS_V1 synthetic abc\nBad 0 a b trailing\n");assert(nd_cheats_load(p)<0);
+    FILE *longline=fopen(p,"w");assert(longline);fputs("NATIVE_CHEATS_V1 synthetic abc\nBad 0 a ",longline);
+    for(int i=0;i<300;i++) fputc('0',longline);
+    fputc('\n',longline);assert(fclose(longline)==0);assert(nd_cheats_load(p)<0);assert(nd_cheats_count()==0);
     fixture(p,"NATIVE_CHEATS_V1 synthetic abc\nOne 0 a b\nTwo 0 a c\n");assert(nd_cheats_load(p)<0);assert(nd_cheats_count()==0);
     fixture(p,"NATIVE_CHEATS_V1 synthetic abc\nPatch 0 a b\n");assert(chmod(p,0644)==0);assert(nd_cheats_load(p)<0);
     assert(chmod(p,0600)==0);assert(nd_cheats_load(p)==0);assert(nd_cheats_count()==1);
