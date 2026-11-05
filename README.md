@@ -43,6 +43,6 @@ python3 build.py runtime --work /mnt/totk-public-check
 
 ## 掌机应用控制
 
-F1 或 Minus+Plus 打开可折叠的边缘控制栏；应用菜单用 Deck A 确认、B 返回，游戏玩法映射保持不变。原生 IMU、已接通的画面选项、金手指导入边界和验证状态见 [应用控制](docs/application-controls.md)。游戏自身菜单 A/B 修改仍待版本调用点核验；不通过全局交换冒充完成。
+F1 或 Minus+Plus 打开可折叠的边缘控制栏；应用菜单用 Deck A 确认、B 返回，游戏玩法映射保持不变。原生 IMU、已接通的画面选项、金手指导入边界和验证状态见 [应用控制](docs/application-controls.md)。固定版本游戏菜单也使用物理 A 确认、B 取消；已验证的软件范围与实机验收边界见 [菜单输入](docs/menu-confirm.md)。
 
 维护者重新生成按键图示：安装 `.gitlab/art/pipcompile.lock.txt` 中带哈希的开发依赖后执行 `python3 tools/draw_deck_art.py`。普通编译使用已提交的图示，不依赖这些绘图包；它们也纳入依赖扫描。

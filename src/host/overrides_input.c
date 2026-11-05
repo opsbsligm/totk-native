@@ -3,6 +3,12 @@
  * stay MacNativeGames' (Mac virtual key codes) and the window layer translates its own keys into them; the game
  * controller source is runtime_gamepad_read (none until the window / SDL3 layer of milestone 3.2); the diagnostic input
  * script / file commands are not ported. */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#ifdef __linux__
+#include <sys/uio.h>
+#endif
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -13,6 +19,14 @@
 #include <string.h>
 
 #include "host.h"
+#ifdef __linux__
+#include "menu_confirm.h"
+static NdMenuConfirm confirm_state;
+static bool menu_read(void *unused,uint64_t addr,void *out,size_t size) {
+    (void)unused;struct iovec local={out,size},remote={(void *)(uintptr_t)addr,size};
+    return process_vm_readv(getpid(),&local,1,&remote,1,0)==(ssize_t)size;
+}
+#endif
 #include "../runtime/hle.h"
 
 typedef struct { int64_t sampling; uint64_t buttons; int32_t lx, ly, rx, ry; uint32_t attributes, pad; } NpadState;
@@ -54,6 +68,9 @@ void runtime_input_clear(void) {
     memset(keys, 0, sizeof keys);
     pending = 0;
     memset(&g_pad, 0, sizeof g_pad);
+#ifdef __linux__
+    confirm_state=(NdMenuConfirm){0};
+#endif
     pthread_mutex_unlock(&input_lock);
 }
 
@@ -178,7 +195,13 @@ static int pad_states(NpadState *out, int max, const uint32_t *id, uint32_t want
         state.ry = 32767 * ((int)keys[126] - (int)keys[125]);   /* arrow up / down */
         RuntimeGamepadState pad;
         gamepad_read(&pad);
+#ifdef __linux__
+        const char *opt=getenv("TOTK_MENU_CONFIRM");
+        bool active=(!opt || strcmp(opt,"0")) && nd_totk_menu_context(menu_read,NULL);
+        state.buttons |= (pad.buttons&~3ull) | nd_menu_confirm(&confirm_state,active,(unsigned)pad.buttons&3,1,2);
+#else
         state.buttons |= pad.buttons;
+#endif
         if (abs(pad.lx) > abs(state.lx)) state.lx = pad.lx;
         if (abs(pad.ly) > abs(state.ly)) state.ly = pad.ly;
         if (abs(pad.rx) > abs(state.rx)) state.rx = pad.rx;

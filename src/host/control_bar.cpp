@@ -1,3 +1,4 @@
+#include "control_preferences.h"
 // SDL's event thread only queues bounded value events. ImGui and Vulkan belong
 // exclusively to the presentation thread. The panel never maps game buttons.
 #include "control_bar.h"
@@ -178,6 +179,7 @@ static void drain(ImGuiIO &io) {
 static void preferences(bool save) {
     const char *data=getenv("XDG_CONFIG_HOME"), *home=getenv("HOME");
     char folder[4096],path[4096];
+    if((!data || *data!='/') && (!home || *home!='/')) return;
     int n=data && *data=='/' ? snprintf(folder,sizeof folder,"%s/totk-native",data) :
         snprintf(folder,sizeof folder,"%s/.config/totk-native",home?home:".");
     if(n<0 || (size_t)n>=sizeof folder) return;
@@ -186,14 +188,11 @@ static void preferences(bool save) {
     n=snprintf(path,sizeof path,"%s/control.ini",folder);
     if(n<0 || (size_t)n>=sizeof path) return;
     if(!save) {
-        FILE *f=fopen(path,"r"); if(!f) return;
         int a,rate,enabled;
-        if(fscanf(f,"anchor=%d\nfps=%d\ngyro=%d",&a,&rate,&enabled)==3) {
-            if(a>=0 && a<8) anchor=a;
-            if(rate==30 || rate==40 || rate==45 || rate==60 || rate==90 || rate==120) fps=rate;
-            gyro=enabled!=0; runtime_hid_feedback_flag("gyro",gyro);
+        if(nd_control_preferences_read(path,&a,&rate,&enabled)) {
+            anchor=a; fps=rate; gyro=enabled!=0; runtime_hid_feedback_flag("gyro",gyro);
         }
-        fclose(f); return;
+        return;
     }
     char temp[4096]; n=snprintf(temp,sizeof temp,"%s.new-XXXXXX",path);
     if(n<0 || (size_t)n>=sizeof temp) return;
