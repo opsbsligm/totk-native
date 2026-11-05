@@ -1505,10 +1505,10 @@ static void pp_report(void) {   // at a present after the frame: wait for the GP
     mtl_finish();
     uint64_t *ts = malloc(sizeof *ts * 2 * (size_t)g_ppn);
     double (*row)[2] = malloc(sizeof *row * (size_t)g_ppn);
-    if (!ts || !row) return;
+    if (!ts || !row) goto cleanup;
     VkResult r = vk.vkGetQueryPoolResults(vkc.device, g_ppq, 0, (uint32_t)(2 * g_ppn), sizeof *ts * 2 * (size_t)g_ppn, ts, sizeof *ts,
                                           VK_QUERY_RESULT_64_BIT);
-    if (r != VK_SUCCESS) { VLOG("pass profile: results %d", (int)r); return; }
+    if (r != VK_SUCCESS) { VLOG("pass profile: results %d", (int)r); goto cleanup; }
     double per = vkc.props.limits.timestampPeriod / 1e6, inpass = 0, gaps = 0;
     for (int i = 0; i < g_ppn; i++) {
         row[i][0] = ts[2 * i + 1] > ts[2 * i] ? (double)(ts[2 * i + 1] - ts[2 * i]) * per : 0;
@@ -1525,6 +1525,7 @@ static void pp_report(void) {   // at a present after the frame: wait for the GP
         VLOG("  %7.3f ms  pass %4d  %ux%u  %u colour (fmt %#x) depth %#x  %u draws  fs %s", row[k][0], (int)row[k][1], p->w, p->h,
              p->ncolor, p->fmt0, p->depth, p->draws, p->key[0] ? p->key : "-");
     }
+cleanup:
     free(ts); free(row);
 }
 
