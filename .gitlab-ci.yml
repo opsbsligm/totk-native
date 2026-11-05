@@ -26,8 +26,8 @@ default:
 
 native-unit:
   needs: []
-  tags: [gitlab--duo]
-  image: local.gitlab-ci.invalid/gitlab-org/duo-workflow/default-docker-image/workflow-generic-image:v0.0.23
+  tags: [native-games]
+  image: native-games/toolchain:c0a18e93d70c048d8fee
   script:
     - python3 tools/check_source.py
     - mkdir -p out/public-tests
