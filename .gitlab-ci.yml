@@ -82,8 +82,15 @@ container_scanning:
     paths: [out/container-scan.log, gl-container-scanning-report.json, gl-sbom-report.cdx.json]
 
 dependency-scanning:
+  tags: [native-games-origin]
   before_script:
     - cp .gitlab/pipcompile.lock.txt pipcompile.lock.txt
+    - |
+      if [ -n "${NATIVE_SECURITY_API_URL:-}" ]; then
+        test -s "$CI_SERVER_TLS_CA_FILE"
+        export SSL_CERT_FILE="$CI_SERVER_TLS_CA_FILE"
+        export CI_API_V4_URL="$NATIVE_SECURITY_API_URL"
+      fi
   image: ${NATIVE_SECURITY_PREFIX}/dependency-scanning@sha256:dee4eff3ebca66a1112477142c902e62462ee53e0a8dc4292cdfa2ed459aae21
 
 dependency-coverage:
