@@ -37,7 +37,7 @@ native-unit:
 native-build:
   needs: []
   tags: [native-games]
-  image: native-games/toolchain:10b59487b9b121945f05
+  image: native-games/toolchain:c0a18e93d70c048d8fee
   script:
     - mkdir -p out/home
     - export HOME="$CI_PROJECT_DIR/out/home"
@@ -64,7 +64,7 @@ container_scanning:
   needs: []
   variables:
     GIT_STRATEGY: fetch
-    CS_IMAGE: "archive://out/toolchain.tar.gz"
+    CS_IMAGE: "archive://out/toolchain.tar"
     CS_DISABLE_LANGUAGE_VULNERABILITY_SCAN: "false"
     CS_TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/out/trivy-cache"
     TMPDIR: "$CI_PROJECT_DIR/out/trivy-tmp"
@@ -91,9 +91,11 @@ gitlab-advanced-sast-cpp:
     SAST_COMPILATION_DATABASE: "out/cppscan/compile_commands.json"
   before_script:
     - python3 .gitlab/unpack_cpp_scan.py
+  script:
+    - python3 .gitlab/run_cpp_scan.py
   artifacts:
     when: always
-    paths: [out/cppscan/coverage-input.json, gl-sast-report.json]
+    paths: [out/cppscan/coverage-input.json, out/cppscan/coverage-result.json, out/cppscan/analysis.log, gl-sast-report.json]
   image: registry.gitlab.com/security-products/clangsa@sha256:9aff93a28ad09aaffd1701747e350d643ce31e3f6f8a561541e6d95021fb32f3
   allow_failure: false
 

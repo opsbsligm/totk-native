@@ -3,6 +3,7 @@ require 'net/http'
 require 'uri'
 require 'digest'
 require 'fileutils'
+require 'zlib'
 
 settings = File.readlines('.gitlab/toolchain.env', chomp: true).to_h { |line| line.split('=', 2) }
 version = settings.fetch('NATIVE_TOOLCHAIN_VERSION')
@@ -34,6 +35,25 @@ begin
   raise 'Toolchain archive checksum mismatch' unless digest.hexdigest == expected
   File.rename(partial, 'out/toolchain.tar.gz')
   puts "Toolchain archive verified: #{version}, #{count} bytes"
+  # GCS reads archive metadata for every finding. A seekable tar avoids
+  # decompressing the entire image thousands of times during report conversion.
+  expanded = 'out/toolchain.tar.new'
+  begin
+    size = 0
+    Zlib::GzipReader.open('out/toolchain.tar.gz') do |source|
+      File.open(expanded, 'wb') do |target|
+        while (block = source.read(1024 * 1024)) && !block.empty?
+          size += block.bytesize
+          raise 'Expanded toolchain archive exceeds 6 GiB bound' if size > 6 * 1024**3
+          target.write(block)
+        end
+      end
+    end
+    File.rename(expanded, 'out/toolchain.tar')
+    puts "Seekable toolchain archive ready: #{size} bytes"
+  ensure
+    File.unlink(expanded) if File.exist?(expanded)
+  end
 ensure
   File.unlink(partial) if File.exist?(partial)
 end

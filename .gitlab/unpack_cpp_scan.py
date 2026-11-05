@@ -1,5 +1,6 @@
 """Extract the bounded public-header artifact without requiring tar in the analyzer image."""
 from pathlib import Path, PurePosixPath
+import json
 import shutil
 import tarfile
 
@@ -23,4 +24,12 @@ with tarfile.open(base / 'cppscan.tar.gz', 'r:gz') as archive:
             target.parent.mkdir(parents=True, exist_ok=True)
             with archive.extractfile(entry) as source, target.open('xb') as stream:
                 shutil.copyfileobj(source, stream)
-print('Public compile database and header artifact extracted')
+database = base / 'cppscan/compile_commands.json'
+rows = json.loads(database.read_text())
+for row in rows:
+    compiler = row['arguments'][0]
+    if compiler not in ('clang', 'clang++') or not shutil.which(compiler):
+        raise SystemExit('Expected the analyzer-provided Clang compiler')
+    row['arguments'][0] = shutil.which(compiler)
+database.write_text(json.dumps(rows, indent=2) + '\n')
+print('Public compile database and header artifact extracted; analyzer compiler paths resolved')

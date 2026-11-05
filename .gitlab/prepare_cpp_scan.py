@@ -56,7 +56,11 @@ def main():
     if not raw or {obj for _, obj, _ in raw} != set(build.rglob('*.o')):
         raise ValueError('Compilation database does not cover every built runtime object')
     output.mkdir(parents=True)
-    languages = {'c': system_includes('clang', 'c'), 'c++': system_includes('clang++', 'c++')}
+    resource = (Path(subprocess.check_output(['clang', '-print-resource-dir'], text=True).strip()) / 'include').resolve()
+    # The analyzer uses its own Clang version. Intrinsic/resource headers must
+    # match that compiler; only the build host's libc/C++ SDK is forwarded.
+    languages = {language: [path for path in system_includes(compiler, language) if path != resource]
+                 for language, compiler in (('c', 'clang'), ('c++', 'clang++'))}
     unique = list(dict.fromkeys(path for paths in languages.values() for path in paths))
     mappings = {str(source): str(project), str(build): str(output / 'generated')}
     native = Path(os.environ['NATIVE_DEPS']) / 'include'
@@ -91,7 +95,7 @@ def main():
             if value in ('-MD', '-MMD', '-MP'):
                 continue
             arguments.append(rebase(value))
-        arguments.append('-nostdinc')
+        arguments.append('-nostdlibinc')
         if language == 'c++':
             arguments.append('-nostdinc++')
         for include in languages[language]:

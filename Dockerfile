@@ -46,3 +46,6 @@ COPY --from=dotnet /usr/share/dotnet /usr/share/dotnet
 RUN ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet
 
 RUN apt-get update && apt-get install -y --no-install-recommends fonts-wqy-microhei && rm -rf /var/lib/apt/lists/*
+
+# Dependency installation is complete. Build execution never installs packages.
+RUN /opt/venv/bin/python -m pip uninstall --yes pip
