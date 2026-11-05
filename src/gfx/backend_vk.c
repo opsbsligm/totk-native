@@ -368,14 +368,16 @@ void mtl_pool_invalidate(const pool_t *p, uint64_t off, uint64_t n) { (void)p; (
 
 static __thread int g_pool_last;   // the entry this thread found last (draws use a few pools over and over)
 static const pool_ent *pool_find(uintptr_t addr, uint64_t len) {   // g_pool_mu held
-    if (g_pool_last < g_npools && addr >= g_pools[g_pool_last].lo && addr + len <= g_pools[g_pool_last].hi) return &g_pools[g_pool_last];
+    if (len > UINT64_MAX - addr) return NULL;
+    uint64_t end = (uint64_t)addr + len;
+    if (g_pool_last < g_npools && addr >= g_pools[g_pool_last].lo && end <= g_pools[g_pool_last].hi) return &g_pools[g_pool_last];
     int lo = 0, hi = g_npools - 1, found = -1;
     while (lo <= hi) {
         int m = (lo + hi) / 2;
         if (g_pools[m].lo <= addr) { found = m; lo = m + 1; } else hi = m - 1;
     }
     for (int i = found; i >= 0 && i > found - 4; i--)   // nested / adjacent pools: the closest few that start below
-        if (addr >= g_pools[i].lo && addr + len <= g_pools[i].hi) { g_pool_last = i; return &g_pools[i]; }
+        if (addr >= g_pools[i].lo && end <= g_pools[i].hi) { g_pool_last = i; return &g_pools[i]; }
     return NULL;
 }
 
