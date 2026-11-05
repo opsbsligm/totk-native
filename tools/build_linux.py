@@ -199,8 +199,8 @@ def main():
     cc = shutil.which('clang')
     cxx = shutil.which('clang++')
     ar = shutil.which('llvm-ar') or shutil.which('ar')
-    if not all([cc, cxx, ar, shutil.which('ninja')]):
-        ap.error('clang, clang++, ar and ninja are required')
+    if not all([cc, cxx, ar, shutil.which('ninja'), shutil.which('ld.lld')]):
+        ap.error('clang, clang++, ar, ld.lld and ninja are required')
     flags = pkg_flags('sdl3', 'vulkan', 'opus', 'vpx', 'openssl', 'libzstd')
     includes = [f'-I{ROOT/p}' for p in ['src/host', 'src/gfx', 'src/gfx/nvn', 'src/gfx/nvn/include', 'src/gfx/compat', 'src/runtime']]
     if os.environ.get('ULTRS_VULKAN_INCLUDE'):
@@ -221,7 +221,7 @@ def main():
              'rule cc_game',
              '  command = '+shlex.quote(cc)+' '+shlex.join(common)+' -mllvm -disable-cgp -std=gnu17 -MD -MF $out.d -c $in -o $out',
              '  depfile = $out.d', '  deps = gcc',
-             'rule link', '  command = '+shlex.quote(cxx)+' -rdynamic -o $out @$out.rsp '+shlex.join(flags+['-pthread', '-ldl', '-lm']),
+             'rule link', '  command = '+shlex.quote(cxx)+' -fuse-ld=lld -rdynamic -o $out.new @$out.rsp '+shlex.join(flags+['-pthread', '-ldl', '-lm'])+' && mv -f $out.new $out',
              '  rspfile = $out.rsp', '  rspfile_content = $in']
     if recovery:
         lines.extend(['rule cc_recovery',
