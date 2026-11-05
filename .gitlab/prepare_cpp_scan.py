@@ -53,7 +53,12 @@ def main():
         if not corresponding.is_file() or sha(path) != sha(corresponding):
             raise ValueError('Exported source differs from the scanned checkout')
         raw.append((path, obj, command))
-    if not raw or {obj for _, obj, _ in raw} != set(build.rglob('*.o')):
+    actual_objects = set(build.rglob('*.o'))
+    logged_objects = {obj for _, obj, _ in raw}
+    if not raw or logged_objects != actual_objects:
+        print(json.dumps(dict(logged=len(logged_objects), built=len(actual_objects),
+                              missing=sorted(map(str, actual_objects - logged_objects)),
+                              unexpected=sorted(map(str, logged_objects - actual_objects)))))
         raise ValueError('Compilation database does not cover every built runtime object')
     output.mkdir(parents=True)
     resource = (Path(subprocess.check_output(['clang', '-print-resource-dir'], text=True).strip()) / 'include').resolve()

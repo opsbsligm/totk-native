@@ -41,6 +41,7 @@ native-build:
   script:
     - mkdir -p out/home
     - export HOME="$CI_PROJECT_DIR/out/home"
+    - export MAKEFLAGS="--output-sync=target"
     - export NATIVE_SOURCE_CHECK="/tmp/native-source-${CI_JOB_ID}"
     - mkdir -p "$NATIVE_SOURCE_CHECK/source"
     - trap 'rm -rf "$NATIVE_SOURCE_CHECK"' EXIT
@@ -66,11 +67,17 @@ container_scanning:
     GIT_STRATEGY: fetch
     CS_IMAGE: "archive://out/toolchain.tar"
     CS_DISABLE_LANGUAGE_VULNERABILITY_SCAN: "false"
+    CS_QUIET: "true"
     CS_TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/out/trivy-cache"
     TMPDIR: "$CI_PROJECT_DIR/out/trivy-tmp"
   before_script:
     - ruby .gitlab/fetch_toolchain.rb
     - ruby .gitlab/prepare_scanner_cache.rb
+  script:
+    - ruby .gitlab/run_container_scan.rb
+  artifacts:
+    when: always
+    paths: [out/container-scan.log, gl-container-scanning-report.json, gl-sbom-report.cdx.json]
 
 dependency-scanning:
   image: ${NATIVE_SECURITY_PREFIX}/dependency-scanning@sha256:dee4eff3ebca66a1112477142c902e62462ee53e0a8dc4292cdfa2ed459aae21
