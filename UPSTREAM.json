@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/kuraeow/ultratears",
+  "commit": "0c9ce8afd4c3ab81c33200917af51fb9807aeef0",
+  "license": "GPL-3.0-or-later",
+  "game_version": "1.4.3",
+  "original_port_repository": "https://gitlab.example.com:8445/codex/nativedeck",
+  "original_port_commit": "dad29799121a99940f0cb2a2aa9b8759e358de59",
+  "game_content_included": false
+}

@@ -1,0 +1,138 @@
+include:
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+  - template: Jobs/Container-Scanning.gitlab-ci.yml
+  - template: Jobs/Dependency-Scanning.v2.gitlab-ci.yml
+    inputs:
+      allow_failure: false
+      max_scan_depth: -1
+      pipcompile_lockfile_file_name_pattern: "pipcompile.lock.txt"
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+
+stages: [test]
+variables:
+  AST_ENABLE_MR_PIPELINES: "true"
+  GITLAB_ADVANCED_SAST_ENABLED: "true"
+  GITLAB_ADVANCED_SAST_CPP_ENABLED: "true"
+default:
+  tags: [native-games]
+  timeout: 40 minutes
+
+native-unit:
+  needs: []
+  tags: [native-games]
+  image: native-games/toolchain:c0a18e93d70c048d8fee
+  script:
+    - python3 tools/check_source.py
+    - python3 .gitlab/check_dependency_coverage.py --input-only
+    - mkdir -p out/public-tests
+    - cd out/public-tests
+    - python3 -B -m unittest discover -s "$CI_PROJECT_DIR/tests" -v
+
+native-build:
+  needs: []
+  tags: [native-games]
+  image: native-games/toolchain:c0a18e93d70c048d8fee
+  script:
+    - mkdir -p out/home
+    - export HOME="$CI_PROJECT_DIR/out/home"
+    - export MAKEFLAGS="--output-sync=target"
+    - export NATIVE_SOURCE_CHECK="/tmp/native-source-${CI_JOB_ID}"
+    - mkdir -p "$NATIVE_SOURCE_CHECK/source"
+    - trap 'rm -rf "$NATIVE_SOURCE_CHECK"' EXIT
+    - python3 tools/export_source.py --output "$NATIVE_SOURCE_CHECK/source.tar.gz"
+    - tar -xzf "$NATIVE_SOURCE_CHECK/source.tar.gz" -C "$NATIVE_SOURCE_CHECK/source"
+    - python3 "$NATIVE_SOURCE_CHECK/source/tools/check_source.py"
+    - python3 "$NATIVE_SOURCE_CHECK/source/tools/pipeline.py" runtime --work "$CI_PROJECT_DIR/out/public" --jobs 2
+    - mkdir -p out/compiler-policy
+    - cd out/compiler-policy && python3 ../../tools/test_compile_policy.py && cd ../..
+    - python3 tools/audit_linux_runtime.py --build out/public/runtime --evidence out/public/link-audit
+    - python3 .gitlab/prepare_cpp_scan.py --source "$NATIVE_SOURCE_CHECK/source" --build out/public --output out/cppscan
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths: [out/public/logs/, out/public/link-audit/, out/cppscan.tar.gz]
+
+container_scanning:
+  tags: [native-games-origin]
+  timeout: 100 minutes
+  image: ${NATIVE_SECURITY_PREFIX}/container-scanning@sha256:f30b58af2ad924c82cd709b18d6594e007b492cf9e3fe6b223ff9b4d23f539e3
+  allow_failure: false
+  needs: []
+  variables:
+    GIT_STRATEGY: fetch
+    CS_IMAGE: "archive://out/toolchain.tar"
+    CS_DISABLE_LANGUAGE_VULNERABILITY_SCAN: "false"
+    CS_QUIET: "true"
+    CS_TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/out/trivy-cache"
+    TMPDIR: "$CI_PROJECT_DIR/out/trivy-tmp"
+  before_script:
+    - ruby .gitlab/fetch_toolchain.rb
+    - ruby .gitlab/prepare_scanner_cache.rb
+  script:
+    - ruby .gitlab/run_container_scan.rb
+  artifacts:
+    when: always
+    paths: [out/container-scan.log, gl-container-scanning-report.json, gl-sbom-report.cdx.json]
+
+dependency-scanning:
+  tags: [native-games-origin]
+  before_script:
+    - cp .gitlab/pipcompile.lock.txt pipcompile.lock.txt
+    - |
+      if [ -n "${NATIVE_SECURITY_API_URL:-}" ]; then
+        test -s "$CI_SERVER_TLS_CA_FILE"
+        export SSL_CERT_FILE="$CI_SERVER_TLS_CA_FILE"
+        export CI_API_V4_URL="$NATIVE_SECURITY_API_URL"
+      fi
+  image: ${NATIVE_SECURITY_PREFIX}/dependency-scanning@sha256:dee4eff3ebca66a1112477142c902e62462ee53e0a8dc4292cdfa2ed459aae21
+
+dependency-coverage:
+  needs:
+    - job: dependency-scanning
+      artifacts: true
+  image: native-games/toolchain:c0a18e93d70c048d8fee
+  script:
+    - python3 .gitlab/check_dependency_coverage.py
+  artifacts:
+    when: always
+    paths: [out/dependency-coverage.json]
+
+semgrep-sast:
+  image: ${NATIVE_SECURITY_PREFIX}/semgrep@sha256:bde285a2219a3397142bdf2e93d513b179a98ec8762208cc52242f0929abe552
+  allow_failure: false
+
+gitlab-advanced-sast:
+  image: ${NATIVE_SECURITY_PREFIX}/gitlab-advanced-sast@sha256:a4f2e8941901de686a9214ad06a781f55202b5dcdc9f2fd3274c39ba4e4491a7
+  allow_failure: false
+
+gitlab-advanced-sast-cpp:
+  timeout: 90 minutes
+  needs:
+    - job: native-build
+      artifacts: true
+  variables:
+    SAST_COMPILATION_DATABASE: "out/cppscan/compile_commands.json"
+  before_script:
+    - python3 .gitlab/unpack_cpp_scan.py
+  script:
+    - python3 .gitlab/run_cpp_scan.py
+  artifacts:
+    when: always
+    paths: [out/cppscan/coverage-input.json, out/cppscan/coverage-result.json, out/cppscan/analysis.log, gl-sast-report.json]
+  image: ${NATIVE_SECURITY_PREFIX}/clangsa@sha256:9aff93a28ad09aaffd1701747e350d643ce31e3f6f8a561541e6d95021fb32f3
+  allow_failure: false
+
+gitlab-advanced-sast-ext:
+  image: ${NATIVE_SECURITY_PREFIX}/gitlab-advanced-sast-ext@sha256:046eb419b1e2acb992013c649cd8932ff05dfa14f8c35335a96201f1f7522f64
+  allow_failure: false
+
+secret_detection:
+  image: ${NATIVE_SECURITY_PREFIX}/secrets@sha256:05e8567c4e4bdfaec379c3c2f867204b32b0226636b5380642d8d4f87a66ad93
+  allow_failure: false
