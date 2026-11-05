@@ -59,7 +59,7 @@ native-build:
 
 container_scanning:
   timeout: 100 minutes
-  image: registry.gitlab.com/security-products/container-scanning@sha256:f30b58af2ad924c82cd709b18d6594e007b492cf9e3fe6b223ff9b4d23f539e3
+  image: ${NATIVE_SECURITY_PREFIX}/container-scanning@sha256:f30b58af2ad924c82cd709b18d6594e007b492cf9e3fe6b223ff9b4d23f539e3
   allow_failure: false
   needs: []
   variables:
@@ -73,14 +73,14 @@ container_scanning:
     - ruby .gitlab/prepare_scanner_cache.rb
 
 dependency-scanning:
-  image: registry.gitlab.com/security-products/dependency-scanning@sha256:dee4eff3ebca66a1112477142c902e62462ee53e0a8dc4292cdfa2ed459aae21
+  image: ${NATIVE_SECURITY_PREFIX}/dependency-scanning@sha256:dee4eff3ebca66a1112477142c902e62462ee53e0a8dc4292cdfa2ed459aae21
 
 semgrep-sast:
-  image: registry.gitlab.com/security-products/semgrep@sha256:bde285a2219a3397142bdf2e93d513b179a98ec8762208cc52242f0929abe552
+  image: ${NATIVE_SECURITY_PREFIX}/semgrep@sha256:bde285a2219a3397142bdf2e93d513b179a98ec8762208cc52242f0929abe552
   allow_failure: false
 
 gitlab-advanced-sast:
-  image: registry.gitlab.com/security-products/gitlab-advanced-sast@sha256:a4f2e8941901de686a9214ad06a781f55202b5dcdc9f2fd3274c39ba4e4491a7
+  image: ${NATIVE_SECURITY_PREFIX}/gitlab-advanced-sast@sha256:a4f2e8941901de686a9214ad06a781f55202b5dcdc9f2fd3274c39ba4e4491a7
   allow_failure: false
 
 gitlab-advanced-sast-cpp:
@@ -97,13 +97,13 @@ gitlab-advanced-sast-cpp:
   artifacts:
     when: always
     paths: [out/cppscan/coverage-input.json, out/cppscan/coverage-result.json, out/cppscan/analysis.log, gl-sast-report.json]
-  image: registry.gitlab.com/security-products/clangsa@sha256:9aff93a28ad09aaffd1701747e350d643ce31e3f6f8a561541e6d95021fb32f3
+  image: ${NATIVE_SECURITY_PREFIX}/clangsa@sha256:9aff93a28ad09aaffd1701747e350d643ce31e3f6f8a561541e6d95021fb32f3
   allow_failure: false
 
 gitlab-advanced-sast-ext:
-  image: registry.gitlab.com/security-products/gitlab-advanced-sast-ext@sha256:046eb419b1e2acb992013c649cd8932ff05dfa14f8c35335a96201f1f7522f64
+  image: ${NATIVE_SECURITY_PREFIX}/gitlab-advanced-sast-ext@sha256:046eb419b1e2acb992013c649cd8932ff05dfa14f8c35335a96201f1f7522f64
   allow_failure: false
 
 secret_detection:
-  image: registry.gitlab.com/security-products/secrets@sha256:05e8567c4e4bdfaec379c3c2f867204b32b0226636b5380642d8d4f87a66ad93
+  image: ${NATIVE_SECURITY_PREFIX}/secrets@sha256:05e8567c4e4bdfaec379c3c2f867204b32b0226636b5380642d8d4f87a66ad93
   allow_failure: false
