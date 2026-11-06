@@ -25,6 +25,14 @@ int main(int argc,char **argv) {
  assert(!unlink(p));assert(!symlink("missing-target",p));assert(!nd_control_preferences_read(p,&a,&f,&g));
  assert(!unlink(p));assert(!mkdir(p,0700));assert(!nd_control_preferences_read(p,&a,&f,&g));assert(!rmdir(p));
  fixture(p,"anchor=1\nfps=60\ngyro=0\n");FILE *z=fopen(p,"a");assert(z);for(int i=0;i<512;i++)fputc('0',z);fclose(z);assert(!nd_control_preferences_read(p,&a,&f,&g));
+ assert(!unlink(p));
+ int u=-1,sharp=-1;
+ fixture(p,"anchor=4\nfps=-1\ngyro=1\nupscaler=1\nsharpness=75\n");
+ assert(nd_control_preferences_read_extended(p,&a,&f,&g,&u,&sharp));assert(a==4 && f==-1 && g==1 && u==1 && sharp==75);
+ fixture(p,"anchor=4\nfps=60\ngyro=1\nupscaler=2\nsharpness=50\n");assert(!nd_control_preferences_read_extended(p,&a,&f,&g,&u,&sharp));assert(u==1 && sharp==75);
+ fixture(p,"anchor=4\nfps=60\ngyro=1\nupscaler=1\nsharpness=101\n");assert(!nd_control_preferences_read_extended(p,&a,&f,&g,&u,&sharp));
+ fixture(p,"anchor=4\nfps=60\ngyro=1\nupscaler=1\n");assert(!nd_control_preferences_read_extended(p,&a,&f,&g,&u,&sharp));
+ fixture(p,"anchor=4\nfps=60\ngyro=1\n");assert(nd_control_preferences_read_extended(p,&a,&f,&g,&u,&sharp));assert(!u && sharp==50);
  assert(!unlink(p));return 0;
 }
 ''')

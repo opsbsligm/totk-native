@@ -235,7 +235,8 @@ void nd_atm_bind(const char *id,uint64_t base,uint64_t start,uint64_t size,NdAtm
     pthread_mutex_lock(&mutex);memset(cheats,0,sizeof cheats);count=0;build[0]=error[0]=filename[0]=0;
     main_base=base;data_start=start;data_bytes=size;heap_bounds=heap;
     if(id && strlen(id)==64 && strspn(id,"0123456789abcdefABCDEF")==64 && start>=base && size<=UINT64_MAX-start) {
-        for(int i=0;i<16;i++) build[i]=(char)((id[i]>='a' && id[i]<='f')?id[i]-32:id[i]);build[16]=0;
+        for(int i=0;i<16;i++) {build[i]=(char)((id[i]>='a' && id[i]<='f')?id[i]-32:id[i]);}
+        build[16]=0;
     }
     pthread_mutex_unlock(&mutex);
 }

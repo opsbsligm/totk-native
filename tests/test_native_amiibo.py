@@ -32,7 +32,7 @@ int main(int argc,char **argv) {
     write_tag(path,540);assert(!nd_amiibo_load(path));assert(activated==1);
     assert(!nd_amiibo_tag_info(out,sizeof out));assert(out[0]==4 && out[3]==3 && out[0xa]==7 && out[0x20]==1 && out[0x24]==2);
     assert(nd_amiibo_model_info(out,sizeof out)==ND_NFP_NOT_FOUND);
-    assert(!nd_amiibo_mount());assert(!nd_amiibo_model_info(out,sizeof out));assert(out[0]==0x10 && out[3]==0x16 && out[4]==0x15 && out[5]==0x14 && out[6]==0x13);
+    assert(!nd_amiibo_mount());assert(!nd_amiibo_start());nd_amiibo_snapshot(&s);assert(s.state==4 && activated==1);assert(!nd_amiibo_model_info(out,sizeof out));assert(out[0]==0x10 && out[3]==0x16 && out[4]==0x15 && out[5]==0x14 && out[6]==0x13);
     assert(nd_amiibo_model_info(out,0x3f)==ND_NFP_NOT_FOUND);assert(nd_amiibo_load(path)<0);
     assert(!nd_amiibo_unmount());nd_amiibo_remove();assert(removed==1);assert(nd_amiibo_tag_info(out,sizeof out)==ND_NFP_NOT_FOUND);
     nd_amiibo_snapshot(&s);assert(!s.loaded && s.state==3);assert(!nd_amiibo_start());assert(!nd_amiibo_load(path));assert(activated==2);

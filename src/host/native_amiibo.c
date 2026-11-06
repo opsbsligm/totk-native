@@ -47,6 +47,8 @@ int nd_amiibo_load(const char *path) {
     unsigned nonzero=0,nonff=0;const int uid[]={0,1,2,4,5,6,7};
     for(unsigned i=0;i<7;i++) {nonzero|=data[uid[i]];nonff|=data[uid[i]]^255;}
     if(!nonzero || !nonff) return fail("Invalid tag UID");
+    unsigned identity=0,identity_ff=0;for(int i=0;i<8;i++) {identity|=data[0x54+i];identity_ff|=data[0x54+i]^255;}
+    if(!identity || !identity_ff) return fail("Tag contains no valid figure identity");
     pthread_mutex_lock(&mutex);
     // Do not replace a mounted tag beneath a game operation. Remove it first.
     if(state.state==4 || state.state==2) {pthread_mutex_unlock(&mutex);return fail("Remove the current tag before loading another");}
@@ -66,7 +68,8 @@ void nd_amiibo_remove(void) {
 unsigned nd_amiibo_start(void) {
     pthread_mutex_lock(&mutex);
     if(!state.initialized) {pthread_mutex_unlock(&mutex);return ND_NFP_NOT_FOUND;}
-    int activate=state.loaded && state.state!=2 && state.state!=4;
+    if(state.state==2 || state.state==4) {pthread_mutex_unlock(&mutex);return 0;}
+    int activate=state.loaded;
     state.state=state.loaded?2:1;state.generation++;
     void (*fn)(int)=notification;pthread_mutex_unlock(&mutex);if(activate && fn) fn(1);return 0;
 }

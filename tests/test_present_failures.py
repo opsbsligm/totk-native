@@ -17,6 +17,7 @@ VkFunctions vk;VkContext vkc;
 static int scenario,created,destroyed,view_calls;
 int vk_check(VkResult r,const char *what) {(void)what;return r==VK_SUCCESS;}
 void nd_control_device_reset(void) {}
+void nd_fsr_shutdown(void) {}
 static VkResult caps(VkPhysicalDevice d,VkSurfaceKHR s,VkSurfaceCapabilitiesKHR *c) {
  (void)d;(void)s;memset(c,0,sizeof *c);c->currentExtent=(VkExtent2D){1280,800};c->minImageCount=2;return VK_SUCCESS;
 }
