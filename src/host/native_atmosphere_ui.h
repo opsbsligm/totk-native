@@ -14,7 +14,7 @@ static void nd_draw_atmosphere(const char *game,bool chinese) {
     if(ImGui::Button(t("Disable all","全部关闭"),ImVec2(-1,48))) nd_atm_disable_all();
     if(busy) nd_ui_status(t("Reading file in background","正在后台读取文件"));
     size_t count=nd_atm_count();
-    if(!count && !busy) ImGui::TextWrapped("%s",t("No matching definitions loaded. Empty switches cannot change the game.","尚未加载匹配版本的项目；没有指令的开关不会改变游戏。"));
+    if(!count && !busy) ImGui::TextWrapped("%s",t("No entries loaded. Load built-in presets or import a matching file.","暂无可用项目。可加载内置预设，或导入匹配版本的文件。"));
     for(size_t i=0;i<count;i++) {
         NdAtmInfo info;nd_atm_info(i,&info);bool on=info.enabled;
         ImGui::PushID((int)i);ImGui::Separator();

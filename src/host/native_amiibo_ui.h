@@ -6,7 +6,7 @@
 static void nd_draw_amiibo_library(const char *game,bool chinese) {
     auto t=[chinese](const char *en,const char *zh){return chinese?zh:en;};
     NdAmiiboSnapshot state;nd_amiibo_snapshot(&state);
-    nd_ui_status(state.state==4?t("Game mounted the figure","游戏已读取公仔"):state.state==2?t("Detected; awaiting game read","已检测，等待游戏读取"):
+    nd_ui_status(state.state==4?t("Figure mounted","公仔已挂载"):state.state==2?t("Detected; awaiting game read","已检测，等待游戏读取"):
         state.loaded?t("Ready for the next in-game scan","已就绪，等待游戏内扫描"):t("Select a virtual figure below","请选择下方虚拟公仔"),state.state==4?1:0);
     ImGui::TextWrapped("%s",t("Select the Amiibo ability in game, then scan here. Each explicit scan creates a fresh virtual identity.",
         "先在游戏中选择 Amiibo 能力，再在这里刷入。每次点击生成新的虚拟身份，可反复刷同一公仔。"));
