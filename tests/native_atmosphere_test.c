@@ -27,6 +27,7 @@ int main(int argc,char **argv) {
 #ifdef __linux__
     assert(memory[8]==42);assert(nd_atm_reload("totk-native")<0);stop_all();
     fixture("[Conditional]\n14050000 00000040 0000002A\n04000000 00000044 00000063\n21000000\n04000000 00000044 0000004D\n20000000\n");assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);assert((memory[8]>>32)==99);memory[8]=41;nd_atm_frame(0);assert((memory[8]>>32)==77);stop_all();
+    fixture("[Register condition]\n400F0000 00000000 00000004\n14051F00 00000040 0000004D\n04000000 00000040 00000022\n20000000\n");assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);assert((memory[8]&0xffffffffu)==34);stop_all();
     fixture("[Buttons]\n80000001\n04000000 00000040 00000033\n20000000\n");assert(!nd_atm_reload("totk-native"));enable(0);memory[8]=0;nd_atm_frame(0);assert(!memory[8]);nd_atm_frame(1);assert(memory[8]==51);stop_all();
     memory[9]=(uintptr_t)&heap[1];
     fixture("[Pointer]\n580F0000 00000048\n640F0000 00000000 00000055\n");assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);assert(heap[1]==85);stop_all();
@@ -34,12 +35,12 @@ int main(int argc,char **argv) {
     char dynamic[512];snprintf(dynamic,sizeof dynamic,"[Denied text]\n400F0000 %08X %08X\n640F0000 00000000 00000077\n",(unsigned)(base>>32),(unsigned)base);
     fixture(dynamic);assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);nd_atm_info(0,&info);assert(!info.enabled && !memory[0] && strstr(info.note,"Outside"));
     fixture("[Overflow]\n400F0000 FFFFFFFF FFFFFFFF\n040F0000 00000040 00000011\n");assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);nd_atm_info(0,&info);assert(!info.enabled && strstr(info.note,"overflow"));
-    fixture("[Zero loop]\n30000000 00000000\n04000000 00000040 00000011\n31000000\n");assert(!nd_atm_reload("totk-native"));memory[8]=0;enable(0);nd_atm_frame(0);assert(!memory[8]);stop_all();
-    fixture("[Budget]\n30000000 FFFFFFFF\n04000000 00000040 00000011\n31000000\n");assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);nd_atm_info(0,&info);assert(!info.enabled && strstr(info.note,"budget"));
+    fixture("[Zero loop]\n30010000 00000000\n04000000 00000040 00000011\n31010000\n");assert(!nd_atm_reload("totk-native"));memory[8]=0;enable(0);nd_atm_frame(0);assert(!memory[8]);stop_all();
+    fixture("[Budget]\n30010000 FFFFFFFF\n04000000 00000040 00000011\n31010000\n");assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);nd_atm_info(0,&info);assert(!info.enabled && strstr(info.note,"budget"));
 #else
     nd_atm_info(0,&info);assert(!info.enabled && strstr(info.note,"Linux"));stop_all();
 #endif
-    fixture("[Truncated]\n580F0000\n[Bad nesting]\n21000000\n[Bad loop]\n31000000\n");assert(!nd_atm_reload("totk-native"));
+    fixture("[Truncated]\n580F0000\n[Bad nesting]\n21000000\n[Bad loop]\n31010000\n");assert(!nd_atm_reload("totk-native"));
     for(size_t i=0;i<3;i++) {nd_atm_info(i,&info);assert(!info.supported);}
     fixture("[Invalid token]\n04000000 00000040 NOTHEX!!\n");assert(nd_atm_reload("totk-native")<0);assert(nd_atm_count()==3);
     fixture("[Mode]\n04000000 00000040 00000033\n");assert(!chmod(file,0644));assert(nd_atm_reload("totk-native")<0);

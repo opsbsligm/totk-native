@@ -6,7 +6,7 @@
 // are compute shader objects (as the rest of the backend), with one descriptor set each: the present thread waits for
 // each frame's work before recording the next, so the sets are rewritten in turn.
 //
-// upscale= in ultratears.cfg (TOTK_UPSCALER): fsr (default) or bilinear; sharpness= (TOTK_SHARPNESS) 0..100, default
+// The NativeDeck panel selects FSR or the default bilinear path; RCAS sharpness is 0..100, default
 // 50 (0: no RCAS pass). Cost: two compute passes over the window's size and one copy per present; nothing on the game's.
 #include "vk.h"
 #include "fsr.h"
@@ -28,7 +28,7 @@ int nd_fsr_status(void) { return atomic_load(&capability); }
 #define LOG(...) (fprintf(stderr, "[totk-vk] " __VA_ARGS__), fputc('\n', stderr))
 
 static struct {
-    int tried, ok, logged, sharp, on;
+    int tried, ok, logged, sharp;
     VkDescriptorSetLayout dsl;
     VkPipelineLayout layout;
     VkDescriptorPool dpool;

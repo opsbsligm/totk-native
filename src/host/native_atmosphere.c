@@ -129,7 +129,7 @@ static int run(const Cheat *c, uint64_t keys,int *shared_budget) {
             wr(add(add(region(x),rel),r[y]), width, width == 8 ? imm64(w + i + 2) : w[i + 2]);
             break;
         case 1:   // 1TMC00AA AAAAAAAA V..: if (region M + A) <cond C> V
-            if (!rd(add(region(x),rel), width, &v) || !compare(y, v, width == 8 ? imm64(w + i + 2) : w[i + 2])) {
+            if (!rd(add(add(region(x),rel),z?r[(f>>8)&15]:0), width, &v) || !compare(y, v, width == 8 ? imm64(w + i + 2) : w[i + 2])) {
                 i = skip(w, n, i + len, 1);
                 continue;
             }
@@ -160,7 +160,7 @@ static int run(const Cheat *c, uint64_t keys,int *shared_budget) {
         case 6: {   // 6T0RIor0 V V: store V at R (+ register r); I: R += width
             uint64_t a = add(r[y],(((f >> 8) & 0xF)?r[(f >> 4)&0xF]:0));
             wr(a, width, imm64(w + i + 1));
-            if (z) r[y] += (uint64_t)width;
+            if (z) r[y] = add(r[y],(uint64_t)width);
             break;
         }
         case 7:   // 7T0RC000 VVVVVVVV: R = R <op C> V
@@ -189,7 +189,7 @@ static int run(const Cheat *c, uint64_t keys,int *shared_budget) {
             default: a = add(region(m),add(r[y],imm)); break;
             }
             wr(a, width, r[x]);
-            if (z) r[y] += (uint64_t)width;
+            if (z) r[y] = add(r[y],(uint64_t)width);
             break;
         }
         default:
@@ -210,6 +210,15 @@ static void validate(Cheat *c) {
         if(type>10 || ((type<=1 || type==5 || type==6 || type==7 || type==9 || type==10) && width!=1 && width!=2 && width!=4 && width!=8)) {note(c,"Unsupported opcode or width");return;}
         if(((type==0 || type==1 || type==5) && ((f>>20)&15)>1) || (type==5 && ((f>>12)&15)>1) || (type==9 && (((f>>20)&15)>9 || ((f>>8)&15)>1)) ||
            (type==7 && ((f>>12)&15)>4) || (type==10 && (((f>>8)&15)>5 || (((f>>8)&15)>=3 && ((f>>4)&15)>1)))) {note(c,"Unsupported address region/arithmetic");return;}
+        int x=(f>>20)&15,z=(f>>12)&15,o=(f>>8)&15;
+        if((type==0 && (f&0x0000ff00u)) || (type==1 && z>1) ||
+           (type==2 && (f&0x00ffffffu)) || (type==3 && (f&0x00f0ffffu)) ||
+           (type==4 && (f&0x0ff0ffffu)) || (type==5 && (o || (z && x))) ||
+           (type==6 && (x || z>1 || o>1 || (f&15))) || (type==7 && (x || (f&0xfff))) ||
+           (type==9 && ((f&15) || (o && (f&255)))) ||
+           (type==10 && (z>1 || ((o==0 || o==1 || o==3) && (f&15))))) {
+            note(c,"Unsupported operand variant or reserved bits");return;
+        }
         if((type==2 || type==3) && width>1) {note(c,"Invalid control-flow opcode");return;}
         if(type==1 && (((f>>16)&15)<1 || ((f>>16)&15)>6)) {note(c,"Invalid comparison");return;}
         if(type==1 || type==8 || (type==3 && !width)) {

@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/kuraeow/ultratears",
+  "commit": "57bf619e7ef579a0675a4d41d74413ebaca02fb8",
+  "original_shader_repository": "https://github.com/valentderah/totk-pc-recomp",
+  "original_shader_commit": "0ae47a578285cde080642c9e6c40316c99171ef1",
+  "files": {
+    "LICENSE-totk-pc-recomp.txt": "63833cc1eff937e4c66cfd07be2d373499b1c6390361dcc3ebade17391021495",
+    "ffx/LICENSE.txt": "db089274ce766da70f5b7d791029c3486f9f9e27c8c79c652689603d3192e802",
+    "ffx/ffx_a.h": "f60e2722fcd13989523b9164d776ab382b3692791767f3bf8bb19967f763f3fb",
+    "ffx/ffx_fsr1.h": "93c3922362ea7fc99cbcc698ca30c98de4f8c246d1fbb0b09e015ddef38ce3a5",
+    "fsr_easu.comp": "bf760ee7dd2efc013e24ec2daa0eb2f0b4835fdbc6db8358fd8ffb5667d8dd05",
+    "fsr_easu_spv.h": "7424b9c422c80d4dd6a3a10bfa5db3ced846c645304f795b7eefd64af965c978",
+    "fsr_rcas.comp": "6ea46d4c41d9b70c0fffb44b34b812476b6aa6a840f86f941d106d4f05d48ce0",
+    "fsr_rcas_spv.h": "e6d55246bdb20058f8d3e3e02b8b1755da07b27f877c68e323253288c20591f4"
+  }
+}
