@@ -5,7 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-typedef struct {char name[97],note[160];int enabled,supported;} NdAtmInfo;
+typedef struct {char name[97],note[160];int enabled,supported;uint64_t frames,writes,verified_writes,mismatches,last_address,last_value;} NdAtmInfo;
 typedef void (*NdAtmHeap)(uint64_t *base,uint64_t *size);
 void nd_atm_bind(const char *build,uint64_t main_base,uint64_t data_start,uint64_t data_size,NdAtmHeap heap);
 int nd_atm_reload(const char *game); // XDG_DATA_HOME/<game>/cheats/<first8B-buildid>.txt

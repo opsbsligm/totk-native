@@ -28,6 +28,7 @@ static uint64_t main_base,data_start,data_bytes;static NdAtmHeap heap_bounds;
 static char build[17],error[160],filename[4096];
 static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 static int fault;static const char *fault_note;
+static NdAtmInfo *executing;
 static _Atomic int loading;
 static uint64_t generation;
 static int within(uint64_t a,size_t n,uint64_t start,uint64_t size) {return a>=start && n<=size && a-start<=size-n;}
@@ -51,7 +52,16 @@ static int transfer(uint64_t a,int width,void *data,int write) {
 #endif
 }
 static int rd(uint64_t a,int width,uint64_t *v) {*v=0;return transfer(a,width,v,0);}
-static void wr(uint64_t a,int width,uint64_t value) {(void)transfer(a,width,&value,1);}
+static void wr(uint64_t a,int width,uint64_t value) {
+    if(!transfer(a,width,&value,1) || !executing) return;
+    executing->writes++;executing->last_address=a;executing->last_value=value;
+    uint64_t observed=0;
+    if(transfer(a,width,&observed,0)) {
+        uint64_t mask=width==8?UINT64_MAX:((UINT64_C(1)<<(width*8))-1);
+        if((observed&mask)==(value&mask)) executing->verified_writes++;
+        else executing->mismatches++; // The game can overwrite concurrently; do not mislabel this as verified.
+    }
+}
 static int op_len(const uint32_t *w, int left) {
     uint32_t f = w[0];
     int t = f >> 28, width = (f >> 24) & 0xF, n;
@@ -337,13 +347,26 @@ int nd_atm_reload_async(const char *game) {
 void nd_atm_disable_all(void) {pthread_mutex_lock(&mutex);for(size_t i=0;i<count;i++) cheats[i].info.enabled=0;pthread_mutex_unlock(&mutex);}
 size_t nd_atm_count(void) {pthread_mutex_lock(&mutex);size_t n=count;pthread_mutex_unlock(&mutex);return n;}
 void nd_atm_info(size_t i,NdAtmInfo *out) {pthread_mutex_lock(&mutex);memset(out,0,sizeof *out);if(i<count) *out=cheats[i].info;pthread_mutex_unlock(&mutex);}
-void nd_atm_request(size_t i,int on) {pthread_mutex_lock(&mutex);if(i<count && cheats[i].info.supported && (!on || !nd_atm_loading())) cheats[i].info.enabled=on!=0;pthread_mutex_unlock(&mutex);}
+void nd_atm_request(size_t i,int on) {
+    pthread_mutex_lock(&mutex);
+    if(i<count && cheats[i].info.supported && (!on || !nd_atm_loading())) {
+        NdAtmInfo *info=&cheats[i].info;
+        if(on && !info->enabled) {
+            info->frames=info->writes=info->verified_writes=info->mismatches=0;
+            info->last_address=info->last_value=0;info->note[0]=0;
+        }
+        info->enabled=on!=0;
+    }
+    pthread_mutex_unlock(&mutex);
+}
 void nd_atm_frame(uint64_t keys) {
     if(nd_atm_loading()) return;
     pthread_mutex_lock(&mutex);int budget=OPS_PER_RUN;
     for(size_t i=0;i<count;i++) if(cheats[i].info.enabled) {
+        executing=&cheats[i].info;executing->frames++;
         fault=0;fault_note="Per-frame VM instruction budget exceeded";
         if(!run(&cheats[i],keys,&budget)) {cheats[i].info.enabled=0;snprintf(cheats[i].info.note,sizeof cheats[i].info.note,"%s",fault_note);}
+        executing=NULL;
         if(budget<0) break;
     }
     pthread_mutex_unlock(&mutex);

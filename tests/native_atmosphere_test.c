@@ -25,10 +25,10 @@ int main(int argc,char **argv) {
     nd_atm_info(1,&info);assert(!info.supported && strstr(info.note,"rebuild"));nd_atm_info(2,&info);assert(!info.supported);
     nd_atm_frame(0);assert(!memory[8]);enable(0);nd_atm_frame(0);
 #ifdef __linux__
-    assert(memory[8]==42);assert(nd_atm_reload("totk-native")<0);stop_all();
+    assert(memory[8]==42);nd_atm_info(0,&info);assert(info.frames==1 && info.writes==1 && info.verified_writes==1 && !info.mismatches);assert(nd_atm_reload("totk-native")<0);stop_all();
     fixture("[Conditional]\n14050000 00000040 0000002A\n04000000 00000044 00000063\n21000000\n04000000 00000044 0000004D\n20000000\n");assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);assert((memory[8]>>32)==99);memory[8]=41;nd_atm_frame(0);assert((memory[8]>>32)==77);stop_all();
     fixture("[Register condition]\n400F0000 00000000 00000004\n14051F00 00000040 0000004D\n04000000 00000040 00000022\n20000000\n");assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);assert((memory[8]&0xffffffffu)==34);stop_all();
-    fixture("[Buttons]\n80000001\n04000000 00000040 00000033\n20000000\n");assert(!nd_atm_reload("totk-native"));enable(0);memory[8]=0;nd_atm_frame(0);assert(!memory[8]);nd_atm_frame(1);assert(memory[8]==51);stop_all();
+    fixture("[Buttons]\n80000001\n04000000 00000040 00000033\n20000000\n");assert(!nd_atm_reload("totk-native"));enable(0);memory[8]=0;nd_atm_frame(0);assert(!memory[8]);nd_atm_info(0,&info);assert(info.frames==1 && !info.writes);nd_atm_frame(1);assert(memory[8]==51);nd_atm_info(0,&info);assert(info.frames==2 && info.writes==1 && info.verified_writes==1);stop_all();
     memory[9]=(uintptr_t)&heap[1];
     fixture("[Pointer]\n580F0000 00000048\n640F0000 00000000 00000055\n");assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);assert(heap[1]==85);stop_all();
     fixture("[Heap]\n04100000 00000010 00000066\n");assert(!nd_atm_reload("totk-native"));enable(0);nd_atm_frame(0);assert(heap[2]==102);stop_all();

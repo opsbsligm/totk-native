@@ -3,7 +3,11 @@
 // exclusively to the presentation thread. The panel never maps game buttons.
 #include "control_bar.h"
 #include "native_cheats.h"
+#include "native_touch.h"
+#include "native_ui_glyphs.h"
 #include "imgui.h"
+#include "native_sidebar_ui.h"
+#include "native_amiibo_catalog.h"
 #include "native_amiibo_ui.h"
 #include "native_atmosphere_ui.h"
 #include "../vk/fsr.h"
@@ -31,16 +35,16 @@ static std::atomic<bool> expanded{false};
 static std::atomic<int> fps{-1}, request_w{0}, request_h{0};
 static std::atomic<uint32_t> held_buttons{0}, suppressed_buttons{0};
 static std::atomic<bool> reset_input{false};
-static float x0, y0, x1, y1;
+static float x0, y0, x1, y1, touch_width, touch_height;
 static int anchor=4;
 static bool gyro=true;
 static ImGuiContext *context;
 static VkDescriptorPool descriptors;
 static VkFormat backend_format;
 static bool backend_ready;
-static bool moving_panel;
+
 static bool chinese, scalable_font;
-static const ImVec2 anchors[]={{0,0},{.5f,0},{1,0},{1,.5f},{1,1},{.5f,1},{0,1},{0,.5f}};
+
 static const char *label(const char *en,const char *zh) {return chinese?zh:en;}
 
 // Fonts come from the package's checked personal shared-font inputs. Decode a
@@ -79,6 +83,8 @@ static void fonts(ImGuiIO &io) {
             builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
             builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
             builder.AddText("画面功能说明高级数据补丁画面扩展控制重新加载匹配的金手指文件与支持范围权限只数据堆内存默认全部关闭后停止写入已经改变可能保留刷新本地标签库已读取检测到等待扫描器空闲移开文件选择将自有的放入此目录然后与支持范围身份应用区存档写画面上采样双线性锐化扩展设置收起王国之泪确认返回帧率上限输出尺寸原生陀螺仪重新居中抗锯齿使用游戏默认目前不可用生成金手指未导入匹配版本的预设停靠左上右下边菜单触屏拖动选择位置保存数据已改变拒绝写入打开：");
+            builder.AddText(nd_ui_zh_glyphs);
+            for(const auto &figure:nd_virtual_figures) builder.AddText(figure.zh);
             builder.BuildRanges(&ranges);ImFontConfig config;config.MergeMode=true;
             if(!io.Fonts->AddFontFromMemoryTTF(data,bytes,22,&config,ranges.Data)) {ImGui::MemFree(data);chinese=false;}
         } else chinese=false;
@@ -94,7 +100,25 @@ static void toggle() {
     runtime_input_clear();
 }
 int nd_control_event(const SDL_Event *event, SDL_Window *window) {
-    static bool back, start;
+    static NdTouch touch={};
+    if(event->type==SDL_EVENT_FINGER_DOWN || event->type==SDL_EVENT_FINGER_MOTION ||
+       event->type==SDL_EVENT_FINGER_UP || event->type==SDL_EVENT_FINGER_CANCELED) {
+        std::lock_guard<std::mutex> guard(lock);
+        float w=touch_width,h=touch_height,px=event->tfinger.x*w,py=event->tfinger.y*h;
+        int type=event->type==SDL_EVENT_FINGER_DOWN?ND_TOUCH_DOWN:event->type==SDL_EVENT_FINGER_MOTION?ND_TOUCH_MOVE:
+                 event->type==SDL_EVENT_FINGER_UP?ND_TOUCH_UP:ND_TOUCH_CANCEL;
+        NdTouchResult r=nd_touch_route(&touch,type,event->tfinger.touchID,event->tfinger.fingerID,
+                                     event->tfinger.x,event->tfinger.y,w,h,px>=x0 && py>=y0 && px<x1 && py<y1,expanded.load());
+        if(r.emit) {
+            SDL_Event copy=*event;copy.tfinger.x=r.x;copy.tfinger.y=r.y;
+            if(r.cancel) copy.type=SDL_EVENT_FINGER_CANCELED;
+            if(events.size()<256) events.push_back(copy);
+            else {events.clear();expanded=false;reset_input=true;nd_touch_reset(&touch);}
+        }
+        return r.consumed;
+    }
+    if((event->type==SDL_EVENT_MOUSE_MOTION && event->motion.which==SDL_TOUCH_MOUSEID) ||
+       ((event->type==SDL_EVENT_MOUSE_BUTTON_DOWN || event->type==SDL_EVENT_MOUSE_BUTTON_UP) && event->button.which==SDL_TOUCH_MOUSEID)) return 1;
     if(event->type==SDL_EVENT_GAMEPAD_BUTTON_DOWN || event->type==SDL_EVENT_GAMEPAD_BUTTON_UP) {
         bool down=event->type==SDL_EVENT_GAMEPAD_BUTTON_DOWN;
         if(event->gbutton.button<32) {
@@ -103,13 +127,9 @@ int nd_control_event(const SDL_Event *event, SDL_Window *window) {
             else {held_buttons.fetch_and(~bit);suppressed_buttons.fetch_and(~bit);}
             if(expanded.load()) suppressed_buttons.fetch_or(held_buttons.load());
         }
-        if(event->gbutton.button==SDL_GAMEPAD_BUTTON_BACK) back=down;
-        if(event->gbutton.button==SDL_GAMEPAD_BUTTON_START) start=down;
-        if(down && back && start) { toggle(); return 1; }
     }
-    if(event->type==SDL_EVENT_KEY_DOWN && event->key.scancode==SDL_SCANCODE_F1 && !event->key.repeat) { toggle(); return 1; }
     if(event->type==SDL_EVENT_WINDOW_FOCUS_LOST || event->type==SDL_EVENT_GAMEPAD_REMOVED) {
-        back=start=false;
+        nd_touch_reset(&touch);
         held_buttons=0;suppressed_buttons=0;
         reset_input=true;
         std::lock_guard<std::mutex> guard(lock); events.clear();
@@ -168,7 +188,12 @@ static void drain(ImGuiIO &io) {
     std::vector<SDL_Event> pending;
     {std::lock_guard<std::mutex> guard(lock); pending.swap(events);}
     for(const SDL_Event &event:pending) {
-        if(event.type==SDL_EVENT_MOUSE_MOTION) io.AddMousePosEvent(event.motion.x,event.motion.y);
+        if(event.type==SDL_EVENT_FINGER_DOWN || event.type==SDL_EVENT_FINGER_MOTION || event.type==SDL_EVENT_FINGER_UP) {
+            io.AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
+            io.AddMousePosEvent(event.tfinger.x,event.tfinger.y);
+            if(event.type!=SDL_EVENT_FINGER_MOTION) io.AddMouseButtonEvent(0,event.type==SDL_EVENT_FINGER_DOWN);
+        } else if(event.type==SDL_EVENT_FINGER_CANCELED) {io.ClearInputMouse();io.AddMousePosEvent(-FLT_MAX,-FLT_MAX);}
+        else if(event.type==SDL_EVENT_MOUSE_MOTION) {io.AddMouseSourceEvent(ImGuiMouseSource_Mouse);io.AddMousePosEvent(event.motion.x,event.motion.y);}
         else if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_UP) {
             io.AddMousePosEvent(event.button.x,event.button.y);
             if(event.button.button==SDL_BUTTON_LEFT) io.AddMouseButtonEvent(0,event.type==SDL_EVENT_MOUSE_BUTTON_DOWN);
@@ -257,92 +282,62 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
         vk_queue_lock(); bool fonts_ready=ImGui_ImplVulkan_CreateFontsTexture(); vk_queue_unlock();
         if(!fonts_ready) {nd_control_device_reset();return;}
     }
+    {std::lock_guard<std::mutex> guard(lock);touch_width=(float)width;touch_height=(float)height;}
     ImGuiIO &io=ImGui::GetIO(); io.DisplaySize=ImVec2((float)width,(float)height);
     static uint64_t last;uint64_t now=SDL_GetTicksNS();
     io.DeltaTime=last && now>last ? (float)((now-last)*1e-9) : 1.f/60;last=now;
     io.FontGlobalScale=scalable_font?std::min(1.f,height/720.f):(height>=720?1.6f:1.3f);
     drain(io); ImGui_ImplVulkan_NewFrame(); ImGui::NewFrame();
-    bool open=expanded.load();
-    static int old_anchor=-1;static bool old_open;
-    if(!moving_panel || old_anchor!=anchor || old_open!=open) {
-        ImVec2 p=anchors[anchor];
-        ImGui::SetNextWindowPos(ImVec2(12+p.x*(width-24),12+p.y*(height-24)),ImGuiCond_Always,p);
-        old_anchor=anchor;old_open=open;
-    }
-    ImGui::SetNextWindowBgAlpha(.96f);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(open?330.f:0.f,(float)width-24),0),ImVec2(width-24,height-24));
-    ImGui::Begin("##deck-control",nullptr,ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoSavedSettings);
-    if(ImGui::Button(open?label("Collapse [-]","收起 [-]"):label("Settings [+]","设置 [+]"),ImVec2(150,40))) {toggle();preferences(true);}
-    if(open) {
-        ImGui::SameLine(); ImGui::TextUnformatted(label("TOTK / DECK","王国之泪"));ImGui::Separator();
-        ImGui::TextUnformatted(label("A: confirm   B: back","A 确认    B 返回"));
-        if(ImGui::BeginTabBar("##feature-tabs")) {
-            if(ImGui::BeginTabItem(label("Display###display","画面###display"))) {
-                static const char *rates[]={"30","40","45","60","90","120"};
-                static const int values[]={30,40,45,60,90,120};int selected=3;
-                for(int i=0;i<6;++i) if(fps.load()==values[i]) selected=i;
-                if(ImGui::Combo(label("Frame cap","帧率上限"),&selected,rates,6)) {fps=values[selected];preferences(true);}
+    bool open=expanded.load(),want_toggle=false,dirty=false;
+    static NdSidebar sidebar;
+    bool content=nd_sidebar_begin(sidebar,open,anchor,label("Tears of the Kingdom","王国之泪"),chinese,&want_toggle);
+    if(content) {
+        if(sidebar.page==0) {
+            nd_ui_status(label("Live presentation settings","即时画面设置"));
+            ImGui::Text(label("Current output: %u x %u","当前输出：%u × %u"),width,height);
+            nd_ui_label(label("Frame cap","帧率上限"));
+            static const char *rates[]={"30","40","45","60","90","120"};
+            static const int values[]={30,40,45,60,90,120};int selected=3;
+            for(int i=0;i<6;++i) if(fps.load()==values[i]) selected=i;
+            if(nd_ui_choice("##frame-cap",&selected,rates,6)) {fps=values[selected];dirty=true;}
+            nd_ui_label(label("Presentation upscaling","画面上采样"));
+            int up=nd_fsr_enabled();const char *methods[]={label("Bilinear","双线性"),"AMD FSR 1"};
+            if(nd_ui_choice("##upscaler",&up,methods,2)) {nd_fsr_configure(up,nd_fsr_sharpness());dirty=true;}
+            if(up) {
+                nd_ui_label(label("Sharpness","锐化强度"));int sharp=nd_fsr_sharpness();
+                if(ImGui::SliderInt("##sharpness",&sharp,0,100,"%d%%")) nd_fsr_configure(1,sharp);
+                if(ImGui::IsItemDeactivatedAfterEdit()) dirty=true;
+                int status=nd_fsr_status();
+                nd_ui_status(status>0?label("FSR backend ready","FSR 后端已就绪"):status<0?label("FSR failed; bilinear fallback","FSR 不可用，已回退双线性"):label("Awaiting presentation frame","等待呈现帧应用"),status);
+            }
+            ImGui::TextWrapped("%s",label("FSR scales the presented image. It does not change game rendering resolution.","FSR 缩放最终画面，不改变游戏内部渲染分辨率。"));
+            if(ImGui::TreeNode(label("Window size / capabilities","窗口尺寸与能力说明"))) {
+                nd_ui_label(label("Window size (windowed mode)","窗口尺寸（窗口模式）"));
                 const char *sizes[]={"960 x 540","1280 x 720","1280 x 800","1920 x 1080"};
                 const int ws[]={960,1280,1280,1920},hs[]={540,720,800,1080};static int size=2;
-                if(ImGui::Combo(label("Output size","输出尺寸"),&size,sizes,4)) {request_h=hs[size];request_w=ws[size];}
-                ImGui::Separator();
-                int upscaler=nd_fsr_enabled();const char *upscalers[]={label("Bilinear","双线性"),"AMD FSR 1 (EASU / RCAS)"};
-                if(ImGui::Combo(label("Presentation upscaling","画面上采样"),&upscaler,upscalers,2)) {nd_fsr_configure(upscaler,nd_fsr_sharpness());preferences(true);}
-                if(upscaler) {
-                    int sharp=nd_fsr_sharpness();
-                    if(ImGui::SliderInt(label("Sharpness","锐化"),&sharp,0,100)) {nd_fsr_configure(1,sharp);preferences(true);}
-                    if(nd_fsr_status()<0) ImGui::TextWrapped("%s",label("FSR unavailable; bilinear fallback active","FSR 不可用；已使用双线性"));
-                }
-                if(ImGui::TreeNode(label("Graphics capabilities","画面功能说明"))) {
-                    ImGui::TextDisabled("%s",label("Anti-aliasing: game's default","抗锯齿：使用游戏默认"));
-                    ImGui::TextDisabled("%s",label("FSR 3 / 4: unavailable","FSR 3 / 4：目前不可用"));
-                    ImGui::TextDisabled("%s",label("Frame generation: unavailable","帧生成：目前不可用"));
-                    ImGui::TreePop();
-                }
-                ImGui::EndTabItem();
+                if(nd_ui_choice("##window-size",&size,sizes,4)) {request_h=hs[size];request_w=ws[size];}
+                ImGui::TextWrapped("%s",label("Fullscreen output follows the display. Anti-aliasing uses the game default. FSR 3 / 4 and frame generation are unavailable.","全屏输出跟随显示器。抗锯齿使用游戏默认，FSR 3 / 4 与帧生成尚不可用。"));
+                ImGui::TreePop();
             }
-            if(ImGui::BeginTabItem(label("Controls###controls","控制###controls"))) {
-                if(ImGui::Checkbox(label("Native sensor motion","原生陀螺仪"),&gyro)) {runtime_hid_feedback_flag("gyro",gyro);preferences(true);}
-                if(ImGui::Button(label("Recenter motion","重新居中"))) runtime_motion_start();
-                const char *docks[]={label("Top left","左上"),label("Top","上边"),label("Top right","右上"),label("Right","右边"),label("Bottom right","右下"),label("Bottom","下边"),label("Bottom left","左下"),label("Left","左边")};
-                if(ImGui::Combo(label("Dock","停靠"),&anchor,docks,8)) preferences(true);
-                ImGui::EndTabItem();
-            }
-            if(ImGui::BeginTabItem(label("Extensions###extensions","扩展###extensions"))) {
-                nd_draw_amiibo_library("totk-native",chinese);
-                nd_draw_atmosphere("totk-native",chinese);
-                if(ImGui::TreeNode(label("Advanced data patches","高级数据补丁"))) {
-                    if(!nd_cheats_count()) ImGui::TextDisabled("%s",label("No compatible presets imported","未导入匹配版本的预设"));
-                    for(size_t i=0;i<nd_cheats_count();i++) {
-                        bool on=nd_cheats_enabled(i)!=0;
-                        if(ImGui::Checkbox(nd_cheats_name(i),&on)) nd_cheats_request(i,on);
-                    }
-                    if(*nd_cheats_error()) ImGui::TextWrapped("%s",nd_cheats_error());
-                    ImGui::TreePop();
-                }
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
-        }
-        ImGui::TextDisabled("%s",label("F1 / Minus+Plus opens this panel","F1 / Minus+Plus 打开设置"));
-        if(ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {toggle();preferences(true);}
+        } else if(sidebar.page==1) {
+            nd_ui_status(label("Native device controls","原生设备控制"));
+            if(ImGui::Checkbox(label("Native sensor motion","原生陀螺仪"),&gyro)) {runtime_hid_feedback_flag("gyro",gyro);dirty=true;}
+            if(ImGui::Button(label("Recenter motion","重新居中陀螺仪"),ImVec2(-1,50))) runtime_motion_start();
+            ImGui::TextWrapped("%s",label("Game bindings stay unchanged. App menus use A to confirm and B to go back.","游戏操作保持原绑定。应用菜单使用 A 确认、B 返回。"));
+            nd_ui_label(label("Edge / corner","边框与角落"));
+            const char *docks[]={label("Top left","左上"),label("Top","上边"),label("Top right","右上"),label("Right","右边"),label("Bottom right","右下"),label("Bottom","下边"),label("Bottom left","左下"),label("Left","左边")};
+            dirty|=nd_ui_choice("##dock",&anchor,docks,8);
+            ImGui::TextWrapped("%s",label("Tap the edge handle to open. Drag the short bar below the title to move and snap.","点击边缘的设置入口展开。拖动标题下方的短条，松手后吸附至边框或角落。"));
+        } else if(sidebar.page==2) nd_draw_amiibo_library("totk-native",chinese);
+        else nd_draw_atmosphere("totk-native",chinese);
+        if(ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight) || ImGui::IsKeyPressed(ImGuiKey_Escape)) want_toggle=true;
     }
-    ImVec2 position=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
-    {std::lock_guard<std::mutex> guard(lock);x0=position.x;y0=position.y;x1=x0+size.x;y1=y0+size.y;}
-    if(ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0) && !ImGui::IsAnyItemHovered()) moving_panel=true;
-    if(moving_panel && ImGui::IsMouseReleased(0)) {
-        moving_panel=false;
-        ImVec2 drag=ImGui::GetMouseDragDelta(0);
-        if(drag.x*drag.x+drag.y*drag.y>100) {
-            float best=1e30f;
-            for(int i=0;i<8;++i) {
-                float dx=(position.x+size.x*.5f)/width-anchors[i].x,dy=(position.y+size.y*.5f)/height-anchors[i].y;
-                float d=dx*dx+dy*dy;if(d<best) {best=d;anchor=i;}
-            }
-            old_anchor=-1;preferences(true);
-        }
-    }
-    ImGui::End(); ImGui::Render();
+    ImVec2 lower,upper;
+    dirty|=nd_sidebar_end(sidebar,open,&anchor,chinese,&lower,&upper);
+    {std::lock_guard<std::mutex> guard(lock);x0=lower.x;y0=lower.y;x1=upper.x;y1=upper.y;}
+    if(want_toggle) {toggle();dirty=true;}
+    if(dirty) preferences(true);
+    ImGui::Render();
     VkRenderingAttachmentInfo color={};color.sType=VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     color.imageView=target;color.imageLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     color.loadOp=VK_ATTACHMENT_LOAD_OP_LOAD;color.storeOp=VK_ATTACHMENT_STORE_OP_STORE;

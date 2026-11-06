@@ -2,9 +2,11 @@
 /* Original implementation. NTAG layout/NFP ABI cross-checked with libnx and
  * valentderah/totk-pc-recomp@0ae47a5 (MIT). Only public figure identity is read;
  * encrypted application areas, writes and NFC hardware emulation are unsupported. */
+#define _DEFAULT_SOURCE 1
 #define _POSIX_C_SOURCE 200809L
 #define _DARWIN_C_SOURCE 1
 #include "native_amiibo.h"
+#include "native_amiibo_catalog.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -13,9 +15,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/random.h>
 #include <unistd.h>
 static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
-static NdAmiiboSnapshot state;
+static NdAmiiboSnapshot state={.virtual_index=-1};
 static unsigned char tag[540];
 static void (*notification)(int);
 void nd_amiibo_set_notify(void (*fn)(int)) {pthread_mutex_lock(&mutex);notification=fn;pthread_mutex_unlock(&mutex);}
@@ -52,7 +55,7 @@ int nd_amiibo_load(const char *path) {
     pthread_mutex_lock(&mutex);
     // Do not replace a mounted tag beneath a game operation. Remove it first.
     if(state.state==4 || state.state==2) {pthread_mutex_unlock(&mutex);return fail("Remove the current tag before loading another");}
-    memcpy(tag,data,sizeof tag);state.loaded=1;state.error[0]=0;state.generation++;
+    memcpy(tag,data,sizeof tag);state.virtual_index=-1;state.loaded=1;state.error[0]=0;state.generation++;
     const char *name=strrchr(path,'/');snprintf(state.name,sizeof state.name,"%s",name?name+1:path);
     int activate=state.initialized && state.state==1;
     if(activate) state.state=2;
@@ -62,7 +65,7 @@ int nd_amiibo_load(const char *path) {
 }
 void nd_amiibo_remove(void) {
     pthread_mutex_lock(&mutex);int active=state.state==2 || state.state==4;
-    state.loaded=0;memset(tag,0,sizeof tag);state.name[0]=0;state.state=state.initialized?3:0;state.generation++;
+    state.loaded=0;state.virtual_index=-1;memset(tag,0,sizeof tag);state.name[0]=0;state.state=state.initialized?3:0;state.generation++;
     void (*fn)(int)=notification;pthread_mutex_unlock(&mutex);if(active && fn) fn(0);
 }
 unsigned nd_amiibo_start(void) {
@@ -80,7 +83,7 @@ unsigned nd_amiibo_stop(void) {
 }
 unsigned nd_amiibo_mount(void) {
     pthread_mutex_lock(&mutex);unsigned result=ND_NFP_NOT_FOUND;
-    if(state.initialized && state.loaded && (state.state==2 || state.state==4)) {state.state=4;state.generation++;result=0;}
+    if(state.initialized && state.loaded && (state.state==2 || state.state==4)) {state.state=4;state.generation++;state.mounts++;result=0;}
     pthread_mutex_unlock(&mutex);return result;
 }
 unsigned nd_amiibo_unmount(void) {
@@ -93,7 +96,7 @@ unsigned nd_amiibo_tag_info(void *out,size_t size) {
     pthread_mutex_lock(&mutex);unsigned result=ND_NFP_NOT_FOUND;
     if(state.loaded && (state.state==2 || state.state==4)) {
         unsigned char *p=out;memset(p,0,0x58);p[0]=tag[0];p[1]=tag[1];p[2]=tag[2];memcpy(p+3,tag+4,4);
-        p[0xa]=7;p[0x20]=1;p[0x24]=2;result=0;
+        p[0xa]=7;p[0x20]=1;p[0x24]=2;state.tag_reads++;result=0;
     }
     pthread_mutex_unlock(&mutex);return result;
 }
@@ -101,7 +104,7 @@ unsigned nd_amiibo_model_info(void *out,size_t size) {
     if(!out || size<0x40) return ND_NFP_NOT_FOUND;
     pthread_mutex_lock(&mutex);unsigned result=ND_NFP_NOT_FOUND;
     if(state.loaded && state.state==4) {
-        unsigned char *p=out;memset(p,0,0x40);memcpy(p,tag+0x54,3);p[3]=tag[0x5a];p[4]=tag[0x59];p[5]=tag[0x58];p[6]=tag[0x57];result=0;
+        unsigned char *p=out;memset(p,0,0x40);memcpy(p,tag+0x54,3);p[3]=tag[0x5a];p[4]=tag[0x59];p[5]=tag[0x58];p[6]=tag[0x57];state.model_reads++;result=0;
     }
     pthread_mutex_unlock(&mutex);return result;
 }
@@ -125,4 +128,35 @@ int nd_amiibo_library(const char *game,char folder[4096],char names[ND_AMIIBO_MA
         if(safe) snprintf(names[count++],256,"%s",entry->d_name);
     }
     closedir(dir);qsort(names,(size_t)count,256,name_compare);return count;
+}
+
+size_t nd_amiibo_virtual_count(void) {return sizeof nd_virtual_figures/sizeof nd_virtual_figures[0];}
+const char *nd_amiibo_virtual_name(size_t index,int chinese) {
+    if(index>=nd_amiibo_virtual_count()) return "";
+    return chinese?nd_virtual_figures[index].zh:nd_virtual_figures[index].name;
+}
+int nd_amiibo_virtual_supported(size_t index) {
+    return index<nd_amiibo_virtual_count() && !nd_virtual_figures[index].needs_application_area;
+}
+int nd_amiibo_scan_virtual(size_t index) {
+    if(!nd_amiibo_virtual_supported(index)) return fail("This figure needs application-area saves (not supported)");
+    unsigned char data[540]={0};data[0]=4;
+    unsigned char random[6];
+    if(getentropy(random,sizeof random)) return fail("System random source unavailable; scan cancelled");
+    data[1]=random[0];data[2]=random[1];memcpy(data+4,random+2,4);
+    data[3]=0x88^data[0]^data[1]^data[2];data[8]=data[4]^data[5]^data[6]^data[7];
+    memcpy(data+12,"\xf1\x10\xff\xee",4);memcpy(data+0x54,nd_virtual_figures[index].id,8);
+    pthread_mutex_lock(&mutex);
+    int remove=state.state==2 || state.state==4;
+    int activate=!remove && state.initialized && state.state==1;
+    memcpy(tag,data,sizeof tag);state.loaded=1;state.virtual_index=(int)index;state.error[0]=0;
+    state.generation++;state.scans++;
+    snprintf(state.name,sizeof state.name,"%s",nd_virtual_figures[index].name);
+    // A mounted tag is removed once. The next StartDetection activates the new
+    // identity; never signal both events immediately or pulse/beep every frame.
+    if(remove) state.state=3;
+    else if(activate) state.state=2;
+    void (*fn)(int)=notification;pthread_mutex_unlock(&mutex);
+    if(fn) {if(remove) fn(0);else if(activate) fn(1);}
+    return 0;
 }
