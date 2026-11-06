@@ -44,6 +44,9 @@ static inline void nd_ui_label(const char *text) {ImGui::Spacing();ImGui::TextUn
 static inline bool nd_ui_choice(const char *id,int *selected,const char *const names[],int count) {
     bool changed=false;int current=*selected;
     if(current<0 || current>=count) current=0;
+    const ImGuiStyle &style=ImGui::GetStyle();
+    float rows=(44.f+style.ItemSpacing.y)*count+2*style.WindowPadding.y;
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0,0),ImVec2(FLT_MAX,std::min(rows,ImGui::GetIO().DisplaySize.y*.75f)));
     if(ImGui::BeginCombo(id,names[current])) {
         for(int i=0;i<count;i++) if(ImGui::Selectable(names[i],i==current,0,ImVec2(0,44))) {*selected=i;changed=true;}
         ImGui::EndCombo();
