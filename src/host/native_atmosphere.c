@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +28,8 @@ static uint64_t main_base,data_start,data_bytes;static NdAtmHeap heap_bounds;
 static char build[17],error[160],filename[4096];
 static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 static int fault;static const char *fault_note;
+static _Atomic int loading;
+static uint64_t generation;
 static int within(uint64_t a,size_t n,uint64_t start,uint64_t size) {return a>=start && n<=size && a-start<=size-n;}
 static uint64_t add(uint64_t a,uint64_t b) {if(b>UINT64_MAX-a) {fault=1;fault_note="Address overflow";return 0;}return a+b;}
 static uint64_t region(int m) {uint64_t b=0,n=0;if(m==0) return main_base;if(m==1 && heap_bounds) heap_bounds(&b,&n);return b;}
@@ -201,7 +204,7 @@ static int run(const Cheat *c, uint64_t keys,int *shared_budget) {
 }
 
 static void note(Cheat *c,const char *text) {c->info.supported=0;snprintf(c->info.note,sizeof c->info.note,"%s",text);}
-static void validate(Cheat *c) {
+static void validate(Cheat *c,uint64_t source_base,uint64_t source_data) {
     int stack[32],reg[32],seen_else[32],depth=0;c->info.supported=c->n>0;
     if(!c->n) {note(c,"Heading only");return;}
     for(int i=0;i<c->n;) {
@@ -234,7 +237,7 @@ static void validate(Cheat *c) {
         // Static text/rodata stores cannot affect lifted machine code.
         if(type==0 && ((f>>20)&15)==0) {
             uint64_t offset=((uint64_t)(f&255)<<32)|c->words[i+1];
-            if(offset<data_start-main_base) {note(c,"AOT code/rodata patch requires rebuilding this game");return;}
+            if(offset<source_data-source_base) {note(c,"AOT code/rodata patch requires rebuilding this game");return;}
         }
         i+=len;
     }
@@ -242,7 +245,7 @@ static void validate(Cheat *c) {
 }
 void nd_atm_bind(const char *id,uint64_t base,uint64_t start,uint64_t size,NdAtmHeap heap) {
     pthread_mutex_lock(&mutex);memset(cheats,0,sizeof cheats);count=0;build[0]=error[0]=filename[0]=0;
-    main_base=base;data_start=start;data_bytes=size;heap_bounds=heap;
+    main_base=base;data_start=start;data_bytes=size;heap_bounds=heap;generation++;
     if(id && strlen(id)==64 && strspn(id,"0123456789abcdefABCDEF")==64 && start>=base && size<=UINT64_MAX-start) {
         for(int i=0;i<16;i++) {build[i]=(char)((id[i]>='a' && id[i]<='f')?id[i]-32:id[i]);}
         build[16]=0;
@@ -250,20 +253,33 @@ void nd_atm_bind(const char *id,uint64_t base,uint64_t start,uint64_t size,NdAtm
     pthread_mutex_unlock(&mutex);
 }
 static int fail(const char *message) {snprintf(error,sizeof error,"%s",message);return -1;}
-int nd_atm_reload(const char *game) {
+static int report_error(const char *message) {pthread_mutex_lock(&mutex);int result=fail(message);pthread_mutex_unlock(&mutex);return result;}
+static int any_enabled_locked(void) {for(size_t i=0;i<count;i++) if(cheats[i].info.enabled) return 1;return 0;}
+// Owns the one import slot, never the VM mutex, during file I/O and parsing.
+static int reload_reserved(const char *game) {
+    char path[4096];uint64_t revision,source_base,source_data;int result=-1,length=-1;
+    const char *base=getenv("XDG_DATA_HOME"),*home=getenv("HOME");
     pthread_mutex_lock(&mutex);
-    // Reload cannot silently replace running programs or leave previous freezes active.
-    for(size_t i=0;i<count;i++) if(cheats[i].info.enabled) {int x=fail("Disable every Atmosphere cheat before reloading");pthread_mutex_unlock(&mutex);return x;}
-    const char *base=getenv("XDG_DATA_HOME"),*home=getenv("HOME");int length=-1;
-    if(strcmp(game,"totk-native") && strcmp(game,"botw-native")) goto invalid;
-    if(!build[0]) goto invalid;
-    if(base && *base=='/') length=snprintf(filename,sizeof filename,"%s/%s/cheats/%s.txt",base,game,build);
-    else if(home && *home=='/') length=snprintf(filename,sizeof filename,"%s/.local/share/%s/cheats/%s.txt",home,game,build);
-    if(length<0 || (size_t)length>=sizeof filename) goto invalid;
-    int fd=open(filename,O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK);struct stat st;char text[65537];size_t used=0;
-    if(fd<0) {fail("No matching build-ID cheat file; open the folder shown below");pthread_mutex_unlock(&mutex);return -1;}
-    if(fstat(fd,&st) || !S_ISREG(st.st_mode) || st.st_uid!=geteuid() || (st.st_mode&0077) || st.st_size<0 || st.st_size>65536) {close(fd);fail("Cheat file must be owned, mode 0600, regular and <=64 KiB");pthread_mutex_unlock(&mutex);return -1;}
-    while(used<sizeof text-1) {ssize_t n=read(fd,text+used,sizeof text-1-used);if(n<0 && errno==EINTR) continue;if(n<0) {close(fd);goto invalid;}if(!n) break;used+=(size_t)n;}
+    if(any_enabled_locked()) {fail("Disable every Atmosphere cheat before reloading");pthread_mutex_unlock(&mutex);goto done;}
+    if(!build[0]) {fail("Game build ID is not bound");pthread_mutex_unlock(&mutex);goto done;}
+    if(base && *base=='/') length=snprintf(path,sizeof path,"%s/%s/cheats/%s.txt",base,game,build);
+    else if(home && *home=='/') length=snprintf(path,sizeof path,"%s/.local/share/%s/cheats/%s.txt",home,game,build);
+    if(length<0 || (size_t)length>=sizeof path) {fail("Invalid data folder");pthread_mutex_unlock(&mutex);goto done;}
+    revision=generation;source_base=main_base;source_data=data_start;
+    snprintf(filename,sizeof filename,"%s",path);
+    pthread_mutex_unlock(&mutex);
+    int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK);struct stat st;char text[65537];size_t used=0;
+    if(fd<0) {report_error("No matching build-ID cheat file; open the folder shown below");goto done;}
+    if(fstat(fd,&st) || !S_ISREG(st.st_mode) || st.st_uid!=geteuid() || (st.st_mode&0077) || st.st_size<0 || st.st_size>65536) {
+        close(fd);report_error("Cheat file must be owned, mode 0600, regular and <=64 KiB");goto done;
+    }
+    while(used<sizeof text-1) {
+        ssize_t n=read(fd,text+used,sizeof text-1-used);
+        if(n<0 && errno==EINTR) continue;
+        if(n<0) {close(fd);goto invalid;}
+        if(!n) break;
+        used+=(size_t)n;
+    }
     close(fd);if(used!=(size_t)st.st_size || memchr(text,0,used)) goto invalid;text[used]=0;
     memset(staged,0,sizeof staged);size_t loaded=0;char *next=NULL,*begin=text;
     if(used>=3 && !memcmp(begin,"\xef\xbb\xbf",3)) begin+=3;
@@ -283,15 +299,47 @@ int nd_atm_reload(const char *game) {
             c->words[c->n++]=(uint32_t)strtoul(word,NULL,16);
         }
     }
-    for(size_t i=0;i<loaded;i++) validate(&staged[i]);
-    memcpy(cheats,staged,sizeof cheats);count=loaded;error[0]=0;pthread_mutex_unlock(&mutex);return 0;
+    for(size_t i=0;i<loaded;i++) validate(&staged[i],source_base,source_data);
+    pthread_mutex_lock(&mutex);
+    if(generation!=revision || any_enabled_locked()) {
+        fail("Game or cheat state changed during import; result discarded");pthread_mutex_unlock(&mutex);goto done;
+    }
+    memcpy(cheats,staged,sizeof cheats);count=loaded;error[0]=0;generation++;
+    pthread_mutex_unlock(&mutex);result=0;goto done;
 invalid:
-    fail("Invalid or unbound cheat file; previous definitions preserved");pthread_mutex_unlock(&mutex);return -1;
+    report_error("Invalid cheat file; previous definitions preserved");
+done:
+    atomic_store_explicit(&loading,0,memory_order_release);return result;
 }
+static const char *import_game(const char *game) {
+    if(game && !strcmp(game,"totk-native")) return "totk-native";
+    if(game && !strcmp(game,"botw-native")) return "botw-native";
+    return NULL;
+}
+int nd_atm_loading(void) {return atomic_load_explicit(&loading,memory_order_acquire);}
+int nd_atm_reload(const char *game) {
+    const char *name=import_game(game);if(!name) return report_error("Unsupported game profile");
+    if(atomic_exchange_explicit(&loading,1,memory_order_acq_rel)) return -1;
+    return reload_reserved(name);
+}
+static void *import_worker(void *game) {(void)reload_reserved(game);return NULL;}
+int nd_atm_reload_async(const char *game) {
+    const char *name=import_game(game);if(!name) return report_error("Unsupported game profile");
+    if(atomic_exchange_explicit(&loading,1,memory_order_acq_rel)) return -1;
+    pthread_attr_t attr;pthread_t thread;
+    if(pthread_attr_init(&attr)) {atomic_store(&loading,0);return report_error("Cannot initialize import worker");}
+    int code=pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_DETACHED);
+    if(!code) code=pthread_create(&thread,&attr,import_worker,(void *)name);
+    pthread_attr_destroy(&attr);
+    if(code) {atomic_store(&loading,0);return report_error("Cannot start import worker");}
+    return 0;
+}
+void nd_atm_disable_all(void) {pthread_mutex_lock(&mutex);for(size_t i=0;i<count;i++) cheats[i].info.enabled=0;pthread_mutex_unlock(&mutex);}
 size_t nd_atm_count(void) {pthread_mutex_lock(&mutex);size_t n=count;pthread_mutex_unlock(&mutex);return n;}
 void nd_atm_info(size_t i,NdAtmInfo *out) {pthread_mutex_lock(&mutex);memset(out,0,sizeof *out);if(i<count) *out=cheats[i].info;pthread_mutex_unlock(&mutex);}
-void nd_atm_request(size_t i,int on) {pthread_mutex_lock(&mutex);if(i<count && cheats[i].info.supported) cheats[i].info.enabled=on!=0;pthread_mutex_unlock(&mutex);}
+void nd_atm_request(size_t i,int on) {pthread_mutex_lock(&mutex);if(i<count && cheats[i].info.supported && (!on || !nd_atm_loading())) cheats[i].info.enabled=on!=0;pthread_mutex_unlock(&mutex);}
 void nd_atm_frame(uint64_t keys) {
+    if(nd_atm_loading()) return;
     pthread_mutex_lock(&mutex);int budget=OPS_PER_RUN;
     for(size_t i=0;i<count;i++) if(cheats[i].info.enabled) {
         fault=0;fault_note="Per-frame VM instruction budget exceeded";

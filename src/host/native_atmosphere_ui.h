@@ -4,10 +4,15 @@
 static void nd_draw_atmosphere(const char *game,bool chinese) {
     auto label=[chinese](const char *en,const char *zh) {return chinese?zh:en;};
     ImGui::SeparatorText(label("Cheats / Atmosphere","金手指 / Atmosphere"));
-    if(ImGui::Button(label("Reload matching cheats","重新加载匹配的金手指"))) nd_atm_reload(game);
+    bool busy=nd_atm_loading()!=0;
+    ImGui::BeginDisabled(busy);
+    if(ImGui::Button(label("Reload matching cheats","重新加载匹配的金手指"))) nd_atm_reload_async(game);
+    ImGui::EndDisabled();ImGui::SameLine();
+    if(ImGui::Button(label("Disable all","全部关闭"))) nd_atm_disable_all();
+    if(busy) ImGui::TextUnformatted(label("Reading cheat file...","正在加载金手指文件"));
     for(size_t i=0;i<nd_atm_count();i++) {
         NdAtmInfo info;nd_atm_info(i,&info);bool on=info.enabled;
-        ImGui::PushID((int)i);ImGui::BeginDisabled(!info.supported);
+        ImGui::PushID((int)i);ImGui::BeginDisabled(busy || !info.supported);
         if(ImGui::Checkbox(info.name,&on)) nd_atm_request(i,on);
         ImGui::EndDisabled();
         if(*info.note) ImGui::TextWrapped("%s",info.note);

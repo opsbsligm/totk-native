@@ -114,11 +114,12 @@ int nd_amiibo_library(const char *game,char folder[4096],char names[ND_AMIIBO_MA
     else {folder[0]=0;return -1;}
     if(n<0 || n>=4096) {folder[0]=0;return -1;}
     DIR *dir=opendir(folder);if(!dir) return 0;
+    int directory_fd=dirfd(dir);if(directory_fd<0) {closedir(dir);return -1;}
     struct dirent *entry;int count=0,visited=0;
     while(count<ND_AMIIBO_MAX_FILES && visited++<1024 && (entry=readdir(dir))) {
         size_t len=strlen(entry->d_name);if(len<5 || len>=256 || strcmp(entry->d_name+len-4,".bin")) continue;
         struct stat st;
-        if(fstatat(dirfd(dir),entry->d_name,&st,AT_SYMLINK_NOFOLLOW) || !S_ISREG(st.st_mode) || st.st_uid!=geteuid() || st.st_size!=540) continue;
+        if(fstatat(directory_fd,entry->d_name,&st,AT_SYMLINK_NOFOLLOW) || !S_ISREG(st.st_mode) || st.st_uid!=geteuid() || st.st_size!=540) continue;
         // Control characters in filenames must not alter the UI/log layout.
         int safe=1;for(size_t i=0;i<len;i++) if((unsigned char)entry->d_name[i]<32) safe=0;
         if(safe) snprintf(names[count++],256,"%s",entry->d_name);
