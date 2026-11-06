@@ -43,6 +43,7 @@ void runtime_trace_guest(uint64_t fp, uint64_t lr);
 void host_services_register(void);  // services_*.c: IPC services the SDK opens
 void hle_bind_system_event(void *event, int autoclear);
 void hle_signal_system_event(void *event);
+int hle_try_signal_system_event(void *event);
 uint32_t runtime_thread_current_handle(void);
 
 // ---- loader (src/runtime/loader.c): module memory for QueryMemory / SetMemoryPermission

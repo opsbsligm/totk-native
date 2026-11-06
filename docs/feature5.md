@@ -4,7 +4,7 @@ F1 或 Minus+Plus 打开控制栏；A 确认、B 返回，拖动后自动吸附�
 
 ## Amiibo
 
-自有标准 NTAG215 的 540 字节 `.bin` 放入 `$XDG_DATA_HOME/<game>/amiibo/`（未设置时为 `~/.local/share/<game>/amiibo/`），`<game>` 为 `totk-native` 或 `botw-native`。控制栏刷新后选择；进入游戏的 Amiibo 扫描能力后会检测到标签。读完选择“移开标签”，再选下一枚。只支持只读公仔身份；应用区存档、写入、Wolf Link 存档能力未实现。拒绝损坏 UID 校验、错误大小、符号链接及非本人所有文件。仓库不提供标签 dump。
+自有标准 NTAG215 的 540 字节 `.bin` 放入 `$XDG_DATA_HOME/<game>/amiibo/`（未设置时为 `~/.local/share/<game>/amiibo/`），`<game>` 为 `totk-native` 或 `botw-native`。控制栏刷新后选择；进入游戏的 Amiibo 扫描能力后会检测到标签。扫描事件销毁时同步失效缓存，重新扫描在游戏线程重绑；宿主通知不会复活已销毁事件或触发复用后的其他句柄。读完选择“移开标签”，再选下一枚。只支持只读公仔身份；应用区存档、写入、Wolf Link 存档能力未实现。拒绝损坏 UID 校验、错误大小、符号链接及非本人所有文件。仓库不提供标签 dump。
 
 ## Atmosphère 金手指
 

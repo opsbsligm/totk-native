@@ -86,7 +86,7 @@ static void *nfp_activate,*nfp_deactivate;
 static void nfp_notify(int activated) {
     pthread_mutex_lock(&nfp_events_lock);
     void *event=activated?nfp_activate:nfp_deactivate;
-    if(event) hle_signal_system_event(event); // already bound on the guest thread
+    if(event) (void)hle_try_signal_system_event(event); // host callbacks never recreate SDK events
     pthread_mutex_unlock(&nfp_events_lock);
 }
 static int nfp_valid(const void *h) {uint64_t id=0;if(h) memcpy(&id,h,8);return id==1;}
@@ -118,7 +118,14 @@ static unsigned nfp_attach_deactivate(void *event,const void *h) {
     pthread_mutex_lock(&nfp_events_lock);nfp_deactivate=event;pthread_mutex_unlock(&nfp_events_lock);return 0;
 }
 static int nfp_device_state(const void *h) {NdAmiiboSnapshot s;nd_amiibo_snapshot(&s);return nfp_valid(h)?s.state:5;}
-static unsigned nfp_start(const void *h) {return nfp_valid(h)?nd_amiibo_start():ND_NFP_NOT_FOUND;}
+static unsigned nfp_start(const void *h) {
+    if(!nfp_valid(h)) return ND_NFP_NOT_FOUND;
+    // The ability wheel may destroy its SystemEvents between detection attempts.
+    pthread_mutex_lock(&nfp_events_lock);void *activate=nfp_activate,*deactivate=nfp_deactivate;pthread_mutex_unlock(&nfp_events_lock);
+    if(activate) hle_bind_system_event(activate,0);
+    if(deactivate) hle_bind_system_event(deactivate,0);
+    return nd_amiibo_start();
+}
 static unsigned nfp_stop(const void *h) {return nfp_valid(h)?nd_amiibo_stop():ND_NFP_NOT_FOUND;}
 static unsigned nfp_mount(const void *h,unsigned model,unsigned target) {(void)model;(void)target;return nfp_valid(h)?nd_amiibo_mount():ND_NFP_NOT_FOUND;}
 static unsigned nfp_unmount(const void *h) {return nfp_valid(h)?nd_amiibo_unmount():ND_NFP_NOT_FOUND;}
