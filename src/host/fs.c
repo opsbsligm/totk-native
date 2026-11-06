@@ -4,7 +4,8 @@
  *  - Windows file calls (mkdir, directory types via stat, rename that refuses to replace, _commit);
  *  - RomFS: the runtime index (tools/make_romfs_index.py, MacNativeGames' TOTKRFS1 layout) and the extracted
  *    romfs.bin, both already verified at extraction, or (the player's dump) a folder of plain files, indexed by
- *    walking it at start (tools/setup.py checks it against the expected version); overlays (mods, data patches), split images and the startup
+ *    walking it at start (tools/setup.py checks it against the expected version); only four packaged, hash-bound Deck icon
+ *    fonts can override read-only files. General overlays (mods, data patches), split images and the startup
  *    re-hash are not ported yet. RomFS directory listing stays unsupported, as in MacNativeGames.
  * Save, temporary and cache storage are host directories under the profile directory (TOTK_PROFILE_DIR, default
  * userdata); application save data is created on first start, as the system launcher does. */
@@ -23,6 +24,7 @@
 
 #include "host.h"
 #include "../runtime/hle.h"
+#include "deck_font_files.h"
 
 #define R_PATH_NOT_FOUND 0x202u
 #define R_ALREADY_EXISTS 0x402u
@@ -67,6 +69,7 @@ static const char *entry_name(Entry e) { return (const char *)index_bytes + stri
 static char rom_dir[4096];
 static int rom_folder;
 static int rom_fds[NROM];
+static uint64_t rom_sizes[NROM];
 typedef struct { char *path; uint64_t size; } Walked;
 static Walked *walked;
 static size_t nwalked, walked_cap;
@@ -228,10 +231,24 @@ static unsigned romfs_open(uint64_t *out, const char *path, int mode) {
         snprintf(full, sizeof full, "%s/%s", rom_dir, p);
         if ((fd = open(full, O_RDONLY | O_BINARY)) < 0) return R_PATH_NOT_FOUND;
     }
+    uint64_t actual_size = entry(i).size;
+#ifndef _WIN32
+    const char *deck_ui = getenv("TOTK_STEAMDECK_UI");
+    int font = nd_font_index(p);
+    if (font >= 0 && (!deck_ui || strcmp(deck_ui, "0"))) {
+        int patched = nd_font_open("data/deck-ui", font, rom_folder ? fd : image_fd,
+                                  rom_folder ? 0 : entry(i).offset, actual_size, &actual_size);
+        if (fd >= 0) close(fd);
+        need(patched >= 0, "Deck icon font missing or differs from verified private recipe");
+        fd = patched;
+        fprintf(stderr, "[totk] verified Deck icon font: %s (%llu bytes)\n", p, (unsigned long long)actual_size);
+    }
+#endif
     pthread_mutex_lock(&rom_lock);
     for (uint64_t h = 1; h < NROM; h++)
-        if (!rom_handles[h]) { rom_handles[h] = i + 1; rom_fds[h] = fd; *out = ROM_BASE + h; pthread_mutex_unlock(&rom_lock); return 0; }
+        if (!rom_handles[h]) { rom_handles[h] = i + 1; rom_fds[h] = fd; rom_sizes[h] = actual_size; *out = ROM_BASE + h; pthread_mutex_unlock(&rom_lock); return 0; }
     pthread_mutex_unlock(&rom_lock);
+    if (fd >= 0) close(fd);
     runtime_fail("RomFS handle table full");
 }
 static unsigned romfs_read(uint64_t *out, uint64_t h, int64_t offset, void *buffer, uint64_t size) {
@@ -239,11 +256,15 @@ static unsigned romfs_read(uint64_t *out, uint64_t h, int64_t offset, void *buff
     uint64_t i = rom_handles[h - ROM_BASE];
     if (!i) return R_ROM_INVALID;
     Entry e = entry(i - 1);
+    e.size = rom_sizes[h - ROM_BASE];
+    int fd = rom_fds[h - ROM_BASE];
+    if (fd >= 0) e.offset = 0;
     if ((uint64_t)offset > e.size) return R_ROM_INVALID;
     uint64_t n = size < e.size - (uint64_t)offset ? size : e.size - (uint64_t)offset, done = 0;
     guest_prepare_write(buffer, n);
     while (done < n) {
-        ssize_t r = pread(rom_folder ? rom_fds[h - ROM_BASE] : image_fd, (uint8_t *)buffer + done, (size_t)(n - done), (off_t)(e.offset + (uint64_t)offset + done));
+        ssize_t r = pread(fd >= 0 ? fd : image_fd, (uint8_t *)buffer + done, (size_t)(n - done), (off_t)(e.offset + (uint64_t)offset + done));
+        if (r < 0 && errno == EINTR) continue;
         need(r > 0, "RomFS image read");
         done += (uint64_t)r;
     }
@@ -253,14 +274,16 @@ static unsigned romfs_read(uint64_t *out, uint64_t h, int64_t offset, void *buff
 static unsigned romfs_size(int64_t *out, uint64_t h) {
     uint64_t i = rom_handles[h - ROM_BASE];
     if (!out || !i) return R_ROM_INVALID;
-    *out = (int64_t)entry(i - 1).size;
+    *out = (int64_t)rom_sizes[h - ROM_BASE];
     return 0;
 }
 static void romfs_close(uint64_t h) {
     pthread_mutex_lock(&rom_lock);
     need(rom_handles[h - ROM_BASE] != 0, "close of a closed RomFS handle");
     rom_handles[h - ROM_BASE] = 0;
-    if (rom_folder) close(rom_fds[h - ROM_BASE]);
+    if (rom_fds[h - ROM_BASE] >= 0) close(rom_fds[h - ROM_BASE]);
+    rom_fds[h - ROM_BASE] = -1;
+    rom_sizes[h - ROM_BASE] = 0;
     pthread_mutex_unlock(&rom_lock);
 }
 static unsigned romfs_entry_type(int *out, const char *path) {

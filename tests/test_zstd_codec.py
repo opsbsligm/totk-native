@@ -36,6 +36,7 @@ class ZstandardTests(unittest.TestCase):
             encoded = compress(raw)
             self.assertEqual(codec.get_frame_info(encoded).decompressed_size, len(raw))
             self.assertEqual(codec.decompress(encoded), raw)
+            self.assertEqual(codec.decompress(codec.compress(raw)), raw)
         encoded = compress(b'0123456789' * 100)
         with patch.object(codec, 'MAX_OUTPUT', 16), self.assertRaisesRegex(ValueError, 'oversized'):
             codec.decompress(encoded)
@@ -59,6 +60,16 @@ class ZstandardTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'dictionary'):
             codec.decompress(encoded)
         self.assertEqual(codec.decompress(encoded, zstd_dict=dictionary), raw)
+        encoded = codec.compress(raw, zstd_dict=dictionary)
+        self.assertEqual(codec.get_frame_info(encoded).dictionary_id, dictionary.dict_id)
+        self.assertEqual(codec.decompress(encoded, zstd_dict=dictionary), raw)
+
+    def test_compression_bounds(self):
+        for level in (0, 20, '9'):
+            with self.assertRaises(ValueError):
+                codec.compress(b'fixture', level=level)
+        with patch.object(codec, 'MAX_OUTPUT', 2), self.assertRaises(ValueError):
+            codec.compress(b'longer')
 
 
 if __name__ == '__main__':

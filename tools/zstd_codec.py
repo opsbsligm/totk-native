@@ -65,3 +65,30 @@ def decompress(data, *, zstd_dict=None):
         return output.raw[:count]
     finally:
         _free(context)
+
+
+def compress(data, *, zstd_dict=None, level=9):
+    """Encode bounded private assets, retaining the source dictionary identity."""
+    data = bytes(data)
+    if len(data) > MAX_OUTPUT or not isinstance(level, int) or not 1 <= level <= 19:
+        raise ValueError('Oversized Zstandard input or invalid level')
+    bound = function('ZSTD_compressBound', C.c_size_t, C.c_size_t)(len(data))
+    output = C.create_string_buffer(bound)
+    create = function('ZSTD_createCCtx', C.c_void_p)
+    free = function('ZSTD_freeCCtx', C.c_size_t, C.c_void_p)
+    encode = function('ZSTD_compress_usingDict', C.c_size_t, C.c_void_p, C.c_void_p,
+                      C.c_size_t, C.c_void_p, C.c_size_t, C.c_void_p, C.c_size_t, C.c_int)
+    dictionary = zstd_dict.data if zstd_dict is not None else b''
+    context = create()
+    if not context:
+        raise MemoryError('Cannot allocate Zstandard context')
+    try:
+        count = encode(context, output, bound, data, len(data), dictionary, len(dictionary), level)
+        if _error(count):
+            raise ValueError('Zstandard encode failed: ' + _error_name(count).decode())
+        encoded = output.raw[:count]
+        if decompress(encoded, zstd_dict=zstd_dict) != data:
+            raise ValueError('Zstandard round trip changed asset bytes')
+        return encoded
+    finally:
+        free(context)
