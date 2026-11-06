@@ -6,6 +6,8 @@
 #include "hle.h"
 #include "rt.h"
 #include "../host/native_cheats.h"
+#include "../host/native_atmosphere.h"
+extern void nd_atm_heap_bounds(uint64_t *,uint64_t *);
 #include "lz4.h"
 
 Module g_modules[MAX_MODULES];
@@ -81,6 +83,8 @@ static void load_nso(Module *m, const char *path, uint64_t base) {
     m->data_off = seg[2][1]; m->data_size = seg[2][2] + bss;
     if (!strcmp(m->name,"main")) {
         nd_cheats_bind("totk-1.4.3",id,base,base+m->data_off,m->data_size);
+        nd_atm_bind(id,base,base+m->data_off,m->data_size,nd_atm_heap_bounds);
+        nd_atm_reload("totk-native");
         const char *cheats=getenv("NATIVE_CHEATS_FILE");
         nd_cheats_load(cheats && *cheats ? cheats : "native-cheats.txt");
     }

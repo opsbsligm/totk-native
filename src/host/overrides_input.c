@@ -19,6 +19,9 @@
 #include <string.h>
 
 #include "host.h"
+#include <stdatomic.h>
+static _Atomic uint64_t nd_cheat_buttons;
+uint64_t nd_atm_input_keys(void) {return atomic_load(&nd_cheat_buttons);}
 #ifdef __linux__
 #include "menu_confirm.h"
 static NdMenuConfirm confirm_state;
@@ -207,6 +210,7 @@ static int pad_states(NpadState *out, int max, const uint32_t *id, uint32_t want
         if (abs(pad.rx) > abs(state.rx)) state.rx = pad.rx;
         if (abs(pad.ry) > abs(state.ry)) state.ry = pad.ry;
     }
+    atomic_store(&nd_cheat_buttons,state.buttons);
     *out = state;
     pthread_mutex_unlock(&input_lock);
     return 1;

@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "host.h"
+#include "native_amiibo.h"
 #include "../runtime/hle.h"
 
 /* ---------- nn::oe / nn::applet ---------- */
@@ -79,16 +80,58 @@ static unsigned report_save_uid(const void *report, const void *uid) { (void)uid
 static unsigned immediate_transmission(void) { return 0; }
 static unsigned connection_status(void *report, const char *a, const char *b, const char *c) { (void)report; (void)a; (void)b; (void)c; return 0; }
 
-/* ---------- nn::nfp: the host has no NFC reader ---------- */
-#define NFP_DEVICE_NOT_FOUND 0x8073u   /* nfp module 115, description 64 */
-static int nfp_state;
-static unsigned nfp_initialize(void) { nfp_state = 1; return 0; }
-static unsigned nfp_finalize(void) { nfp_state = 0; return 0; }
-static int nfp_get_state(void) { return nfp_state; }
-static unsigned nfp_list(void *handles, int *count, int max) { (void)handles; (void)max; if (count) *count = 0; return NFP_DEVICE_NOT_FOUND; }
-static unsigned nfp_attach_availability(void *event) { if (!event) runtime_fail("nfp availability event"); hle_bind_system_event(event, 0); return 0; }
-static unsigned nfp_no_device(void) { return NFP_DEVICE_NOT_FOUND; }
-static int nfp_device_state(const void *h) { (void)h; return 0; }
+/* ---------- nn::nfp: local, read-only virtual figure reader ---------- */
+static pthread_mutex_t nfp_events_lock=PTHREAD_MUTEX_INITIALIZER;
+static void *nfp_activate,*nfp_deactivate;
+static void nfp_notify(int activated) {
+    pthread_mutex_lock(&nfp_events_lock);
+    void *event=activated?nfp_activate:nfp_deactivate;
+    if(event) (void)hle_try_signal_system_event(event); // host callbacks never recreate SDK events
+    pthread_mutex_unlock(&nfp_events_lock);
+}
+static int nfp_valid(const void *h) {uint64_t id=0;if(h) memcpy(&id,h,8);return id==1;}
+static unsigned nfp_initialize(void) {nd_amiibo_set_notify(nfp_notify);nd_amiibo_initialize(1);return 0;}
+static unsigned nfp_finalize(void) {
+    pthread_mutex_lock(&nfp_events_lock);nfp_activate=nfp_deactivate=NULL;pthread_mutex_unlock(&nfp_events_lock);
+    nd_amiibo_initialize(0);return 0;
+}
+static int nfp_get_state(void) {NdAmiiboSnapshot s;nd_amiibo_snapshot(&s);return s.initialized;}
+static unsigned nfp_list(void *handles,int *count,int max) {
+    if(count) *count=0;
+    if(!nfp_get_state()) return ND_NFP_NOT_FOUND;
+    if(max>0 && handles) {uint64_t id=1;guest_prepare_write(handles,8);memcpy(handles,&id,8);if(count) *count=1;}
+    return 0;
+}
+static unsigned nfp_attach_availability(void *event) {
+    if(!event) return ND_NFP_NOT_FOUND;
+    hle_bind_system_event(event,0);hle_signal_system_event(event);return 0;
+}
+static unsigned nfp_attach_activate(void *event,const void *h) {
+    if(!event || !nfp_valid(h)) return ND_NFP_NOT_FOUND;
+    hle_bind_system_event(event,0);
+    pthread_mutex_lock(&nfp_events_lock);nfp_activate=event;pthread_mutex_unlock(&nfp_events_lock);
+    NdAmiiboSnapshot s;nd_amiibo_snapshot(&s);if(s.state==2 || s.state==4) nfp_notify(1);return 0;
+}
+static unsigned nfp_attach_deactivate(void *event,const void *h) {
+    if(!event || !nfp_valid(h)) return ND_NFP_NOT_FOUND;
+    hle_bind_system_event(event,0);
+    pthread_mutex_lock(&nfp_events_lock);nfp_deactivate=event;pthread_mutex_unlock(&nfp_events_lock);return 0;
+}
+static int nfp_device_state(const void *h) {NdAmiiboSnapshot s;nd_amiibo_snapshot(&s);return nfp_valid(h)?s.state:5;}
+static unsigned nfp_start(const void *h) {
+    if(!nfp_valid(h)) return ND_NFP_NOT_FOUND;
+    // The ability wheel may destroy its SystemEvents between detection attempts.
+    pthread_mutex_lock(&nfp_events_lock);void *activate=nfp_activate,*deactivate=nfp_deactivate;pthread_mutex_unlock(&nfp_events_lock);
+    if(activate) hle_bind_system_event(activate,0);
+    if(deactivate) hle_bind_system_event(deactivate,0);
+    return nd_amiibo_start();
+}
+static unsigned nfp_stop(const void *h) {return nfp_valid(h)?nd_amiibo_stop():ND_NFP_NOT_FOUND;}
+static unsigned nfp_mount(const void *h,unsigned model,unsigned target) {(void)model;(void)target;return nfp_valid(h)?nd_amiibo_mount():ND_NFP_NOT_FOUND;}
+static unsigned nfp_unmount(const void *h) {return nfp_valid(h)?nd_amiibo_unmount():ND_NFP_NOT_FOUND;}
+static unsigned nfp_npad(unsigned *out,const void *h) {if(!out || !nfp_valid(h)) return ND_NFP_NOT_FOUND;*out=0;return 0;}
+static unsigned nfp_tag(void *out,const void *h) {if(!nfp_valid(h)) return ND_NFP_NOT_FOUND;guest_prepare_write(out,0x58);return nd_amiibo_tag_info(out,0x58);}
+static unsigned nfp_model(void *out,const void *h) {if(!nfp_valid(h)) return ND_NFP_NOT_FOUND;guest_prepare_write(out,0x40);return nd_amiibo_model_info(out,0x40);}
 
 /* ---------- nn::err ---------- */
 static void show_error(uint32_t result) {
@@ -116,12 +159,13 @@ HLE_NATIVE("_ZN2nn3nfp8GetStateEv", nfp_get_state, 'w')
 HLE_NATIVE("_ZN2nn3nfp11ListDevicesEPNS0_12DeviceHandleEPii", nfp_list, 'w')
 HLE_NATIVE("_ZN2nn3nfp29AttachAvailabilityChangeEventEPNS_2os15SystemEventTypeE", nfp_attach_availability, 'w')
 HLE_NATIVE("_ZN2nn3nfp14GetDeviceStateERKNS0_12DeviceHandleE", nfp_device_state, 'w')
-HLE_NATIVE("_ZN2nn3nfp5MountERKNS0_12DeviceHandleENS0_9ModelTypeENS0_11MountTargetE", nfp_no_device, 'w')
-HLE_NATIVE("_ZN2nn3nfp9GetNpadIdEPjRKNS0_12DeviceHandleE", nfp_no_device, 'w')
-HLE_NATIVE("_ZN2nn3nfp19AttachActivateEventEPNS_2os15SystemEventTypeERKNS0_12DeviceHandleE", nfp_no_device, 'w')
-HLE_NATIVE("_ZN2nn3nfp21AttachDeactivateEventEPNS_2os15SystemEventTypeERKNS0_12DeviceHandleE", nfp_no_device, 'w')
-HLE_NATIVE("_ZN2nn3nfp14StartDetectionERKNS0_12DeviceHandleE", nfp_no_device, 'w')
-HLE_NATIVE("_ZN2nn3nfp13StopDetectionERKNS0_12DeviceHandleE", nfp_no_device, 'w')
-HLE_NATIVE("_ZN2nn3nfp10GetTagInfoEPNS0_7TagInfoERKNS0_12DeviceHandleE", nfp_no_device, 'w')
-HLE_NATIVE("_ZN2nn3nfp12GetModelInfoEPNS0_9ModelInfoERKNS0_12DeviceHandleE", nfp_no_device, 'w')
+HLE_NATIVE("_ZN2nn3nfp5MountERKNS0_12DeviceHandleENS0_9ModelTypeENS0_11MountTargetE", nfp_mount, 'w')
+HLE_NATIVE("_ZN2nn3nfp9GetNpadIdEPjRKNS0_12DeviceHandleE", nfp_npad, 'w')
+HLE_NATIVE("_ZN2nn3nfp19AttachActivateEventEPNS_2os15SystemEventTypeERKNS0_12DeviceHandleE", nfp_attach_activate, 'w')
+HLE_NATIVE("_ZN2nn3nfp21AttachDeactivateEventEPNS_2os15SystemEventTypeERKNS0_12DeviceHandleE", nfp_attach_deactivate, 'w')
+HLE_NATIVE("_ZN2nn3nfp14StartDetectionERKNS0_12DeviceHandleE", nfp_start, 'w')
+HLE_NATIVE("_ZN2nn3nfp13StopDetectionERKNS0_12DeviceHandleE", nfp_stop, 'w')
+HLE_NATIVE("_ZN2nn3nfp10GetTagInfoEPNS0_7TagInfoERKNS0_12DeviceHandleE", nfp_tag, 'w')
+HLE_NATIVE("_ZN2nn3nfp12GetModelInfoEPNS0_9ModelInfoERKNS0_12DeviceHandleE", nfp_model, 'w')
 HLE_NATIVE("_ZN2nn3err9ShowErrorENS_6ResultE", show_error, 'v')
+HLE_NATIVE("_ZN2nn3nfp7UnmountERKNS0_12DeviceHandleE", nfp_unmount, 'w')

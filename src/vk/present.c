@@ -5,6 +5,7 @@
 // Mailbox when the surface offers it (the newest frame wins, no tearing), FIFO otherwise.
 #include "present.h"
 #include "vk.h"
+#include "fsr.h"
 #include "../host/control_bar.h"
 
 #include <SDL3/SDL.h>
@@ -55,6 +56,7 @@ static int create_present_objects(void) {
 }
 
 static void destroy_swapchain(void) {
+    nd_fsr_shutdown();
     nd_control_device_reset();
     for (uint32_t i=0;i<nimages;i++) {
         if (views[i]) vk.vkDestroyImageView(vkc.device,views[i],NULL);
@@ -142,7 +144,7 @@ static VkClearColorValue frame_colour(uint64_t n) {
 // ---- output images: written by the replay thread, shown by the present thread
 #define OUTS 3
 typedef struct {
-    VkImage img; VkDeviceMemory mem; uint32_t w, h;
+    VkImage img; VkImageView sampled_view; VkDeviceMemory mem; uint32_t w, h;
     int state;                   // 0 free, 1 written (pending), 2 being shown
     uint64_t seq;                // when it was written (newest pending wins)
     VkSemaphore timeline; uint64_t value; int crop[4];
@@ -169,6 +171,8 @@ int vkp_out_acquire(uint32_t w, uint32_t h, VkImage *image) {
     if (pick < 0) return -1;
     out_t *o = &g_out[pick];
     if (o->img && (o->w != w || o->h != h)) {   // free: no present work uses it
+        if(o->sampled_view) vk.vkDestroyImageView(vkc.device,o->sampled_view,NULL);
+        o->sampled_view=VK_NULL_HANDLE;
         vk.vkDestroyImage(vkc.device, o->img, NULL);
         vk.vkFreeMemory(vkc.device, o->mem, NULL);
         o->img = VK_NULL_HANDLE;
@@ -176,7 +180,7 @@ int vkp_out_acquire(uint32_t w, uint32_t h, VkImage *image) {
     if (!o->img) {
         VkImageCreateInfo ci = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_B8G8R8A8_UNORM,
             .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+            .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
         VkMemoryRequirements req;
         if (!vk_check(vk.vkCreateImage(vkc.device, &ci, NULL, &o->img), "output image")) goto fail;
         vk.vkGetImageMemoryRequirements(vkc.device, o->img, &req);
@@ -188,6 +192,11 @@ int vkp_out_acquire(uint32_t w, uint32_t h, VkImage *image) {
             goto fail;
         }
         vk.vkBindImageMemory(vkc.device, o->img, o->mem, 0);
+        VkImageViewCreateInfo vi={VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=o->img,.viewType=VK_IMAGE_VIEW_TYPE_2D,
+            .format=VK_FORMAT_B8G8R8A8_UNORM,.components={VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_ONE},
+            .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
+        // A failed optional view keeps the original bilinear path usable.
+        if(vk.vkCreateImageView(vkc.device,&vi,NULL,&o->sampled_view)!=VK_SUCCESS) o->sampled_view=VK_NULL_HANDLE;
         o->w = w; o->h = h;
     }
     *image = o->img;
@@ -244,6 +253,8 @@ static int present_one(uint64_t n, unsigned slot, out_t *out) {
                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
         VkImageBlit b = {{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {{sx, sy, 0}, {sx + sw, sy + sh, 1}},
                          {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {{dx, dy, 0}, {dx + dw, dy + dh, 1}}};
+        int crop[4]={sx,sy,sw,sh};
+        if(!nd_fsr_record(cb,out->img,out->sampled_view,out->w,out->h,crop,images[idx],dx,dy,(uint32_t)dw,(uint32_t)dh))
         vk.vkCmdBlitImage(cb, out->img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           1, &b, VK_FILTER_LINEAR);
     }
@@ -258,7 +269,7 @@ static int present_one(uint64_t n, unsigned slot, out_t *out) {
     VkSemaphoreSubmitInfo waits[2] = {
         {VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = image_ready[slot], .stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT},
         {VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = out ? out->timeline : VK_NULL_HANDLE, .value = out ? out->value : 0,
-         .stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT}};
+         .stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT}};
     VkSemaphoreSubmitInfo sig = {VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, .semaphore = render_done[idx],
                                  .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT};
     VkCommandBufferSubmitInfo cbi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = cb};
