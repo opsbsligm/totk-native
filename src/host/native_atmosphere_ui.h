@@ -3,7 +3,7 @@
 #include "native_atmosphere.h"
 static void nd_draw_atmosphere(const char *game,bool chinese) {
     auto label=[chinese](const char *en,const char *zh) {return chinese?zh:en;};
-    ImGui::SeparatorText("Atmosphere");
+    ImGui::SeparatorText(label("Cheats / Atmosphere","金手指 / Atmosphere"));
     if(ImGui::Button(label("Reload matching cheats","重新加载匹配的金手指"))) nd_atm_reload(game);
     for(size_t i=0;i<nd_atm_count();i++) {
         NdAtmInfo info;nd_atm_info(i,&info);bool on=info.enabled;

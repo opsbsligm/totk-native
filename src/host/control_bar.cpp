@@ -77,7 +77,8 @@ static void fonts(ImGuiIO &io) {
         if(data) {
             static ImVector<ImWchar> ranges;ImFontGlyphRangesBuilder builder;
             builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
-            builder.AddText("重新加载匹配的金手指文件与支持范围权限只数据堆内存默认全部关闭后停止写入已经改变可能保留刷新本地标签库已读取检测到等待扫描器空闲移开文件选择将自有的放入此目录然后与支持范围身份应用区存档写画面上采样双线性锐化扩展设置收起王国之泪确认返回帧率上限输出尺寸原生陀螺仪重新居中抗锯齿使用游戏默认目前不可用生成金手指未导入匹配版本的预设停靠左上右下边菜单触屏拖动选择位置保存数据已改变拒绝写入打开：");
+            builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+            builder.AddText("画面功能说明高级数据补丁画面扩展控制重新加载匹配的金手指文件与支持范围权限只数据堆内存默认全部关闭后停止写入已经改变可能保留刷新本地标签库已读取检测到等待扫描器空闲移开文件选择将自有的放入此目录然后与支持范围身份应用区存档写画面上采样双线性锐化扩展设置收起王国之泪确认返回帧率上限输出尺寸原生陀螺仪重新居中抗锯齿使用游戏默认目前不可用生成金手指未导入匹配版本的预设停靠左上右下边菜单触屏拖动选择位置保存数据已改变拒绝写入打开：");
             builder.BuildRanges(&ranges);ImFontConfig config;config.MergeMode=true;
             if(!io.Fonts->AddFontFromMemoryTTF(data,bytes,22,&config,ranges.Data)) {ImGui::MemFree(data);chinese=false;}
         } else chinese=false;
@@ -275,37 +276,54 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
     if(open) {
         ImGui::SameLine(); ImGui::TextUnformatted(label("TOTK / DECK","王国之泪"));ImGui::Separator();
         ImGui::TextUnformatted(label("A: confirm   B: back","A 确认    B 返回"));
-        static const char *rates[]={"30","40","45","60","90","120"};
-        static const int values[]={30,40,45,60,90,120};int selected=3;
-        for(int i=0;i<6;++i) if(fps.load()==values[i]) selected=i;
-        if(ImGui::Combo(label("Frame cap","帧率上限"),&selected,rates,6)) {fps=values[selected];preferences(true);}
-        const char *sizes[]={"960 x 540","1280 x 720","1280 x 800","1920 x 1080"};
-        const int ws[]={960,1280,1280,1920},hs[]={540,720,800,1080};static int size=2;
-        if(ImGui::Combo(label("Output size","输出尺寸"),&size,sizes,4)) {request_h=hs[size];request_w=ws[size];}
-        if(ImGui::Checkbox(label("Native sensor motion","原生陀螺仪"),&gyro)) {runtime_hid_feedback_flag("gyro",gyro);preferences(true);}
-        if(ImGui::Button(label("Recenter motion","重新居中"))) runtime_motion_start();
-        ImGui::Separator();
-        int upscaler=nd_fsr_enabled();const char *upscalers[]={label("Bilinear","双线性"),"AMD FSR 1 (EASU / RCAS)"};
-        if(ImGui::Combo(label("Presentation upscaling","画面上采样"),&upscaler,upscalers,2)) {nd_fsr_configure(upscaler,nd_fsr_sharpness());preferences(true);}
-        if(upscaler) {
-            int sharp=nd_fsr_sharpness();
-            if(ImGui::SliderInt(label("Sharpness","锐化"),&sharp,0,100)) {nd_fsr_configure(1,sharp);preferences(true);}
-            if(nd_fsr_status()<0) ImGui::TextWrapped("%s",label("FSR unavailable; bilinear fallback active","FSR 不可用；已使用双线性"));
+        if(ImGui::BeginTabBar("##feature-tabs")) {
+            if(ImGui::BeginTabItem(label("Display###display","画面###display"))) {
+                static const char *rates[]={"30","40","45","60","90","120"};
+                static const int values[]={30,40,45,60,90,120};int selected=3;
+                for(int i=0;i<6;++i) if(fps.load()==values[i]) selected=i;
+                if(ImGui::Combo(label("Frame cap","帧率上限"),&selected,rates,6)) {fps=values[selected];preferences(true);}
+                const char *sizes[]={"960 x 540","1280 x 720","1280 x 800","1920 x 1080"};
+                const int ws[]={960,1280,1280,1920},hs[]={540,720,800,1080};static int size=2;
+                if(ImGui::Combo(label("Output size","输出尺寸"),&size,sizes,4)) {request_h=hs[size];request_w=ws[size];}
+                ImGui::Separator();
+                int upscaler=nd_fsr_enabled();const char *upscalers[]={label("Bilinear","双线性"),"AMD FSR 1 (EASU / RCAS)"};
+                if(ImGui::Combo(label("Presentation upscaling","画面上采样"),&upscaler,upscalers,2)) {nd_fsr_configure(upscaler,nd_fsr_sharpness());preferences(true);}
+                if(upscaler) {
+                    int sharp=nd_fsr_sharpness();
+                    if(ImGui::SliderInt(label("Sharpness","锐化"),&sharp,0,100)) {nd_fsr_configure(1,sharp);preferences(true);}
+                    if(nd_fsr_status()<0) ImGui::TextWrapped("%s",label("FSR unavailable; bilinear fallback active","FSR 不可用；已使用双线性"));
+                }
+                if(ImGui::TreeNode(label("Graphics capabilities","画面功能说明"))) {
+                    ImGui::TextDisabled("%s",label("Anti-aliasing: game's default","抗锯齿：使用游戏默认"));
+                    ImGui::TextDisabled("%s",label("FSR 3 / 4: unavailable","FSR 3 / 4：目前不可用"));
+                    ImGui::TextDisabled("%s",label("Frame generation: unavailable","帧生成：目前不可用"));
+                    ImGui::TreePop();
+                }
+                ImGui::EndTabItem();
+            }
+            if(ImGui::BeginTabItem(label("Controls###controls","控制###controls"))) {
+                if(ImGui::Checkbox(label("Native sensor motion","原生陀螺仪"),&gyro)) {runtime_hid_feedback_flag("gyro",gyro);preferences(true);}
+                if(ImGui::Button(label("Recenter motion","重新居中"))) runtime_motion_start();
+                const char *docks[]={label("Top left","左上"),label("Top","上边"),label("Top right","右上"),label("Right","右边"),label("Bottom right","右下"),label("Bottom","下边"),label("Bottom left","左下"),label("Left","左边")};
+                if(ImGui::Combo(label("Dock","停靠"),&anchor,docks,8)) preferences(true);
+                ImGui::EndTabItem();
+            }
+            if(ImGui::BeginTabItem(label("Extensions###extensions","扩展###extensions"))) {
+                nd_draw_amiibo_library("totk-native",chinese);
+                nd_draw_atmosphere("totk-native",chinese);
+                if(ImGui::TreeNode(label("Advanced data patches","高级数据补丁"))) {
+                    if(!nd_cheats_count()) ImGui::TextDisabled("%s",label("No compatible presets imported","未导入匹配版本的预设"));
+                    for(size_t i=0;i<nd_cheats_count();i++) {
+                        bool on=nd_cheats_enabled(i)!=0;
+                        if(ImGui::Checkbox(nd_cheats_name(i),&on)) nd_cheats_request(i,on);
+                    }
+                    if(*nd_cheats_error()) ImGui::TextWrapped("%s",nd_cheats_error());
+                    ImGui::TreePop();
+                }
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
         }
-        ImGui::TextDisabled("%s",label("Anti-aliasing: game's default","抗锯齿：使用游戏默认"));
-        ImGui::TextDisabled("%s",label("FSR 3 / 4: unavailable","FSR 3 / 4：目前不可用"));
-        ImGui::TextDisabled("%s",label("Frame generation: unavailable","帧生成：目前不可用"));
-        nd_draw_amiibo_library("totk-native",chinese);
-        nd_draw_atmosphere("totk-native",chinese);
-        ImGui::Separator(); ImGui::TextUnformatted(label("Cheats","金手指"));
-        if(!nd_cheats_count()) ImGui::TextDisabled("%s",label("No compatible presets imported","未导入匹配版本的预设"));
-        for(size_t i=0;i<nd_cheats_count();i++) {
-            bool on=nd_cheats_enabled(i)!=0;
-            if(ImGui::Checkbox(nd_cheats_name(i),&on)) nd_cheats_request(i,on);
-        }
-        if(*nd_cheats_error()) ImGui::TextWrapped("%s",nd_cheats_error());
-        const char *docks[]={label("Top left","左上"),label("Top","上边"),label("Top right","右上"),label("Right","右边"),label("Bottom right","右下"),label("Bottom","下边"),label("Bottom left","左下"),label("Left","左边")};
-        if(ImGui::Combo(label("Dock","停靠"),&anchor,docks,8)) preferences(true);
         ImGui::TextDisabled("%s",label("F1 / Minus+Plus opens this panel","F1 / Minus+Plus 打开设置"));
         if(ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {toggle();preferences(true);}
     }

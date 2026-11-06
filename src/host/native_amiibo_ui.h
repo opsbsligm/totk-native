@@ -7,7 +7,8 @@ static void nd_draw_amiibo_library(const char *game,bool chinese) {
     static bool listed=false;static int count=0;static char folder[4096],names[ND_AMIIBO_MAX_FILES][256];
     auto label=[chinese](const char *en,const char *zh) {return chinese?zh:en;};
     ImGui::SeparatorText("Amiibo");
-    if(!listed || ImGui::Button(label("Refresh local library","刷新本地标签库"))) {
+    bool refresh=ImGui::Button(label("Refresh local library","刷新本地标签库"));
+    if(!listed || refresh) {
         count=nd_amiibo_library(game,folder,names);listed=true;
     }
     NdAmiiboSnapshot state;nd_amiibo_snapshot(&state);
@@ -18,7 +19,7 @@ static void nd_draw_amiibo_library(const char *game,bool chinese) {
         ImGui::TextWrapped("%s",state.name);
         if(ImGui::Button(label("Remove tag","移开标签"))) nd_amiibo_remove();
     }
-    if(ImGui::BeginCombo(label("Local tag file","本地标签文件"),state.loaded?state.name:label("Choose a .bin file","选择标签文件"))) {
+    if(ImGui::BeginCombo(label("Tag file","标签文件"),state.loaded?state.name:label("Choose a .bin file","选择标签文件"))) {
         for(int i=0;i<count;i++) {
             ImGui::PushID(i);ImGui::BeginDisabled(state.state==2 || state.state==4);
             if(ImGui::Selectable(names[i])) {
