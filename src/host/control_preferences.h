@@ -16,7 +16,7 @@ static inline bool nd_control_pref_number(char **cursor,const char *key,int *val
     if(errno || v>INT_MAX || (*end!='\n' && *end!=0)) return false;
     *value=(int)v;*cursor=*end?end+1:end;return true;
 }
-static inline bool nd_control_preferences_read(const char *path,int *anchor,int *fps,int *gyro) {
+static inline bool nd_control_preferences_read_extended(const char *path,int *anchor,int *fps,int *gyro,int *upscaler,int *sharpness) {
     int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK);
     if(fd<0) return false;
     struct stat st;char text[129];size_t used=0;bool ok=false;
@@ -36,7 +36,14 @@ static inline bool nd_control_preferences_read(const char *path,int *anchor,int 
     // signed sentinel; all other fields and numeric caps remain unsigned.
     if(!strncmp(p,"fps=-1\n",7)) {f=-1;p+=7;}
     else if(!nd_control_pref_number(&p,"fps=",&f)) return false;
-    if(!nd_control_pref_number(&p,"gyro=",&g) || *p || a>=8 || g>1 ||
+    int u=0,s=50;
+    if(!nd_control_pref_number(&p,"gyro=",&g)) return false;
+    if(*p && (!nd_control_pref_number(&p,"upscaler=",&u) || !nd_control_pref_number(&p,"sharpness=",&s))) return false;
+    if(*p || a>=8 || g>1 || u>1 || s>100 ||
        !(f==-1 || f==30 || f==40 || f==45 || f==60 || f==90 || f==120)) return false;
-    *anchor=a;*fps=f;*gyro=g;return true;
+    *anchor=a;*fps=f;*gyro=g;*upscaler=u;*sharpness=s;return true;
+}
+
+static inline bool nd_control_preferences_read(const char *path,int *anchor,int *fps,int *gyro) {
+    int up,sharp;return nd_control_preferences_read_extended(path,anchor,fps,gyro,&up,&sharp);
 }

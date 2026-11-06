@@ -36,7 +36,7 @@ def source_lists():
     return runtime + ['src/runtime/platform/linux.c', 'src/runtime/platform/linux_io.c',
                       'src/host/deck_motion_decode.c', 'src/host/deck_motion_linux.c',
                       'src/host/nd_totk_timing.c',
-                      'src/host/diagnostics_linux.c'] + host + found['GFX'] + ['src/host/native_cheats.c', 'src/host/control_bar.cpp',
+                      'src/host/diagnostics_linux.c'] + host + found['GFX'] + ['src/vk/fsr.c', 'src/host/native_atmosphere.c', 'src/host/native_amiibo.c', 'src/host/native_cheats.c', 'src/host/control_bar.cpp',
         *['third_party/imgui/'+name for name in ('imgui.cpp','imgui_draw.cpp','imgui_tables.cpp','imgui_widgets.cpp','backends/imgui_impl_vulkan.cpp')]] + ['src/host/menu_confirm.c']
 
 
@@ -227,7 +227,7 @@ def main():
         lines.extend(['rule cc_recovery',
                       '  command = '+shlex.quote(cc)+' '+shlex.join([arg for arg in common if arg != '-O1'])+' $recovery_clang_args -std=gnu17 -MD -MF $out.d -c $in -o $out',
                       '  depfile = $out.d', '  deps = gcc'])
-    ui_sources=[p for p in sources if 'third_party/imgui' in p.as_posix() or p.name in ('control_bar.cpp','native_cheats.c','menu_confirm.c')]
+    ui_sources=[p for p in sources if 'third_party/imgui' in p.as_posix() or p.name in ('control_bar.cpp','native_cheats.c','menu_confirm.c','fsr.c','native_amiibo.c','native_atmosphere.c')]
     ordinary=[p for p in sources if p not in ui_sources]
     ui_flags=['-DIMGUI_IMPL_VULKAN_NO_PROTOTYPES','-I'+str(ROOT/'third_party/imgui'),'-I'+str(ROOT/'third_party/imgui/backends')]
     lines.extend(['rule cxxui','  command = '+shlex.quote(cxx)+' '+shlex.join([*common,*ui_flags])+' -std=c++17 -fno-exceptions -fno-rtti -MD -MF $out.d -c $in -o $out',

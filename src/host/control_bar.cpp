@@ -4,6 +4,9 @@
 #include "control_bar.h"
 #include "native_cheats.h"
 #include "imgui.h"
+#include "native_amiibo_ui.h"
+#include "native_atmosphere_ui.h"
+#include "../vk/fsr.h"
 #include "imgui_impl_vulkan.h"
 #include <SDL3/SDL_vulkan.h>
 #include <atomic>
@@ -74,7 +77,7 @@ static void fonts(ImGuiIO &io) {
         if(data) {
             static ImVector<ImWchar> ranges;ImFontGlyphRangesBuilder builder;
             builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
-            builder.AddText("设置收起王国之泪确认返回帧率上限输出尺寸原生陀螺仪重新居中抗锯齿使用游戏默认目前不可用生成金手指未导入匹配版本的预设停靠左上右下边菜单触屏拖动选择位置保存数据已改变拒绝写入打开：");
+            builder.AddText("重新加载匹配的金手指文件与支持范围权限只数据堆内存默认全部关闭后停止写入已经改变可能保留刷新本地标签库已读取检测到等待扫描器空闲移开文件选择将自有的放入此目录然后与支持范围身份应用区存档写画面上采样双线性锐化扩展设置收起王国之泪确认返回帧率上限输出尺寸原生陀螺仪重新居中抗锯齿使用游戏默认目前不可用生成金手指未导入匹配版本的预设停靠左上右下边菜单触屏拖动选择位置保存数据已改变拒绝写入打开：");
             builder.BuildRanges(&ranges);ImFontConfig config;config.MergeMode=true;
             if(!io.Fonts->AddFontFromMemoryTTF(data,bytes,22,&config,ranges.Data)) {ImGui::MemFree(data);chinese=false;}
         } else chinese=false;
@@ -188,9 +191,9 @@ static void preferences(bool save) {
     n=snprintf(path,sizeof path,"%s/control.ini",folder);
     if(n<0 || (size_t)n>=sizeof path) return;
     if(!save) {
-        int a,rate,enabled;
-        if(nd_control_preferences_read(path,&a,&rate,&enabled)) {
-            anchor=a; fps=rate; gyro=enabled!=0; runtime_hid_feedback_flag("gyro",gyro);
+        int a,rate,enabled,up,sharp;
+        if(nd_control_preferences_read_extended(path,&a,&rate,&enabled,&up,&sharp)) {
+            anchor=a; fps=rate; gyro=enabled!=0;nd_fsr_configure(up,sharp); runtime_hid_feedback_flag("gyro",gyro);
         }
         return;
     }
@@ -198,7 +201,7 @@ static void preferences(bool save) {
     if(n<0 || (size_t)n>=sizeof temp) return;
     int fd=mkstemp(temp); if(fd<0) return;
     FILE *f=fdopen(fd,"w"); if(!f) {close(fd);unlink(temp);return;}
-    bool ok=fprintf(f,"anchor=%d\nfps=%d\ngyro=%d\n",anchor,fps.load(),gyro)>0;
+    bool ok=fprintf(f,"anchor=%d\nfps=%d\ngyro=%d\nupscaler=%d\nsharpness=%d\n",anchor,fps.load(),gyro,nd_fsr_enabled(),nd_fsr_sharpness())>0;
     if(fflush(f) || fsync(fd)) ok=false;
     if(fclose(f)) ok=false;
     if(!ok || rename(temp,path)) unlink(temp);
@@ -282,9 +285,18 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
         if(ImGui::Checkbox(label("Native sensor motion","原生陀螺仪"),&gyro)) {runtime_hid_feedback_flag("gyro",gyro);preferences(true);}
         if(ImGui::Button(label("Recenter motion","重新居中"))) runtime_motion_start();
         ImGui::Separator();
+        int upscaler=nd_fsr_enabled();const char *upscalers[]={label("Bilinear","双线性"),"AMD FSR 1 (EASU / RCAS)"};
+        if(ImGui::Combo(label("Presentation upscaling","画面上采样"),&upscaler,upscalers,2)) {nd_fsr_configure(upscaler,nd_fsr_sharpness());preferences(true);}
+        if(upscaler) {
+            int sharp=nd_fsr_sharpness();
+            if(ImGui::SliderInt(label("Sharpness","锐化"),&sharp,0,100)) {nd_fsr_configure(1,sharp);preferences(true);}
+            if(nd_fsr_status()<0) ImGui::TextWrapped("%s",label("FSR unavailable; bilinear fallback active","FSR 不可用；已使用双线性"));
+        }
         ImGui::TextDisabled("%s",label("Anti-aliasing: game's default","抗锯齿：使用游戏默认"));
         ImGui::TextDisabled("%s",label("FSR 3 / 4: unavailable","FSR 3 / 4：目前不可用"));
         ImGui::TextDisabled("%s",label("Frame generation: unavailable","帧生成：目前不可用"));
+        nd_draw_amiibo_library("totk-native",chinese);
+        nd_draw_atmosphere("totk-native",chinese);
         ImGui::Separator(); ImGui::TextUnformatted(label("Cheats","金手指"));
         if(!nd_cheats_count()) ImGui::TextDisabled("%s",label("No compatible presets imported","未导入匹配版本的预设"));
         for(size_t i=0;i<nd_cheats_count();i++) {

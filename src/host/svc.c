@@ -33,7 +33,8 @@
 #define SYSTEM_RESOURCE_BUDGET (32ULL << 20)
 #define APP_POOL      0xcd500000ULL  /* retail application pool, 3.2 GiB (MacNativeGames' default without 2K heaps) */
 
-static uint64_t heap_size;
+static _Atomic uint64_t heap_size;
+void nd_atm_heap_bounds(uint64_t *base,uint64_t *size) {*base=HEAP_START;*size=atomic_load(&heap_size);}
 static unsigned char alias_pages[ALIAS_SIZE / 4096];
 static uint64_t alias_bytes;
 static uint64_t main_stack_lo, main_stack_hi;
