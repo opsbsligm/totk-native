@@ -390,7 +390,7 @@ int nd_atm_load_defaults(const char *game) {
     for(size_t i=0;i<count;i++) {
         Cheat *c=&cheats[i];c->n=presets[i].n;memcpy(c->words,presets[i].words,(size_t)c->n*sizeof c->words[0]);
         snprintf(c->info.name,sizeof c->info.name,"%s",presets[i].name);c->info.supported=c->info.builtin=1;
-        check(c,main_base,data_start);
+        validate(c,main_base,data_start);
     }
     error[0]=0;generation++;pthread_mutex_unlock(&mutex);return 0;
 }
