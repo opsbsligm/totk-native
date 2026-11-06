@@ -35,7 +35,7 @@ static std::atomic<bool> expanded{false};
 static std::atomic<int> fps{-1}, request_w{0}, request_h{0};
 static std::atomic<uint32_t> held_buttons{0}, suppressed_buttons{0};
 static std::atomic<bool> reset_input{false};
-static float x0, y0, x1, y1, touch_width, touch_height;
+static float hit_left, hit_top, hit_right, hit_bottom, touch_width, touch_height;
 static int anchor=4;
 static bool gyro=true;
 static ImGuiContext *context;
@@ -108,7 +108,7 @@ int nd_control_event(const SDL_Event *event, SDL_Window *window) {
         int type=event->type==SDL_EVENT_FINGER_DOWN?ND_TOUCH_DOWN:event->type==SDL_EVENT_FINGER_MOTION?ND_TOUCH_MOVE:
                  event->type==SDL_EVENT_FINGER_UP?ND_TOUCH_UP:ND_TOUCH_CANCEL;
         NdTouchResult r=nd_touch_route(&touch,type,event->tfinger.touchID,event->tfinger.fingerID,
-                                     event->tfinger.x,event->tfinger.y,w,h,px>=x0 && py>=y0 && px<x1 && py<y1,expanded.load());
+                                     event->tfinger.x,event->tfinger.y,w,h,px>=hit_left && py>=hit_top && px<hit_right && py<hit_bottom,expanded.load());
         if(r.emit) {
             SDL_Event copy=*event;copy.tfinger.x=r.x;copy.tfinger.y=r.y;
             if(r.cancel) copy.type=SDL_EVENT_FINGER_CANCELED;
@@ -144,7 +144,7 @@ int nd_control_event(const SDL_Event *event, SDL_Window *window) {
         float px,py;
         if(event->type==SDL_EVENT_MOUSE_MOTION) { copy.motion.x*=sx; copy.motion.y*=sy; px=copy.motion.x; py=copy.motion.y; }
         else { copy.button.x*=sx; copy.button.y*=sy; px=copy.button.x; py=copy.button.y; }
-        std::lock_guard<std::mutex> guard(lock); hit=px>=x0 && py>=y0 && px<x1 && py<y1;
+        std::lock_guard<std::mutex> guard(lock); hit=px>=hit_left && py>=hit_top && px<hit_right && py<hit_bottom;
     }
     bool captured=nd_control_captured();
     bool values=pointer || event->type==SDL_EVENT_KEY_DOWN || event->type==SDL_EVENT_KEY_UP ||
@@ -334,7 +334,7 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
     }
     ImVec2 lower,upper;
     dirty|=nd_sidebar_end(sidebar,open,&anchor,chinese,&lower,&upper);
-    {std::lock_guard<std::mutex> guard(lock);x0=lower.x;y0=lower.y;x1=upper.x;y1=upper.y;}
+    {std::lock_guard<std::mutex> guard(lock);hit_left=lower.x;hit_top=lower.y;hit_right=upper.x;hit_bottom=upper.y;}
     if(want_toggle) {toggle();dirty=true;}
     if(dirty) preferences(true);
     ImGui::Render();
