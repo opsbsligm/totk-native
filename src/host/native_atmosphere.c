@@ -8,6 +8,7 @@
 #define _POSIX_C_SOURCE 200809L
 #define _DARWIN_C_SOURCE 1
 #include "native_atmosphere.h"
+#include "native_memory.h"
 #include "native_cheat_presets.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -53,9 +54,7 @@ static int transfer(uint64_t a,int width,void *data,int write) {
             fault=1;fault_note="Cross-page write rejected before changing memory";return 0;
         }
     }
-    struct iovec local={data,(size_t)width},remote={(void *)(uintptr_t)a,(size_t)width};
-    ssize_t n=write?process_vm_writev(getpid(),&local,1,&remote,1,0):process_vm_readv(getpid(),&local,1,&remote,1,0);
-    if(n==width) return 1;
+    if(nd_memory_copy(a,data,(size_t)width,write)) return 1;
     fault=1;fault_note="Guest memory is not accessible; cheat stopped";return 0;
 #else
     (void)data;fault=1;fault_note="This guarded cheat backend requires Linux";return 0;

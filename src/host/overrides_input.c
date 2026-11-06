@@ -7,6 +7,7 @@
 #define _GNU_SOURCE
 #endif
 #ifdef __linux__
+#include "native_memory.h"
 #include <sys/uio.h>
 #endif
 #include <fcntl.h>
@@ -26,8 +27,7 @@ uint64_t nd_atm_input_keys(void) {return atomic_load(&nd_cheat_buttons);}
 #include "menu_confirm.h"
 static NdMenuConfirm confirm_state;
 static bool menu_read(void *unused,uint64_t addr,void *out,size_t size) {
-    (void)unused;struct iovec local={out,size},remote={(void *)(uintptr_t)addr,size};
-    return process_vm_readv(getpid(),&local,1,&remote,1,0)==(ssize_t)size;
+    (void)unused;return nd_memory_copy(addr,out,size,0)!=0;
 }
 #endif
 #include "../runtime/hle.h"
