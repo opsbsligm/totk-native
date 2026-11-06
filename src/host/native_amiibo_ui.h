@@ -1,40 +1,49 @@
 /* SPDX-License-Identifier: MIT */
 #pragma once
 #include "native_amiibo.h"
+#include "native_ui_text.h"
 #include <stdio.h>
-// Presentation thread only; bounded listing is refreshed explicitly, not every frame.
 static void nd_draw_amiibo_library(const char *game,bool chinese) {
-    static bool listed=false;static int count=0;static char folder[4096],names[ND_AMIIBO_MAX_FILES][256];
-    auto label=[chinese](const char *en,const char *zh) {return chinese?zh:en;};
-    ImGui::SeparatorText("Amiibo");
-    bool refresh=ImGui::Button(label("Refresh local library","刷新本地标签库"));
-    if(!listed || refresh) {
-        count=nd_amiibo_library(game,folder,names);listed=true;
-    }
+    auto t=[chinese](const char *en,const char *zh){return chinese?zh:en;};
     NdAmiiboSnapshot state;nd_amiibo_snapshot(&state);
-    const char *status=state.state==4?label("Mounted","已读取"):state.state==2?label("Tag detected","已检测到标签"):
-        state.state==1?label("Waiting for a tag","等待扫描标签"):label("Reader idle","扫描器空闲");
-    ImGui::TextUnformatted(status);
+    nd_ui_status(state.state==4?t("Figure mounted","公仔已挂载"):state.state==2?t("Detected; awaiting game read","已检测，等待游戏读取"):
+        state.loaded?t("Ready for the next in-game scan","已就绪，等待游戏内扫描"):t("Select a virtual figure below","请选择下方虚拟公仔"),state.state==4?1:0);
+    ImGui::TextWrapped("%s",t("Select the Amiibo ability in game, then scan here. Each explicit scan creates a fresh virtual identity.",
+        "先在游戏中选择 Amiibo 能力，再在这里刷入。每次点击生成新的虚拟身份，可反复刷同一公仔。"));
+    static int selected=0;const char *names[64];int count=(int)nd_amiibo_virtual_count();
+    for(int i=0;i<count;i++) names[i]=nd_amiibo_virtual_name((size_t)i,chinese);
+    nd_ui_label(t("Built-in figures","内置公仔"));nd_ui_choice("##virtual-figure",&selected,names,count);
+    bool supported=nd_amiibo_virtual_supported((size_t)selected)!=0;
+    ImGui::BeginDisabled(!supported);
+    if(ImGui::Button(t("Scan / scan again","刷入公仔 / 再刷一次"),ImVec2(-1,52))) nd_amiibo_scan_virtual((size_t)selected);
+    ImGui::EndDisabled();
+    if(!supported) ImGui::TextWrapped("%s",t("Wolf Link needs an application-area save; unavailable.","狼林克需要应用区存档，目前不可用。"));
     if(state.loaded) {
-        ImGui::TextWrapped("%s",state.name);
-        if(ImGui::Button(label("Remove tag","移开标签"))) nd_amiibo_remove();
+        ImGui::TextWrapped("%s",state.virtual_index>=0?nd_amiibo_virtual_name((size_t)state.virtual_index,chinese):state.name);
+        if(ImGui::Button(t("Remove figure","移开公仔"),ImVec2(-1,48))) nd_amiibo_remove();
     }
-    if(ImGui::BeginCombo(label("Tag file","标签文件"),state.loaded?state.name:label("Choose a .bin file","选择标签文件"))) {
-        for(int i=0;i<count;i++) {
-            ImGui::PushID(i);ImGui::BeginDisabled(state.state==2 || state.state==4);
-            if(ImGui::Selectable(names[i])) {
-                char path[4096];int n=snprintf(path,sizeof path,"%s/%s",folder,names[i]);
-                if(n>0 && (size_t)n<sizeof path) nd_amiibo_load(path);
+    ImGui::Separator();
+    ImGui::TextWrapped(t("Scans: %llu  Mounts: %llu\nGame identity reads: %llu","刷入 %llu 次 · 挂载 %llu 次\n游戏身份读取 %llu 次"),
+        (unsigned long long)state.scans,(unsigned long long)state.mounts,(unsigned long long)state.model_reads);
+    ImGui::TextWrapped("%s",t("A game read is not a reward receipt. Rewards still follow the game's rules.","读取次数表示游戏已取走身份；奖励仍受游戏规则限制。"));
+    if(*state.error) ImGui::TextWrapped("%s",nd_ui_message(state.error,chinese));
+    if(ImGui::TreeNode(t("Own tag files / advanced","自有标签文件 / 高级"))) {
+        static bool listed=false;static int files=0;static char folder[4096],local[ND_AMIIBO_MAX_FILES][256];
+        bool refresh=ImGui::Button(t("Refresh local library","刷新本地标签库"),ImVec2(-1,48));
+        if(!listed || refresh) {files=nd_amiibo_library(game,folder,local);listed=true;}
+        if(ImGui::BeginCombo(t("Tag file","标签文件"),state.loaded?state.name:t("Choose a file","选择文件"))) {
+            for(int i=0;i<files;i++) {
+                ImGui::PushID(i);ImGui::BeginDisabled(state.state==2 || state.state==4);
+                if(ImGui::Selectable(local[i],false,0,ImVec2(0,44))) {
+                    char path[4096];int n=snprintf(path,sizeof path,"%s/%s",folder,local[i]);
+                    if(n>0 && (size_t)n<sizeof path) nd_amiibo_load(path);
+                }
+                ImGui::EndDisabled();ImGui::PopID();
             }
-            ImGui::EndDisabled();ImGui::PopID();
+            ImGui::EndCombo();
         }
-        ImGui::EndCombo();
-    }
-    if(count<=0) ImGui::TextWrapped("%s",label("Place owned 540-byte .bin dumps in this folder, then refresh:","将自有的标签文件放入此目录，然后刷新："));
-    if(ImGui::TreeNode(label("Library folder / scope","标签目录与支持范围"))) {
         ImGui::TextWrapped("%s",folder);
-        ImGui::TextWrapped("%s",label("Read-only figure identity. Application-area saves and tag writes are unavailable.","只读取标签身份；应用区存档与标签写入目前不可用。"));
+        ImGui::TextWrapped("%s",t("Read-only identity; no application save or tag writes.","仅读取身份，不支持应用区存档或标签写入。"));
         ImGui::TreePop();
     }
-    if(*state.error) ImGui::TextWrapped("%s",state.error);
 }

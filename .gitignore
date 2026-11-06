@@ -63,3 +63,13 @@ third_party/totk_xlate/
 *.webm
 
 /source-manifest.json
+
+.DS_Store
+*.pem
+*.p12
+id_rsa*
+.env
+.env.*
+*.key
+*.token
+*pat-secret*
