@@ -31,8 +31,12 @@ static inline bool nd_control_preferences_read(const char *path,int *anchor,int 
     close(fd);
     if(!ok || memchr(text,0,used)) return false;
     text[used]=0;char *p=text;int a,f,g;
-    if(!nd_control_pref_number(&p,"anchor=",&a) || !nd_control_pref_number(&p,"fps=",&f) ||
-       !nd_control_pref_number(&p,"gyro=",&g) || *p || a>=8 || g>1 ||
-       !(f==30 || f==40 || f==45 || f==60 || f==90 || f==120)) return false;
+    if(!nd_control_pref_number(&p,"anchor=",&a)) return false;
+    // The untouched UI cap inherits the launcher (-1). Accept only this exact
+    // signed sentinel; all other fields and numeric caps remain unsigned.
+    if(!strncmp(p,"fps=-1\n",7)) {f=-1;p+=7;}
+    else if(!nd_control_pref_number(&p,"fps=",&f)) return false;
+    if(!nd_control_pref_number(&p,"gyro=",&g) || *p || a>=8 || g>1 ||
+       !(f==-1 || f==30 || f==40 || f==45 || f==60 || f==90 || f==120)) return false;
     *anchor=a;*fps=f;*gyro=g;return true;
 }
