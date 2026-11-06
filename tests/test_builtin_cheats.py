@@ -27,7 +27,8 @@ int main(void) {
  ptr(main_mem+0x2ca1a78,heap+0x100);ptr(heap+0x180,heap+0x1000);
  ptr(main_mem+0x2c9fd70,heap+0x400);ptr(heap+0x438,heap+0x2000);
  ptr(main_mem+0x2cc5fe0,heap+0x8000);ptr(heap+0x8e40,heap+0x9000);ptr(heap+0xeb08,heap+0xf000);
- for(size_t i=0;i<3;i++) enable(i);nd_atm_frame(0);
+ for(size_t i=0;i<3;i++) {enable(i);}
+ nd_atm_frame(0);
  uint64_t stamina;uint32_t rupees;memcpy(&stamina,heap+0x22ac,8);memcpy(&rupees,heap+0x14d90,4);
  assert(heap[0x1848]==0x78 && stamina==UINT64_C(0x453b8000453b8000) && rupees==999999);
  for(size_t i=0;i<3;i++) {NdAtmInfo info;nd_atm_info(i,&info);assert(info.enabled && info.frames==1 && info.writes==1 && info.verified_writes==1 && !info.mismatches);}
