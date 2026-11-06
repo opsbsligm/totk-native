@@ -8,6 +8,7 @@
 #define _POSIX_C_SOURCE 200809L
 #define _DARWIN_C_SOURCE 1
 #include "native_atmosphere.h"
+#include "native_cheat_presets.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -25,7 +26,7 @@ enum { LIMIT=64, WORDS=1024, OPS_PER_RUN=4096 };
 typedef struct {NdAtmInfo info;uint32_t words[WORDS];int n;} Cheat;
 static Cheat cheats[LIMIT],staged[LIMIT];static size_t count;
 static uint64_t main_base,data_start,data_bytes;static NdAtmHeap heap_bounds;
-static char build[17],error[160],filename[4096];
+static char build[17],full_build[65],error[160],filename[4096];
 static pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 static int fault;static const char *fault_note;
 static NdAtmInfo *executing;
@@ -36,7 +37,7 @@ static uint64_t add(uint64_t a,uint64_t b) {if(b>UINT64_MAX-a) {fault=1;fault_no
 static uint64_t region(int m) {uint64_t b=0,n=0;if(m==0) return main_base;if(m==1 && heap_bounds) heap_bounds(&b,&n);return b;}
 static int transfer(uint64_t a,int width,void *data,int write) {
     if(fault) return 0;
-    if(width<1 || width>8 || (a&((unsigned)width-1))) {fault=1;fault_note="Unaligned memory access";return 0;}
+    if(width!=1 && width!=2 && width!=4 && width!=8) {fault=1;fault_note="Invalid memory width";return 0;}
     uint64_t hb=0,hs=0;if(heap_bounds) heap_bounds(&hb,&hs);
     int allowed=write?within(a,(size_t)width,data_start,data_bytes):within(a,(size_t)width,main_base,data_start-main_base+data_bytes);
     if(!allowed && hb) allowed=within(a,(size_t)width,hb,hs);
@@ -254,11 +255,11 @@ static void validate(Cheat *c,uint64_t source_base,uint64_t source_data) {
     if(depth) note(c,"Unterminated condition/loop");
 }
 void nd_atm_bind(const char *id,uint64_t base,uint64_t start,uint64_t size,NdAtmHeap heap) {
-    pthread_mutex_lock(&mutex);memset(cheats,0,sizeof cheats);count=0;build[0]=error[0]=filename[0]=0;
+    pthread_mutex_lock(&mutex);memset(cheats,0,sizeof cheats);count=0;build[0]=full_build[0]=error[0]=filename[0]=0;
     main_base=base;data_start=start;data_bytes=size;heap_bounds=heap;generation++;
     if(id && strlen(id)==64 && strspn(id,"0123456789abcdefABCDEF")==64 && start>=base && size<=UINT64_MAX-start) {
         for(int i=0;i<16;i++) {build[i]=(char)((id[i]>='a' && id[i]<='f')?id[i]-32:id[i]);}
-        build[16]=0;
+        build[16]=0;snprintf(full_build,sizeof full_build,"%s",id);
     }
     pthread_mutex_unlock(&mutex);
 }
@@ -373,3 +374,23 @@ void nd_atm_frame(uint64_t keys) {
 }
 const char *nd_atm_error(void) {static _Thread_local char copy[160];pthread_mutex_lock(&mutex);memcpy(copy,error,sizeof copy);pthread_mutex_unlock(&mutex);return copy;}
 const char *nd_atm_file(void) {static _Thread_local char copy[4096];pthread_mutex_lock(&mutex);memcpy(copy,filename,sizeof copy);pthread_mutex_unlock(&mutex);return copy;}
+
+int nd_atm_load_defaults(const char *game) {
+    if(!import_game(game)) return report_error("Unsupported game profile");
+    pthread_mutex_lock(&mutex);
+    if(nd_atm_loading() || any_enabled_locked()) {fail("Disable every Atmosphere cheat before reloading");pthread_mutex_unlock(&mutex);return -1;}
+    const NdBuiltinCheat *presets=NULL;size_t length=0;
+    if(!strcmp(game,"botw-native") && !strcasecmp(full_build,"8e9978d50bdd20b4c8395a106c27ffde00000000000000000000000000000000")) {
+        presets=nd_botw_defaults;length=sizeof nd_botw_defaults/sizeof nd_botw_defaults[0];
+    } else if(!strcmp(game,"totk-native") && !strcasecmp(full_build,"277178b7dba1b6d4949a84778d4abc58b31b34f5000000000000000000000000")) {
+        presets=nd_totk_defaults;length=sizeof nd_totk_defaults/sizeof nd_totk_defaults[0];
+    }
+    if(!presets) {fail("No built-in presets match the complete game build ID");pthread_mutex_unlock(&mutex);return -1;}
+    memset(cheats,0,sizeof cheats);count=length;
+    for(size_t i=0;i<count;i++) {
+        Cheat *c=&cheats[i];c->n=presets[i].n;memcpy(c->words,presets[i].words,(size_t)c->n*sizeof c->words[0]);
+        snprintf(c->info.name,sizeof c->info.name,"%s",presets[i].name);c->info.supported=c->info.builtin=1;
+        check(c,main_base,data_start);
+    }
+    error[0]=0;generation++;pthread_mutex_unlock(&mutex);return 0;
+}

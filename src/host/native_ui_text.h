@@ -40,7 +40,13 @@ static inline const char *nd_ui_message(const char *text,bool zh) {
         {"Tag contains no valid figure identity","标签缺少有效公仔身份"},
         {"Remove the current tag before loading another","请先移开当前标签，再选择另一枚"},
         {"This figure needs application-area saves (not supported)","此公仔需要应用区存档，目前尚不支持"},
-        {"System random source unavailable; scan cancelled","系统随机源不可用，本次刷入已取消"}
+        {"System random source unavailable; scan cancelled","系统随机源不可用，本次刷入已取消"},
+        {"Infinite health","无限生命"},
+        {"Infinite stamina","无限体力"},
+        {"Rupees 999999","卢比设为 999999"},
+        {"Moon jump (hold in-game jump)","月步（按住游戏跳跃键）"},
+        {"Invalid memory width","数据宽度无效，已停止"},
+        {"No built-in presets match the complete game build ID","内置预设与当前完整游戏版本不匹配"}
     };
     for(const auto &m:messages) if(!strcmp(text,m.en)) return m.zh;
     return text;
