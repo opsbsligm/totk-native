@@ -44,6 +44,15 @@ static int transfer(uint64_t a,int width,void *data,int write) {
     if(!a || !allowed) {fault=1;fault_note="Outside writable game data/heap; code patches need a rebuild";return 0;}
 #ifdef __linux__
     // Kernel copies return EFAULT for an unmapped/frozen page; no guest pointer is dereferenced on the UI/host thread.
+    if(write) {
+        static long page_bytes;
+        if(!page_bytes) page_bytes=sysconf(_SC_PAGESIZE);
+        // A kernel write may stop halfway at a protected next page. Reject before
+        // touching either page; ordinary unaligned writes inside one page work.
+        if(page_bytes<=0 || width>page_bytes || a%(uint64_t)page_bytes>(uint64_t)page_bytes-(unsigned)width) {
+            fault=1;fault_note="Cross-page write rejected before changing memory";return 0;
+        }
+    }
     struct iovec local={data,(size_t)width},remote={(void *)(uintptr_t)a,(size_t)width};
     ssize_t n=write?process_vm_writev(getpid(),&local,1,&remote,1,0):process_vm_readv(getpid(),&local,1,&remote,1,0);
     if(n==width) return 1;

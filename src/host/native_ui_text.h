@@ -41,6 +41,7 @@ static inline const char *nd_ui_message(const char *text,bool zh) {
         {"Remove the current tag before loading another","请先移开当前标签，再选择另一枚"},
         {"This figure needs application-area saves (not supported)","此公仔需要应用区存档，目前尚不支持"},
         {"System random source unavailable; scan cancelled","系统随机源不可用，本次刷入已取消"},
+        {"Cross-page write rejected before changing memory","已拒绝跨页写入，原内存未改变"},
         {"Infinite health","无限生命"},
         {"Infinite stamina","无限体力"},
         {"Rupees 999999","卢比设为 999999"},
