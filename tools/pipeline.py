@@ -59,6 +59,7 @@ def assets(work, dump, jobs):
     data = work / 'data'
     data.mkdir(exist_ok=True)
     tool(work, 'romfs', 'prepare_linux_game.py', '--dump', dump, '--data', data, '--stage', 'romfs')
+    tool(work, 'deck-fonts', 'deck_font_prompts.py', '--romfs', data / 'romfs', '--out', data / 'deck-ui')
     tool(work, 'translator', 'build_xlate.py', '--rid', 'linux-x64', '--dotnet', 'dotnet',
          '--out', work / 'translator', '--cache', work / 'cache', '--artifacts', work / 'dotnet-artifacts', '--jobs', jobs)
     tool(work, 'shader-export', 'export_shaders.py', data / 'romfs', data / 'shader-work', dump / 'exefs')
@@ -101,7 +102,7 @@ def main():
     if a.stage in ('assets', 'all'):
         (a.work / 'assets-receipt.json').unlink(missing_ok=True)
         assets(a.work, dump, a.jobs)
-        publish(a.work, 'assets', [a.work / 'data/romfs', a.work / 'data/shaders', a.work / 'data/textures'], before)
+        publish(a.work, 'assets', [a.work / 'data/romfs', a.work / 'data/shaders', a.work / 'data/textures', a.work / 'data/deck-ui'], before)
     if a.stage in ('package', 'all'):
         tool(a.work, 'package', 'package_linux.py', '--work', a.work, '--dump', dump)
         receipt.write_text(json.dumps(dict(schema=1, game=GAME, package='package',

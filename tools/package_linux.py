@@ -82,7 +82,7 @@ def main():
         executable = 'ultratears'
         shutil.copy2(work / 'game' / executable, staging / executable)
         (staging / 'data').mkdir()
-        for name in ('romfs', 'shaders', 'textures'):
+        for name in ('romfs', 'shaders', 'textures', 'deck-ui'):
             copy_tree(work / 'data' / name, staging / 'data' / name)
         copy_tree(dump / 'exefs', staging / 'data/exefs')
         copy_tree(dump / 'fonts', staging / 'data/fonts')

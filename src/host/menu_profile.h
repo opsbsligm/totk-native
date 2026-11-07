@@ -2,6 +2,9 @@
 #pragma once
 #include <stdint.h>
 typedef struct { uint64_t vtable,name_address,descriptor,getter; const char *name; } NdMenuClass;
+/* The 1.4.3 world HUD's bottom movement/control guide remains open while
+   walking and climbing. Its is-open state does not make it an input menu. */
+#define ND_TOTK_WORLD_CTRL_GUIDE_VTABLE 0x803726538ull
 static const NdMenuClass nd_menu_classes[]={
     {0x8037222b0ull,0x802c60592ull,0x8037225c0ull,0x80212ed28ull,"UIActionGuideWithPictScreen"},
     {0x803722a48ull,0x802c711d3ull,0x803722d50ull,0x802132efcull,"UIAmiiboWindowScreen"},

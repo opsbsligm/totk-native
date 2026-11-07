@@ -65,6 +65,8 @@ typedef struct vkb_image {
     VkImageUsageFlags usage;
     int compressed;                // block-compressed format: no attachment / storage use
     int gpu_written;               // rendered / cleared / copied to by the GPU: never overwritten from game memory ([temporary])
+    unsigned deck_glyph_code;       // exact known UI mask + 1, never a size-only match
+    unsigned deck_glyph_menu;       // menu context used for its uploaded physical label
     uint64_t upload_stamp;         // nvn_dirty generation of the last upload from game memory (0 = never)
     uint64_t dirty_checked;        // the submission in which the game memory was last checked for CPU writes
     int stale;                     // that check found CPU writes: upload before the next use

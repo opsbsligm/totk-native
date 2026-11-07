@@ -18,6 +18,8 @@
 #include "tex/astc.h"
 #include "platform/linux_io.h"
 #include "totk_deck_bitmaps.h"
+#include "deck_prompt_masks.h"
+extern int runtime_menu_confirm_active(void);
 #include "tex/bc7.h"
 #include "tex/nvn_deswizzle.h"
 #include "nvn/totk_vpool.h"
@@ -739,6 +741,7 @@ static int cpu_atlas_shadow_needed(const vkb_image *im, size_t size) {
 int vkb_tex_stale(vkb_image *im) {
     uint64_t sub = mtl_last_fence() + 1;
     if (!im->upload_stamp || im->gpu_written || !im->storage) return 0;
+    if (__atomic_load_n(&im->deck_glyph_code,__ATOMIC_ACQUIRE) && __atomic_load_n(&im->deck_glyph_menu,__ATOMIC_ACQUIRE)!=(unsigned)runtime_menu_confirm_active()) return 1;
     if (im->cpu_written) return 1;
     if (im->vpool_gen && im->vpool_gen != totk_vpool_generation()) return 1;   // a virtual pool's mapping changed
     entry *image_entry = (entry *)im;
@@ -1109,6 +1112,39 @@ static int deck_controller_upload(VkCommandBuffer cb, vkb_image *im, const uint8
     return 1;
 }
 
+// Exact original 1.4.3 Common archive R8 masks, SHA-256 after deswizzle.
+// The same shared icon can appear in either context: refresh at menu transitions.
+static int deck_prompt_upload(VkCommandBuffer cb,vkb_image *im,const uint8_t *src,int bw,int bh,int bpb) {
+    static const char *const fingerprints[]={
+        "797fef69d01a9359d80f0522ddc7ea85f90d125cc25e8d49854674592d540216",
+        "a8a77de23cd0a7bcc6921d756efa6a6f7dfe5374a96353b60206387443aaaa31",
+        "db00f4298b4f8089155226b92da9f50ce87514419aa9bb0fae6395a259c7ee2f",
+        "407192a9cbc7ddef48c1b0e2aafdc66b3f863bfaac04d6cff9020bb459cdda96",
+        "89044297eae95fcf4735fc25887b1125c6478313b6afff091220ddbff1164275",
+        "3239afb670f8a98b4dbabc37ebf77cc0b45656227d2db8822d3c7eff01435f12"
+    };
+    const char *enabled=getenv("TOTK_STEAMDECK_UI");
+    if(enabled && !strcmp(enabled,"0")) return 0;
+    if(im->format!=VK_FORMAT_R8_UNORM || im->width!=108 || im->height!=108 ||
+       im->levels!=1 || im->layers!=1 || im->depth!=1 || bw!=1 || bh!=1 || bpb!=1 || im->aspect!=VK_IMAGE_ASPECT_COLOR_BIT) return 0;
+    uint8_t mask[108*108];char hash[65];
+    if(nvn_deswizzle(&im->d,0,0,src,mask,108) || !linux_sha256_hex(mask,sizeof mask,NULL,0,hash)) return 0;
+    unsigned code=0;
+    while(code<6 && strcmp(hash,fingerprints[code])) code++;
+    if(code==6) {__atomic_store_n(&im->deck_glyph_code,0,__ATOMIC_RELEASE);return 0;}
+    unsigned menu=(unsigned)runtime_menu_confirm_active();
+    if(!nd_deck_glyph_mask(code,menu,mask,sizeof mask,108)) return 0;
+    VkBuffer buffer;VkDeviceSize offset;uint8_t *pixels=vkb_ring_alloc(sizeof mask,16,&buffer,&offset);memcpy(pixels,mask,sizeof mask);
+    vkb_image_use(cb,im,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_PIPELINE_STAGE_2_COPY_BIT,VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    VkBufferImageCopy copy={.bufferOffset=offset,.bufferRowLength=108,.bufferImageHeight=108,
+        .imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},.imageExtent={108,108,1}};
+    vk.vkCmdCopyBufferToImage(cb,buffer,im->img,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
+    __atomic_store_n(&im->deck_glyph_code,code+1,__ATOMIC_RELEASE);__atomic_store_n(&im->deck_glyph_menu,menu,__ATOMIC_RELEASE);
+    static _Atomic int messages;
+    if(atomic_fetch_add(&messages,1)<32) VLOG("[deck-ui] exact R8 prompt %u -> %s physical %c",code,menu?"menu":"world",code<4?nd_deck_face_label(code,menu):'L');
+    return 1;
+}
+
 static int tex_upload(VkCommandBuffer cb, vkb_image *im) {
     if (!im->storage || im->gpu_written) return 0;
     const nvn_texdesc *d = &im->d;
@@ -1179,7 +1215,7 @@ static int tex_upload(VkCommandBuffer cb, vkb_image *im) {
                  snapshot ? "exact shadow" : "no snapshot: conservatively re-uploaded");
     }
     int srgb = d->format >= 0x87 && d->format <= 0x94;
-    if (deck_controller_upload(cb, im, src, bw, bh, bpb)) {
+    if (deck_prompt_upload(cb, im, src, bw, bh, bpb) || deck_controller_upload(cb, im, src, bw, bh, bpb)) {
         slow_upload_log(im, why, up_t0, L.size, gathered != NULL);
         free(gathered);
         __atomic_store_n(&im->uploading, 0, __ATOMIC_RELEASE);

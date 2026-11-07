@@ -37,6 +37,9 @@ bool nd_totk_menu_context(NdMenuRead read,void *u) {
         uint64_t obj=objects[i],vt;
         if(!obj) continue;
         if(!pointer(obj) || !get(read,u,obj,&vt,8)) return false;
+        /* UICtrlGuideScreen is the non-modal world footer, not the system
+           controller-help page. Real menu overlays are separate objects. */
+        if(vt==ND_TOTK_WORLD_CTRL_GUIDE_VTABLE) continue;
         for(size_t j=0;j<sizeof nd_menu_classes/sizeof *nd_menu_classes;j++) {
             if(vt!=nd_menu_classes[j].vtable) continue;
             signed char state[2];uint64_t owner;

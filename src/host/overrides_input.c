@@ -7,6 +7,7 @@
 #define _GNU_SOURCE
 #endif
 #ifdef __linux__
+#include "native_memory.h"
 #include <sys/uio.h>
 #endif
 #include <fcntl.h>
@@ -21,13 +22,14 @@
 #include "host.h"
 #include <stdatomic.h>
 static _Atomic uint64_t nd_cheat_buttons;
+static _Atomic int nd_menu_active;
+int runtime_menu_confirm_active(void) {return atomic_load(&nd_menu_active);}
 uint64_t nd_atm_input_keys(void) {return atomic_load(&nd_cheat_buttons);}
 #ifdef __linux__
 #include "menu_confirm.h"
 static NdMenuConfirm confirm_state;
 static bool menu_read(void *unused,uint64_t addr,void *out,size_t size) {
-    (void)unused;struct iovec local={out,size},remote={(void *)(uintptr_t)addr,size};
-    return process_vm_readv(getpid(),&local,1,&remote,1,0)==(ssize_t)size;
+    (void)unused;return nd_memory_copy(addr,out,size,0)!=0;
 }
 #endif
 #include "../runtime/hle.h"
@@ -73,6 +75,7 @@ void runtime_input_clear(void) {
     memset(&g_pad, 0, sizeof g_pad);
 #ifdef __linux__
     confirm_state=(NdMenuConfirm){0};
+    atomic_store(&nd_menu_active,0);
 #endif
     pthread_mutex_unlock(&input_lock);
 }
@@ -201,6 +204,7 @@ static int pad_states(NpadState *out, int max, const uint32_t *id, uint32_t want
 #ifdef __linux__
         const char *opt=getenv("TOTK_MENU_CONFIRM");
         bool active=(!opt || strcmp(opt,"0")) && nd_totk_menu_context(menu_read,NULL);
+        atomic_store(&nd_menu_active,active);
         state.buttons |= (pad.buttons&~3ull) | nd_menu_confirm(&confirm_state,active,(unsigned)pad.buttons&3,1,2);
 #else
         state.buttons |= pad.buttons;

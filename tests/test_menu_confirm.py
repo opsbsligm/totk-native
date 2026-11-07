@@ -44,6 +44,16 @@ int main(void) {
  mem[0x116d]=0;pin_bad=1;assert(!nd_totk_menu_context(rd,0));pin_bad=0;
  vt=0x803000008ull;put(0x1000,&vt,8);assert(!nd_totk_menu_context(rd,0)); // HUD/unrecognized type
  vt=0x803733a28ull;put(0x1000,&vt,8);assert(nd_totk_menu_context(rd,0)); // title
+ // Actual prologue regression: the world control footer is open (0,2)
+ // throughout movement/climbing, but must not swap world A/B.
+ vt=ND_TOTK_WORLD_CTRL_GUIDE_VTABLE;put(0x1000,&vt,8);
+ assert(!nd_totk_menu_context(rd,0));
+ // A real pouch menu still wins when the world footer remains resident.
+ uint64_t second=0x1000001800ull;put(0x108,&second,8);put(0x1820,&mgr,8);
+ vt=0x80372f150ull;put(0x1800,&vt,8);mem[0x196d]=0;mem[0x196e]=2;
+ assert(nd_totk_menu_context(rd,0));
+ mem[0x196e]=1;assert(!nd_totk_menu_context(rd,0));
+ second=0;put(0x108,&second,8);
  count=513;put(8,&count,4);assert(!nd_totk_menu_context(rd,0));count=2;put(8,&count,4);
  uint64_t invalid=~0ull;put(0x100,&invalid,8);assert(!nd_totk_menu_context(rd,0));
  put(0x100,&obj,8);put(0x1020,&invalid,8);assert(!nd_totk_menu_context(rd,0)); // wrong parent
