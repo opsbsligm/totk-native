@@ -78,7 +78,7 @@ unsigned nd_amiibo_start(void) {
 }
 unsigned nd_amiibo_stop(void) {
     pthread_mutex_lock(&mutex);int active=state.state==2 || state.state==4;
-    state.state=0;state.generation++;void (*fn)(int)=notification;
+    state.state=active?3:0;state.generation++;void (*fn)(int)=notification;
     pthread_mutex_unlock(&mutex);if(active && fn) fn(0);return 0;
 }
 unsigned nd_amiibo_mount(void) {

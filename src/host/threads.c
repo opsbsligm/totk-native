@@ -603,6 +603,15 @@ int hle_try_signal_system_event(void *ev) {
     pthread_mutex_unlock(&G);
     return event != NULL;
 }
+void hle_update_system_event_pair(void *first, void *second, int level) {
+    pthread_mutex_lock(&G);
+    event_t *a = h_peek(se_find(first), O_EVENT_W);
+    event_t *b = h_peek(se_find(second), O_EVENT_W);
+    if (a) a->signaled = level > 0;
+    if (b) b->signaled = level < 0;
+    if ((a && a->signaled) || (b && b->signaled)) wake_sync_waiters();
+    pthread_mutex_unlock(&G);
+}
 void hle_signal_system_event(void *ev) {
     if (hle_try_signal_system_event(ev)) return;
     if (!t_self) return;
