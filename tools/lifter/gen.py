@@ -209,6 +209,11 @@ class Module:
 
     def emit_function(self, entry, end, labels, tables, hle):
         """Emit certified target cases or the complete in-function dispatch fallback."""
+        from segmented import MIN_SPLIT_BYTES, emit
+        if (entry not in hle and end - entry >= MIN_SPLIT_BYTES
+                and any(value == 'all' for value in tables.values())
+                and not any(entry <= address < end for address in PATCHES)):
+            return emit(self, entry, end, tables)
         out = [f'void {fname(entry)}(Cpu *c) {{']
         if entry in hle:
             out.append(f'    {sanitize(hle[entry])}(c);')
