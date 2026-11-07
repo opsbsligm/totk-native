@@ -22,3 +22,5 @@ NATIVE_CHEATS_V1 totk-1.4.3 EXACT_64_CHARACTER_NSO_BUILD_ID
 上段描述的是独立数据补丁导入器。Atmosphère VM 导入与预设、完整 Build ID 绑定和执行状态见 [扩展功能](feature5.md) 与 [金手指预设](cheat-presets.md)。软件构建、模拟内存补丁回归与真实游戏行为分开验证；目前 `hardware_validated=false`。
 
 触屏侧栏分为画面、控制、Amiibo、金手指四页；当前能力与执行状态见 [扩展功能](feature5.md)。快捷键不再打开侧栏。
+
+世界提示使用独立 DeckWrld 图标字体，菜单保留 External 字体；两者各自按实际物理按键显示。构建仅接受受支持的 1.4.3 输入，生成四区域字体、Common 布局及配套资源分配表的六项只读覆盖。原始 RomFS 保持不变。系统帮助的十组指引按现有三种模式及骑乘状态求解，保留原文字端点；最终效果仍须以当前候选的实际游戏验收为准。

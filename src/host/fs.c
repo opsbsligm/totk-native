@@ -241,7 +241,7 @@ static unsigned romfs_open(uint64_t *out, const char *path, int mode) {
         if (fd >= 0) close(fd);
         need(patched >= 0, "Deck icon font missing or differs from verified private recipe");
         fd = patched;
-        fprintf(stderr, "[totk] verified Deck icon font: %s (%llu bytes)\n", p, (unsigned long long)actual_size);
+        fprintf(stderr, "[totk] verified Deck UI resource: %s (%llu bytes)\n", p, (unsigned long long)actual_size);
     }
 #endif
     pthread_mutex_lock(&rom_lock);

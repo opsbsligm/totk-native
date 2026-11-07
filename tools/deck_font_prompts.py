@@ -1,8 +1,8 @@
-"""Build four narrow, private icon-font replacements without rewriting RomFS.
+"""Build six narrow private UI resources without rewriting original RomFS.
 
-Only the checked External icon font changes; every other SARC member, offset,
-uncompressed archive size and font metric is preserved. No game assets ship
-with this source. BFOTF interoperability follows MacNativeGames' MIT tool;
+Menu and world icon fonts are distinct. Unrelated SARC members stay byte exact;
+allocation sizes grow with the new fonts and verified controller geometry.
+No game assets ship with this source. BFOTF interoperability follows MacNativeGames' MIT tool;
 see licenses/MacNativeGames.txt and NOTICE.md.
 """
 # SPDX-License-Identifier: MIT
@@ -13,12 +13,14 @@ from pathlib import Path
 import struct
 
 from deck_font_glyphs import patch_external
+import deck_font_world as world
 from romfs import RomFS
 import zstd_codec as zstd
 
-PATHS = tuple('Font/' + name + '.bfarc.zs' for name in (
+FONT_PATHS = tuple('Font/' + name + '.bfarc.zs' for name in (
     'Font.Nin_NX_NVN', 'Font_CNzh.Nin_NX_NVN',
     'Font_KRko.Nin_NX_NVN', 'Font_TWzh.Nin_NX_NVN'))
+PATHS = FONT_PATHS + (world.COMMON, world.RESTBL)
 MAX_ARCHIVE = 32 << 20
 
 
@@ -79,6 +81,8 @@ def patch_archive(archive):
 
 
 def build(root, output):
+    if not __debug__:
+        raise RuntimeError('Do not disable resource validation with Python -O')
     rom = RomFS(root)
     dictionary_pack = zstd.decompress(rom.read('Pack/ZsDic.pack.zs'))
     dictionaries = {}
@@ -90,15 +94,25 @@ def build(root, output):
     if output.exists():
         raise ValueError('Refusing to overwrite existing Deck font outputs')
     output.mkdir(parents=True)
-    records, manifest = bytearray(b'NDUIF001'), []
+    records, manifest, growth = bytearray(b'NDUIF002'), [], {}
     for index, path in enumerate(PATHS):
         original = rom.read(path)
         if not 0 < len(original) <= MAX_ARCHIVE:
             raise ValueError('Font archive size outside supported bounds')
+        pinned = world.COMMON_SHA if path == world.COMMON else world.RESTBL_SHA if path == world.RESTBL else None
+        if pinned and hashlib.sha256(original).hexdigest() != pinned:
+            raise ValueError('Unsupported original UI resource')
         info = zstd.get_frame_info(original)
         dictionary = dictionaries.get(info.dictionary_id)
         archive = zstd.decompress(original, zstd_dict=dictionary)
-        patched = patch_archive(archive)
+        if index < 4:
+            patched = world.font_archive(archive, patch_archive(archive))
+        elif path == world.COMMON:
+            patched = world.common_archive(original, archive)
+        else:
+            patched = world.allocation_table(archive, growth)
+        if path != world.RESTBL and len(patched) > len(archive):
+            growth[path] = ((len(patched) - len(archive) + 0xffff) & ~0xffff) + 0x10000
         encoded = zstd.compress(patched, zstd_dict=dictionary)
         if not 0 < len(encoded) <= MAX_ARCHIVE:
             raise ValueError('Patched font archive exceeds runtime limit')
@@ -106,11 +120,15 @@ def build(root, output):
         records.extend(struct.pack('<QQ', len(original), len(encoded)) + old_hash + new_hash)
         (output / (str(index) + '.zs')).write_bytes(encoded)
         manifest.append(dict(path=path, original_sha256=old_hash.hex(), patched_sha256=new_hash.hex(),
-                             original_size=len(original), patched_size=len(encoded), archive_size=len(archive)))
+                             original_size=len(original), patched_size=len(encoded), archive_size=len(archive),
+                             patched_archive_size=len(patched)))
     (output / 'fonts.bin').write_bytes(records)
-    (output / 'recipe.json').write_text(json.dumps(dict(schema=1, recipe='deck-font-xy-v1', files=manifest,
+    (output / 'recipe.json').write_text(json.dumps(dict(schema=2, recipe='deck-world-menu-v2', files=manifest,
+        allocation_growth=growth,
         converter_sha256={name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
-                          for name in ('deck_font_glyphs.py', 'deck_font_prompts.py', 'zstd_codec.py')}), indent=2) + '\n')
+                          for name in ('deck_font_glyphs.py', 'deck_font_prompts.py', 'deck_font_world.py', 'zstd_codec.py',
+                                       'deck_layout/resource_layout.py', 'deck_layout/anchor_contract.py',
+                                       'deck_layout/build_controller_patch.py')}), indent=2) + '\n')
 
 
 if __name__ == '__main__':

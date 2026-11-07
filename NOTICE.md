@@ -23,3 +23,5 @@ Dear ImGui sources and Vulkan backend are MIT, copied byte-for-byte from the ind
 FSR1 呈现 glue 源于 `kuraeow/ultratears@57bf619e7ef579a0675a4d41d74413ebaca02fb8` 的 GPL 实现（提交号以 third_party/fsr1/UPSTREAM.json 为准）；EASU/RCAS shader 与 AMD headers 为 MIT，声明与原文件保留。新增动态能力回退、部分分配清理、输出视图生命周期与可持久化 UI 设置。
 
 Public virtual-figure identifiers: N3evin/AmiiboAPI@6115745c56ff762ce212ced6fbad9ea195d659b3, Copyright (c) 2017 Nevin Vu, MIT (licenses/AmiiboAPI-MIT.txt). No tag dumps or encrypted application data are bundled.
+
+The independently authored world/menu font separation and RESTBL v1 editor use format observations checked against the user's private 1.4.3 inputs. RESTBL format reference: https://github.com/LordBubblesDev/restbl/blob/0cca153b29f5a8842c94ea5e835651ef00b7241f/src/restbl.py (format only; no implementation copied). The tools/deck_layout geometry solver is recovered first-party NativeDeck work and uses no distributed game layouts.

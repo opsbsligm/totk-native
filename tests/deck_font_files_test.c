@@ -31,7 +31,7 @@ static int fd_count(void) {
 }
 int main(void) {
     const char old[] = "own original compressed fixture", newer[] = "own newer fixture with DIFFERENT size";
-    uint8_t header[328] = "NDUIF001";
+    uint8_t header[ND_DECK_RESOURCE_HEADER] = "NDUIF002";
     put64(header + 8, sizeof old); put64(header + 16, sizeof newer);
     hash_bytes(old, sizeof old, header + 24); hash_bytes(newer, sizeof newer, header + 56);
     write_file("fonts.bin", header, sizeof header); write_file("0.zs", newer, sizeof newer);
@@ -48,7 +48,7 @@ int main(void) {
     }
     assert(fd_count() == baseline); assert(fcntl(source, F_GETFD) >= 0);
     assert(nd_font_open(".", -1, source, offset, sizeof old, &size) < 0);
-    assert(nd_font_open(".", 4, source, offset, sizeof old, &size) < 0);
+    assert(nd_font_open(".", ND_DECK_RESOURCE_COUNT, source, offset, sizeof old, &size) < 0);
     assert(nd_font_open(".", 0, source, offset + 1, sizeof old, &size) < 0);
     assert(nd_font_open(".", 0, source, offset, sizeof old + 1, &size) < 0);
     write_file("0.zs", "corrupt", 7);

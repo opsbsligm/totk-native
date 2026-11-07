@@ -173,6 +173,6 @@ def swap_outlines(font, first, second):
 def patch_external(font):
     if hashlib.sha256(font).hexdigest() != EXTERNAL_SHA256:
         raise ValueError('Unsupported original 1.4.3 icon font')
-    # E042 / E043 are glyphs 8 / 9 in this exact font. A/B keep the menu labels;
-    # gameplay's A/B masks are handled by the context-aware native HUD renderer.
+    # E042 / E043 are glyphs 8 / 9 in this exact font. A/B keep menu labels;
+    # deck_font_world builds a distinct world font with A/B exchanged as well.
     return swap_outlines(font, 8, 9)

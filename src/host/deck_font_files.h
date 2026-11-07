@@ -1,4 +1,4 @@
-/* Narrow, read-only package font recipe. No arbitrary mod paths. MIT. */
+/* Six pinned read-only UI resources. No arbitrary mod paths. MIT. */
 #pragma once
 #ifndef _WIN32
 #include <errno.h>
@@ -10,12 +10,15 @@
 #include <unistd.h>
 #include "platform/linux_io.h"
 
-static const char *const nd_font_paths[4] = {
+enum { ND_DECK_RESOURCE_COUNT = 6, ND_DECK_RESOURCE_HEADER = 8 + 80 * ND_DECK_RESOURCE_COUNT };
+static const char *const nd_font_paths[ND_DECK_RESOURCE_COUNT] = {
     "Font/Font.Nin_NX_NVN.bfarc.zs", "Font/Font_CNzh.Nin_NX_NVN.bfarc.zs",
-    "Font/Font_KRko.Nin_NX_NVN.bfarc.zs", "Font/Font_TWzh.Nin_NX_NVN.bfarc.zs"
+    "Font/Font_KRko.Nin_NX_NVN.bfarc.zs", "Font/Font_TWzh.Nin_NX_NVN.bfarc.zs",
+    "UI/LayoutArchive/Common.Product.140.Nin_NX_NVN.blarc.zs",
+    "System/Resource/ResourceSizeTable.Product.143.Nin_NX_NVN.rsizetable.zs"
 };
 static int nd_font_index(const char *path) {
-    for (int i = 0; i < 4; i++) if (!strcmp(path, nd_font_paths[i])) return i;
+    for (int i = 0; i < ND_DECK_RESOURCE_COUNT; i++) if (!strcmp(path, nd_font_paths[i])) return i;
     return -1;
 }
 static uint64_t nd_font_u64(const uint8_t *p) {
@@ -51,15 +54,15 @@ static int nd_font_hash(int fd, uint64_t offset, uint64_t size, const uint8_t ex
    replacement to the actually opened original RomFS file and both exact hashes. */
 static int nd_font_open(const char *directory, int index, int source_fd,
                         uint64_t source_offset, uint64_t source_size, uint64_t *size) {
-    if (index < 0 || index >= 4 || !size) return -1;
+    if (index < 0 || index >= ND_DECK_RESOURCE_COUNT || !size) return -1;
     int root = -1, manifest = -1, replacement = -1, ok = 0;
-    uint8_t header[328];
+    uint8_t header[ND_DECK_RESOURCE_HEADER];
     struct stat st;
     root = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (root < 0) goto done;
     manifest = openat(root, "fonts.bin", O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     if (manifest < 0 || fstat(manifest, &st) || !S_ISREG(st.st_mode) || st.st_size != (off_t)sizeof header ||
-        !nd_font_read(manifest, header, sizeof header, 0) || memcmp(header, "NDUIF001", 8)) goto done;
+        !nd_font_read(manifest, header, sizeof header, 0) || memcmp(header, "NDUIF002", 8)) goto done;
     const uint8_t *record = header + 8 + 80 * index;
     uint64_t old_size = nd_font_u64(record), new_size = nd_font_u64(record + 8);
     if (old_size != source_size || !nd_font_hash(source_fd, source_offset, old_size, record + 16)) goto done;
