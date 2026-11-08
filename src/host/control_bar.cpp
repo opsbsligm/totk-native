@@ -6,6 +6,7 @@
 #include "native_touch.h"
 #include "native_ui_glyphs.h"
 #include "imgui.h"
+#include "native_imgui_input.h"
 #include "native_sidebar_ui.h"
 #include "native_amiibo_catalog.h"
 #include "native_amiibo_ui.h"
@@ -32,6 +33,9 @@ int runtime_hid_feedback_flag(const char *, int);
 static std::mutex lock;
 static std::vector<SDL_Event> events;
 static std::atomic<bool> expanded{false};
+// Owned only by SDL's event thread; publish capture to the game thread.
+static NdPointer pointer={};
+static std::atomic<bool> pointer_active{false};
 static std::atomic<int> fps{-1}, request_w{0}, request_h{0};
 static std::atomic<uint32_t> held_buttons{0}, suppressed_buttons{0};
 static std::atomic<bool> reset_input{false};
@@ -91,7 +95,7 @@ static void fonts(ImGuiIO &io) {
     }
 }
 
-int nd_control_captured(void) { return expanded.load(); }
+int nd_control_captured(void) { return expanded.load() || pointer_active.load(); }
 uint32_t nd_control_suppressed_pad_buttons(void) {return suppressed_buttons.load();}
 int nd_control_fps_limit(void) { return fps.load(); }
 static void toggle() {
@@ -99,63 +103,99 @@ static void toggle() {
     suppressed_buttons.fetch_or(held_buttons.load());
     runtime_input_clear();
 }
+// The caller holds lock. A dropped DOWN/UP must not leave an owner or pressed
+// ImGui state alive after the bounded event queue is discarded.
+static void enqueue(const SDL_Event &event) {
+    if(events.size()<256) {events.push_back(event);return;}
+    events.clear();expanded=false;reset_input=true;
+    nd_pointer_reset(&pointer);pointer_active=false;
+    suppressed_buttons.fetch_or(held_buttons.load());runtime_input_clear();
+}
+static void publish_pointer_capture() {
+    bool active=nd_pointer_active(&pointer);
+    bool previous=pointer_active.exchange(active);
+    if(active && !previous) {
+        suppressed_buttons.fetch_or(held_buttons.load());
+        runtime_input_clear();
+    }
+}
 int nd_control_event(const SDL_Event *event, SDL_Window *window) {
-    static NdTouch touch={};
     if(event->type==SDL_EVENT_FINGER_DOWN || event->type==SDL_EVENT_FINGER_MOTION ||
        event->type==SDL_EVENT_FINGER_UP || event->type==SDL_EVENT_FINGER_CANCELED) {
         std::lock_guard<std::mutex> guard(lock);
         float w=touch_width,h=touch_height,px=event->tfinger.x*w,py=event->tfinger.y*h;
         int type=event->type==SDL_EVENT_FINGER_DOWN?ND_TOUCH_DOWN:event->type==SDL_EVENT_FINGER_MOTION?ND_TOUCH_MOVE:
                  event->type==SDL_EVENT_FINGER_UP?ND_TOUCH_UP:ND_TOUCH_CANCEL;
-        NdTouchResult r=nd_touch_route(&touch,type,event->tfinger.touchID,event->tfinger.fingerID,
+        NdTouchResult r=nd_pointer_touch(&pointer,type,event->tfinger.touchID,event->tfinger.fingerID,
                                      event->tfinger.x,event->tfinger.y,w,h,px>=hit_left && py>=hit_top && px<hit_right && py<hit_bottom,expanded.load());
         if(r.emit) {
             SDL_Event copy=*event;copy.tfinger.x=r.x;copy.tfinger.y=r.y;
             if(r.cancel) copy.type=SDL_EVENT_FINGER_CANCELED;
-            if(events.size()<256) events.push_back(copy);
-            else {events.clear();expanded=false;reset_input=true;nd_touch_reset(&touch);}
+            enqueue(copy);
         }
+        publish_pointer_capture();
         return r.consumed;
     }
     if((event->type==SDL_EVENT_MOUSE_MOTION && event->motion.which==SDL_TOUCH_MOUSEID) ||
        ((event->type==SDL_EVENT_MOUSE_BUTTON_DOWN || event->type==SDL_EVENT_MOUSE_BUTTON_UP) && event->button.which==SDL_TOUCH_MOUSEID)) return 1;
+    if(event->type==SDL_EVENT_MOUSE_MOTION ||
+       ((event->type==SDL_EVENT_MOUSE_BUTTON_DOWN || event->type==SDL_EVENT_MOUSE_BUTTON_UP) && event->button.button==SDL_BUTTON_LEFT)) {
+        int w=0,h=0,pw=0,ph=0;
+        bool dimensions=SDL_GetWindowSize(window,&w,&h) && SDL_GetWindowSizeInPixels(window,&pw,&ph) && w>0 && h>0 && pw>0 && ph>0;
+        float sx=w>0?(float)pw/w:1,sy=h>0?(float)ph/h:1;
+        bool motion=event->type==SDL_EVENT_MOUSE_MOTION;
+        float x=dimensions?(motion?event->motion.x:event->button.x)*sx:NAN;
+        float y=dimensions?(motion?event->motion.y:event->button.y)*sy:NAN;
+        int type=motion?ND_TOUCH_MOVE:event->type==SDL_EVENT_MOUSE_BUTTON_DOWN?ND_TOUCH_DOWN:ND_TOUCH_UP;
+        uint64_t device=motion?event->motion.which:event->button.which;
+        std::lock_guard<std::mutex> guard(lock);
+        NdTouchResult r=nd_pointer_mouse(&pointer,type,device,x,y,touch_width,touch_height,
+                                       x>=hit_left && y>=hit_top && x<hit_right && y<hit_bottom,expanded.load());
+        if(r.emit) {
+            SDL_Event copy=*event;
+            if(r.cancel) copy.type=SDL_EVENT_FINGER_CANCELED;
+            else if(motion) {copy.motion.x=r.x;copy.motion.y=r.y;}
+            else {copy.button.x=r.x;copy.button.y=r.y;}
+            enqueue(copy);
+        }
+        publish_pointer_capture();return r.consumed;
+    }
+    if(event->type==SDL_EVENT_MOUSE_REMOVED) {
+        std::lock_guard<std::mutex> guard(lock);
+        bool owned=nd_pointer_remove_mouse(&pointer,event->mdevice.which);
+        if(owned) {SDL_Event cancel={};cancel.type=SDL_EVENT_FINGER_CANCELED;enqueue(cancel);}
+        publish_pointer_capture();return owned;
+    }
+    // The UI has one left pointer. Other mouse buttons/wheels cannot change
+    // an existing touch or steal that pointer's pressed state.
+    if(event->type==SDL_EVENT_MOUSE_BUTTON_DOWN || event->type==SDL_EVENT_MOUSE_BUTTON_UP || event->type==SDL_EVENT_MOUSE_WHEEL)
+        return nd_control_captured();
     if(event->type==SDL_EVENT_GAMEPAD_BUTTON_DOWN || event->type==SDL_EVENT_GAMEPAD_BUTTON_UP) {
         bool down=event->type==SDL_EVENT_GAMEPAD_BUTTON_DOWN;
         if(event->gbutton.button<32) {
             uint32_t bit=1u<<event->gbutton.button;
             if(down) held_buttons.fetch_or(bit);
             else {held_buttons.fetch_and(~bit);suppressed_buttons.fetch_and(~bit);}
-            if(expanded.load()) suppressed_buttons.fetch_or(held_buttons.load());
+            if(nd_control_captured()) suppressed_buttons.fetch_or(held_buttons.load());
         }
     }
     if(event->type==SDL_EVENT_WINDOW_FOCUS_LOST || event->type==SDL_EVENT_GAMEPAD_REMOVED) {
-        nd_touch_reset(&touch);
+        std::lock_guard<std::mutex> guard(lock);
+        nd_pointer_reset(&pointer);pointer_active=false;
         held_buttons=0;suppressed_buttons=0;
         reset_input=true;
-        std::lock_guard<std::mutex> guard(lock); events.clear();
+        events.clear();
         return 0;
     }
-    SDL_Event copy=*event;
-    bool pointer=event->type==SDL_EVENT_MOUSE_MOTION || event->type==SDL_EVENT_MOUSE_BUTTON_DOWN || event->type==SDL_EVENT_MOUSE_BUTTON_UP;
-    bool hit=false;
-    if(pointer) {
-        int w,h,pw,ph; SDL_GetWindowSize(window,&w,&h); SDL_GetWindowSizeInPixels(window,&pw,&ph);
-        float sx=w>0 ? (float)pw/w : 1, sy=h>0 ? (float)ph/h : 1;
-        float px,py;
-        if(event->type==SDL_EVENT_MOUSE_MOTION) { copy.motion.x*=sx; copy.motion.y*=sy; px=copy.motion.x; py=copy.motion.y; }
-        else { copy.button.x*=sx; copy.button.y*=sy; px=copy.button.x; py=copy.button.y; }
-        std::lock_guard<std::mutex> guard(lock); hit=px>=hit_left && py>=hit_top && px<hit_right && py<hit_bottom;
-    }
     bool captured=nd_control_captured();
-    bool values=pointer || event->type==SDL_EVENT_KEY_DOWN || event->type==SDL_EVENT_KEY_UP ||
+    bool values=event->type==SDL_EVENT_KEY_DOWN || event->type==SDL_EVENT_KEY_UP ||
         event->type==SDL_EVENT_GAMEPAD_BUTTON_DOWN || event->type==SDL_EVENT_GAMEPAD_BUTTON_UP;
-    bool release=event->type==SDL_EVENT_KEY_UP || event->type==SDL_EVENT_GAMEPAD_BUTTON_UP || event->type==SDL_EVENT_MOUSE_BUTTON_UP;
-    if(((captured || hit) && values) || release) {
+    bool release=event->type==SDL_EVENT_KEY_UP || event->type==SDL_EVENT_GAMEPAD_BUTTON_UP;
+    if((captured && values) || release) {
         std::lock_guard<std::mutex> guard(lock);
-        if(events.size()<256) events.push_back(copy);
-        else { events.clear(); expanded=false; reset_input=true;suppressed_buttons.fetch_or(held_buttons.load()); }
+        enqueue(*event);
     }
-    return (captured || hit) && (values || event->type==SDL_EVENT_GAMEPAD_AXIS_MOTION || event->type==SDL_EVENT_MOUSE_WHEEL);
+    return captured && (values || event->type==SDL_EVENT_GAMEPAD_AXIS_MOTION);
 }
 
 void nd_control_apply_window(SDL_Window *window) {
@@ -184,15 +224,16 @@ static ImGuiKey key(const SDL_Event &event) {
 }
 
 static void drain(ImGuiIO &io) {
-    if(reset_input.exchange(false)) { io.ClearInputKeys(); io.ClearInputMouse(); }
+    bool reset;
     std::vector<SDL_Event> pending;
-    {std::lock_guard<std::mutex> guard(lock); pending.swap(events);}
+    {std::lock_guard<std::mutex> guard(lock);reset=reset_input.exchange(false);pending.swap(events);}
+    if(reset) nd_imgui_reset_input(io);
     for(const SDL_Event &event:pending) {
         if(event.type==SDL_EVENT_FINGER_DOWN || event.type==SDL_EVENT_FINGER_MOTION || event.type==SDL_EVENT_FINGER_UP) {
             io.AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
             io.AddMousePosEvent(event.tfinger.x,event.tfinger.y);
             if(event.type!=SDL_EVENT_FINGER_MOTION) io.AddMouseButtonEvent(0,event.type==SDL_EVENT_FINGER_DOWN);
-        } else if(event.type==SDL_EVENT_FINGER_CANCELED) {io.ClearInputMouse();io.AddMousePosEvent(-FLT_MAX,-FLT_MAX);}
+        } else if(event.type==SDL_EVENT_FINGER_CANCELED) nd_imgui_cancel_pointer(io);
         else if(event.type==SDL_EVENT_MOUSE_MOTION) {io.AddMouseSourceEvent(ImGuiMouseSource_Mouse);io.AddMousePosEvent(event.motion.x,event.motion.y);}
         else if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_UP) {
             io.AddMousePosEvent(event.button.x,event.button.y);
@@ -330,7 +371,6 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
             ImGui::TextWrapped("%s",label("Tap the edge handle to open. Drag the short bar below the title to move and snap.","点击边缘的设置入口展开。拖动标题下方的短条，松手后吸附至边框或角落。"));
         } else if(sidebar.page==2) nd_draw_amiibo_library("totk-native",chinese);
         else nd_draw_atmosphere("totk-native",chinese);
-        if(ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight) || ImGui::IsKeyPressed(ImGuiKey_Escape)) want_toggle=true;
     }
     ImVec2 lower,upper;
     dirty|=nd_sidebar_end(sidebar,open,&anchor,chinese,&lower,&upper);

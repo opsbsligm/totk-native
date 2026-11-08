@@ -216,7 +216,8 @@ _Noreturn void window_loop(void) {
                     }
                 }
                 if (nd_control_event(&e,window)) {
-                    if(e.type==SDL_EVENT_GAMEPAD_BUTTON_DOWN || e.type==SDL_EVENT_GAMEPAD_BUTTON_UP || e.type==SDL_EVENT_GAMEPAD_AXIS_MOTION) pad_update();
+                    // Pointer capture also changes the published gamepad state.
+                    pad_update();
                     continue;
                 }
                 switch (e.type) {
