@@ -53,6 +53,18 @@ int main(void) {
  vt=0x80372f150ull;put(0x1800,&vt,8);mem[0x196d]=0;mem[0x196e]=2;
  assert(nd_totk_menu_context(rd,0));
  mem[0x196e]=1;assert(!nd_totk_menu_context(rd,0));
+ // Advanced-world regression: UIMapScreen remains open for the minimap.
+ // Expanding the map additionally opens UIAppMenuOverlayScreen.
+ vt=ND_TOTK_WORLD_MAP_VTABLE;put(0x1000,&vt,8);
+ assert(!nd_totk_menu_context(rd,0));
+ vt=0x803722e00ull;put(0x1800,&vt,8);mem[0x196e]=2;
+ assert(nd_totk_menu_context(rd,0));
+ mem[0x196d]=255;assert(!nd_totk_menu_context(rd,0));
+ mem[0x196d]=0;mem[0x196e]=1;assert(!nd_totk_menu_context(rd,0));
+ // A real modal dialog must also override a resident minimap.
+ vt=0x80372bbe8ull;put(0x1800,&vt,8);mem[0x196e]=2;
+ assert(nd_totk_menu_context(rd,0));
+ mem[0x196e]=1;assert(!nd_totk_menu_context(rd,0));
  second=0;put(0x108,&second,8);
  count=513;put(8,&count,4);assert(!nd_totk_menu_context(rd,0));count=2;put(8,&count,4);
  uint64_t invalid=~0ull;put(0x100,&invalid,8);assert(!nd_totk_menu_context(rd,0));
