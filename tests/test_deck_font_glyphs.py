@@ -21,6 +21,44 @@ def fixture():
         out+=b'\0'*(-len(out)%4);off=len(out);out+=data;struct.pack_into('>4sIII',out,12+i*16,tag,m.checksum(data),off,len(data))
     out+=b'\0'*(-len(out)%4);head=m.tables(out)[b'head'][1];struct.pack_into('>I',out,head+8,(0xb1b0afba-m.checksum(out))&0xffffffff)
     return bytes(out)
+
+
+def decode_authored_path(test, code):
+    stack=[];at=0;x=y=0;contours=[];points=None;widths=[]
+    while at<len(code):
+        b=code[at];at+=1
+        if b==28:
+            test.assertLessEqual(at+2,len(code))
+            stack.append(int.from_bytes(code[at:at+2],'big',signed=True));at+=2
+        elif 32<=b<=246:stack.append(b-139)
+        elif 247<=b<=254:
+            test.assertLess(at,len(code));value=code[at];at+=1
+            stack.append((b-247)*256+value+108 if b<=250 else -(b-251)*256-value-108)
+        elif b==21:
+            if not contours:widths.append(stack.pop(0)+707)
+            test.assertEqual(len(stack),2);x+=stack[0];y+=stack[1];stack=[]
+            points=[(x,y)];contours.append(points)
+        elif b==5:
+            test.assertIsNotNone(points);test.assertLessEqual(len(stack),48)
+            test.assertEqual(len(stack)%2,0)
+            for dx,dy in zip(stack[::2],stack[1::2]):
+                x+=dx;y+=dy;points.append((x,y))
+            stack=[]
+        else:
+            test.assertEqual(b,14);test.assertEqual(at,len(code));test.assertFalse(stack)
+    return widths,contours
+
+
+def ink_at(contours, x, y):
+    winding=0
+    for points in contours:
+        for (ax,ay),(bx,by) in zip(points,points[1:]):
+            cross=(bx-ax)*(y-ay)-(x-ax)*(by-ay)
+            if ay<=y<by and cross>0:winding+=1
+            elif by<=y<ay and cross<0:winding-=1
+    return winding!=0
+
+
 class FontGlyphs(unittest.TestCase):
     def test_growing_index_preserves_other_glyphs_tables_and_private_addresses(self):
         original = fixture()
@@ -65,29 +103,7 @@ class FontGlyphs(unittest.TestCase):
         for label in shoulders.LABELS:
             code = shoulders.outline(label)
             self.assertNotIn(code, seen); seen.add(code)
-            stack = []; at = 0; x = y = 0; contours = []; points = None; widths = []
-            while at < len(code):
-                b = code[at]; at += 1
-                if b == 28:
-                    stack.append(int.from_bytes(code[at:at+2], 'big', signed=True)); at += 2
-                elif 32 <= b <= 246:
-                    stack.append(b - 139)
-                elif 247 <= b <= 254:
-                    value = code[at]; at += 1
-                    stack.append((b-247)*256+value+108 if b <= 250 else -(b-251)*256-value-108)
-                elif b == 21:
-                    if not contours:
-                        widths.append(stack.pop(0) + 707)
-                    self.assertEqual(len(stack), 2)
-                    x += stack[0]; y += stack[1]; stack = []
-                    points = [(x, y)]; contours.append(points)
-                elif b == 5:
-                    self.assertLessEqual(len(stack), 48); self.assertEqual(len(stack) % 2, 0)
-                    for dx, dy in zip(stack[::2], stack[1::2]):
-                        x += dx; y += dy; points.append((x, y))
-                    stack = []
-                else:
-                    self.assertEqual(b, 14); self.assertEqual(at, len(code)); self.assertFalse(stack)
+            widths,contours=decode_authored_path(self,code)
             self.assertEqual(widths, [720])
             self.assertEqual(len(contours), 4 if label[0] == 'R' else 3)
             for i, polygon in enumerate(contours):
@@ -96,6 +112,29 @@ class FontGlyphs(unittest.TestCase):
                 area = sum(a*d-b*c for (a,b),(c,d) in zip(polygon, polygon[1:]))
                 self.assertEqual(area > 0, i in (0, 3))
         with self.assertRaises(ValueError): shoulders.outline('ZR')
+
+    def test_menu_view_keep_metrics_and_distinct_unoccluded_symbols(self):
+        self.assertEqual(shoulders.SYSTEM_LABELS,{17:'Menu',18:'View'})
+        seen=set()
+        for label in ('Menu','View'):
+            code=shoulders.system_outline(label);self.assertNotIn(code,seen);seen.add(code)
+            widths,contours=decode_authored_path(self,code)
+            self.assertEqual(widths,[600]);self.assertEqual(len(contours),4)
+            self.assertEqual(tuple(min(p[k] for c in contours for p in c) for k in (0,1)),(56,56))
+            self.assertEqual(tuple(max(p[k] for c in contours for p in c) for k in (0,1)),(544,544))
+            for i,polygon in enumerate(contours):
+                self.assertEqual(polygon[0],polygon[-1])
+                area=sum(a*d-b*c for (a,b),(c,d) in zip(polygon,polygon[1:]))
+                self.assertEqual(area>0,i==0 or (label=='View' and i==3))
+            self.assertTrue(ink_at(contours,110,300));self.assertFalse(ink_at(contours,10,10))
+            clear=((300,216),(300,300),(300,384)) if label=='Menu' else (
+                (185,350),(260,405),(334,370),(275,260),(425,260),(350,314),(350,195))
+            filled=((300,258),(300,342)) if label=='Menu' else ((225,350),(350,250),(320,285))
+            for point in clear:self.assertFalse(ink_at(contours,*point),(label,point))
+            for point in filled:self.assertTrue(ink_at(contours,*point),(label,point))
+        for label in ('Plus','Minus','Home'):
+            with self.assertRaises(ValueError):shoulders.system_outline(label)
+        with self.assertRaises(ValueError):shoulders.system_outline('Menu',True)
 
     def test_exact_size_outline_metrics_checksum_and_involution(self):
         original=fixture();m.verify_checksums(original);patched=m.swap_outlines(original,8,9);m.verify_checksums(patched)
