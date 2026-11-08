@@ -31,4 +31,7 @@ static const NdMenuClass nd_menu_classes[]={
     {0x803732cc0ull,0x802c16110ull,0x803732fd0ull,0x80218d608ull,"UISystemSaveLoadScreen"},
     {0x803733000ull,0x802c1e830ull,0x803733308ull,0x80218dca8ull,"UISystemWindowScreen"},
     {0x803733a28ull,0x802c36ea8ull,0x803733d30ull,0x80218ea7cull,"UITitleScreen"},
+    /* Verified loading-tip owner, absent after the actual world takes input.
+       Append to preserve the indices of the existing version/name pins. */
+    {0x80372aa08ull,0x802cdd15eull,0x80372ad10ull,0x8021531d4ull,"UILoadingFadeScreen"},
 };

@@ -3,6 +3,16 @@ main+0x20d1c00 resolves MessageDialogScreen via ScreenMgr *(main+0x3acf960), cou
 main+0x9db390 looks up the same definition table for frontend requests; main+0x9db47c stores the created screen in that same manager array (includes title/frontend).
 main+0x87250c sets UIScreen+0x20 to its owning ScreenMgr.
 main+0x28ff680 checks signed priority at +0x16d >=0 and lifecycle state +0x16e ==2; adjacent closing predicate confirms negative priority/closing state semantics.
-menu_profile.h contains 22 explicit interactive screen types. Each name getter was verified as ADRP x0 / ADD x0 / RET to its exact type name. Local data relocations associate it with the type descriptor; the primary vtable was independently confirmed by constructor STR/STP at object offset zero for all 22 classes.
+menu_profile.h contains 23 explicit interactive screen types. Each name getter was verified as ADRP x0 / ADD x0 / RET to its exact type name. Local data relocations associate it with the type descriptor; the primary vtable was independently confirmed by constructor STR/STP at object offset zero for all 23 classes.
 Name/type-descriptor pins, bounded process_vm_readv(self), parent owner, array count/address stability and exact vtable whitelist protect interpretation.
 No game code or full decompilation is distributed in the repository. The adapter and transition policy are original MIT code. Static facts and synthetic-memory regression do not validate gameplay experience.
+
+2026-11-09 加载提示补充：
+固定原始 main SHA-256 e84a90d551fed0824b4b74933b9c6d043c458521363a7cea58b2faca1822dc9e、
+build ID 277178b7dba1b6d4949a84778d4abc58b31b34f5 的静态名称/getter/descriptor及构造函数对象首字段存储，
+独立确认 UILoadingFadeScreen 主虚表为 0x80372aa08。其 name/getter 也加入版本锚点。
+隔离实机的只读 ScreenMgr 快照确认该对象在加载页 owner 正确、priority=0、lifecycle=2；
+同一会话进入实际世界后不再出现。原实现遗漏该类型，实际两次A均不换提示、两次B均换提示。
+只将这个已核对的加载所有者加入菜单白名单，保留既有世界 HUD/小地图例外和按住跨场景抑制。
+其他名称相似的 Tips/SaveLoadIcon 类型未据名称加入；新回归同时保护关闭/退出加载后的世界规则。
+修复后的实机输入、完整当前SHA CI和安全审查仍需独立核验。

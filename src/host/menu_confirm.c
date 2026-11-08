@@ -21,7 +21,7 @@ bool nd_totk_menu_context(NdMenuRead read,void *u) {
     if(!read) return false;
     /* The package loader pins every module. Also validate local RTTI/name pins
        before interpreting this fixed 1.4.3 layout. String addresses may be odd. */
-    static const unsigned pins[]={12,15,20,21};
+    static const unsigned pins[]={12,15,20,21,22};
     for(size_t i=0;i<sizeof pins/sizeof *pins;i++) {
         const NdMenuClass *p=&nd_menu_classes[pins[i]];char name[64];uint64_t fn=0;
         size_t n=strlen(p->name)+1;

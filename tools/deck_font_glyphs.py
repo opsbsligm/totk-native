@@ -180,8 +180,8 @@ def patch_external(font):
         raise ValueError('Unsupported original 1.4.3 icon font')
     # E042 / E043 are glyphs 8 / 9 in this exact font. A/B keep menu labels;
     # deck_font_world builds a distinct world font with A/B exchanged as well.
-    from deck_font_shoulders import patch_shoulders
-    return patch_shoulders(swap_outlines(font, 8, 9))
+    from deck_font_shoulders import patch_controls
+    return patch_controls(swap_outlines(font, 8, 9))
 
 
 def pack_index(records):

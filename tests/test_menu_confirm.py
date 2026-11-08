@@ -65,6 +65,24 @@ int main(void) {
  vt=0x80372bbe8ull;put(0x1800,&vt,8);mem[0x196e]=2;
  assert(nd_totk_menu_context(rd,0));
  mem[0x196e]=1;assert(!nd_totk_menu_context(rd,0));
+ // Actual 1.4.3 loading-tip owner: A on the Deck must advance, not B.
+ // A resident world minimap remains present in this independent fixture.
+ vt=0x80372aa08ull;put(0x1800,&vt,8);mem[0x196d]=0;mem[0x196e]=2;
+ assert(nd_totk_menu_context(rd,0));
+ NdMenuConfirm loading={0};
+ assert(nd_menu_confirm(&loading,nd_totk_menu_context(rd,0),0,1,2)==0);
+ assert(nd_menu_confirm(&loading,nd_totk_menu_context(rd,0),2,1,2)==1);
+ assert(nd_menu_confirm(&loading,nd_totk_menu_context(rd,0),1,1,2)==2);
+ mem[0x196e]=1;assert(!nd_totk_menu_context(rd,0)); // closing loading owner
+ assert(nd_menu_confirm(&loading,nd_totk_menu_context(rd,0),1,1,2)==0);
+ assert(nd_menu_confirm(&loading,nd_totk_menu_context(rd,0),0,1,2)==0);
+ assert(nd_menu_confirm(&loading,nd_totk_menu_context(rd,0),2,1,2)==2);
+ mem[0x196e]=2;mem[0x196d]=255;assert(!nd_totk_menu_context(rd,0));
+ mem[0x196d]=0;mem[0x196e]=0;assert(!nd_totk_menu_context(rd,0));
+ // Similar names do not justify expanding the interactive whitelist.
+ vt=0x80372a390ull;put(0x1800,&vt,8);mem[0x196e]=2;
+ assert(!nd_totk_menu_context(rd,0));
+ vt=0x80372a6d0ull;put(0x1800,&vt,8);assert(!nd_totk_menu_context(rd,0));
  second=0;put(0x108,&second,8);
  count=513;put(8,&count,4);assert(!nd_totk_menu_context(rd,0));count=2;put(8,&count,4);
  uint64_t invalid=~0ull;put(0x100,&invalid,8);assert(!nd_totk_menu_context(rd,0));

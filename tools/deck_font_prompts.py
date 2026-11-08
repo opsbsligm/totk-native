@@ -124,7 +124,7 @@ def build(root, output):
                              original_size=len(original), patched_size=len(encoded), archive_size=len(archive),
                              patched_archive_size=len(patched)))
     (output / 'fonts.bin').write_bytes(records)
-    (output / 'recipe.json').write_text(json.dumps(dict(schema=2, recipe='deck-world-menu-shoulders-v3', files=manifest,
+    (output / 'recipe.json').write_text(json.dumps(dict(schema=2, recipe='deck-world-menu-controls-v4', files=manifest,
         allocation_growth=growth,
         converter_sha256={name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
                           for name in ('deck_font_glyphs.py', 'deck_font_shoulders.py', 'deck_font_prompts.py', 'deck_font_world.py', 'zstd_codec.py',
