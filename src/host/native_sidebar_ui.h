@@ -66,6 +66,8 @@ static inline void nd_sidebar_drag(NdSidebar &s,float k) {
     }
 }
 static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char *title,bool zh,bool *toggle) {
+    // Cancel applies to both visible panel layers; it never opens a badge.
+    if(open && (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight,false) || ImGui::IsKeyPressed(ImGuiKey_Escape,false))) *toggle=true;
     ImGuiIO &io=ImGui::GetIO();s.scale=std::clamp(io.DisplaySize.y/800.f,.75f,1.35f);
     float k=s.scale,margin=14*k;anchor=std::clamp(anchor,0,7);s.content_active=false;
     if(!open) s.layer=1;

@@ -36,7 +36,11 @@ native-unit:
     - python3 -B -m unittest discover -s "$CI_PROJECT_DIR/tests" -v
 
 native-build:
-  needs: []
+  needs:
+    - job: native-unit
+      artifacts: false
+    - job: secret_detection
+      artifacts: false
   tags: [native-games]
   image: native-games/toolchain:c0a18e93d70c048d8fee
   script:
@@ -64,7 +68,9 @@ container_scanning:
   timeout: 100 minutes
   image: ${NATIVE_SECURITY_PREFIX}/container-scanning@sha256:f30b58af2ad924c82cd709b18d6594e007b492cf9e3fe6b223ff9b4d23f539e3
   allow_failure: false
-  needs: []
+  needs:
+    - job: native-build
+      artifacts: false
   variables:
     GIT_STRATEGY: fetch
     CS_IMAGE: "archive://out/toolchain.tar"
@@ -82,6 +88,9 @@ container_scanning:
     paths: [out/container-scan.log, gl-container-scanning-report.json, gl-sbom-report.cdx.json]
 
 dependency-scanning:
+  needs:
+    - job: native-build
+      artifacts: false
   tags: [native-games-origin]
   before_script:
     - cp .gitlab/pipcompile.lock.txt pipcompile.lock.txt
@@ -107,10 +116,16 @@ dependency-coverage:
     paths: [out/dependency-coverage.json]
 
 semgrep-sast:
+  needs:
+    - job: native-build
+      artifacts: false
   image: ${NATIVE_SECURITY_PREFIX}/semgrep@sha256:bde285a2219a3397142bdf2e93d513b179a98ec8762208cc52242f0929abe552
   allow_failure: false
 
 gitlab-advanced-sast:
+  needs:
+    - job: native-build
+      artifacts: false
   image: ${NATIVE_SECURITY_PREFIX}/gitlab-advanced-sast@sha256:a4f2e8941901de686a9214ad06a781f55202b5dcdc9f2fd3274c39ba4e4491a7
   allow_failure: false
 
@@ -132,6 +147,9 @@ gitlab-advanced-sast-cpp:
   allow_failure: false
 
 gitlab-advanced-sast-ext:
+  needs:
+    - job: native-build
+      artifacts: false
   image: ${NATIVE_SECURITY_PREFIX}/gitlab-advanced-sast-ext@sha256:046eb419b1e2acb992013c649cd8932ff05dfa14f8c35335a96201f1f7522f64
   allow_failure: false
 

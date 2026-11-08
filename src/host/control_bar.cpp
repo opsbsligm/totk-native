@@ -371,7 +371,6 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
             ImGui::TextWrapped("%s",label("Tap the edge handle to open. Drag the short bar below the title to move and snap.","点击边缘的设置入口展开。拖动标题下方的短条，松手后吸附至边框或角落。"));
         } else if(sidebar.page==2) nd_draw_amiibo_library("totk-native",chinese);
         else nd_draw_atmosphere("totk-native",chinese);
-        if(ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight) || ImGui::IsKeyPressed(ImGuiKey_Escape)) want_toggle=true;
     }
     ImVec2 lower,upper;
     dirty|=nd_sidebar_end(sidebar,open,&anchor,chinese,&lower,&upper);

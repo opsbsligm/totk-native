@@ -46,6 +46,8 @@ static void route(int type,ImVec2 p) {
 static void scenario(float width,float height) {
     ImGui::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(width,height);io.DeltaTime=1.f/60;
     unsigned char *p;int w,h;io.Fonts->GetTexDataAsRGBA32(&p,&w,&h);
+    io.ConfigFlags|=ImGuiConfigFlags_NavEnableGamepad|ImGuiConfigFlags_NavEnableKeyboard;
+    io.BackendFlags|=ImGuiBackendFlags_HasGamepad;
     ImGui::GetCurrentContext()->TestEngineHookItems=true;sidebar=NdSidebar();opened=false;anchor=4;full_frames=0;
     frame();frame();assert(!opened && full_frames==0);
     assert(items.count("##edge-badge"));assert(items["##edge-badge"].GetWidth()>=44);
@@ -55,6 +57,17 @@ static void scenario(float width,float height) {
     tap("Back");assert(opened && sidebar.layer==1);
     tap("Cheats");assert(opened && sidebar.layer==2 && sidebar.page==3);
     tap("Hide");assert(!opened);
+    for(ImGuiKey cancel:{ImGuiKey_GamepadFaceRight,ImGuiKey_Escape}) {
+        tap("##edge-badge");assert(opened && sidebar.layer==1);
+        io.AddKeyEvent(cancel,true);frame();assert(!opened);
+        io.AddKeyEvent(cancel,false);frame();frame();
+        tap("##edge-badge");tap("Open full settings");assert(opened && sidebar.layer==2);
+        io.AddKeyEvent(cancel,true);frame();assert(!opened);
+        io.AddKeyEvent(cancel,false);frame();frame();
+        io.AddKeyEvent(cancel,true);frame();assert(!opened);
+        io.AddKeyEvent(cancel,false);frame();frame();
+    }
+    puts("Quick and full panel cancel returns to badge; closed badge never opens from cancel PASS");
     // Drag the collapsed badge to the opposite corner without opening it.
     assert(items.count("##edge-badge"));ImVec2 origin=items["##edge-badge"].GetCenter();
     pointer=NdPointer();route(ND_TOUCH_MOVE,origin);route(ND_TOUCH_DOWN,origin);
