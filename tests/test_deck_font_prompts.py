@@ -33,16 +33,22 @@ def archive():
 
 
 class FontArchiveTests(unittest.TestCase):
-    def test_preserves_every_byte_outside_checked_font_body(self):
+    def test_font_growth_preserves_every_unrelated_member_and_header_roundtrip(self):
         data, font = archive()
         lo, hi = m.members(data)['scft/External.bfotf']
         self.assertEqual(m.font_body(data[lo:hi])[0], font)
-        with patch.object(m, 'patch_external', side_effect=lambda value: value[::-1]):
+        expected = font[::-1] + b'new authored shoulder outlines'
+        with patch.object(m, 'patch_external', return_value=expected):
             changed = m.patch_archive(data)
-        self.assertEqual(m.font_body(changed[lo:hi])[0], font[::-1])
-        self.assertEqual(data[:lo + 8], changed[:lo + 8])
-        self.assertEqual(data[hi:], changed[hi:])
-        self.assertEqual(len(data), len(changed))
+        before, after = m.members(data), m.members(changed)
+        self.assertEqual(set(before), set(after))
+        a, b = after['scft/External.bfotf']
+        self.assertEqual(m.font_body(changed[a:b])[0], expected)
+        self.assertEqual(m.font_body(changed[a:b])[1], m.font_body(data[lo:hi])[1])
+        for name, (a, b) in before.items():
+            if name != 'scft/External.bfotf':
+                x, y = after[name]
+                self.assertEqual(data[a:b], changed[x:y])
         with self.assertRaisesRegex(ValueError, 'Unsupported original'):
             m.patch_archive(data)
 

@@ -58,7 +58,7 @@ def sarc_pack(files):
 def font_archive(original, patched):
     from deck_font_prompts import members, font_body
     before = members(original); after = members(patched)
-    if before != after:
+    if set(before) != set(after):
         raise ValueError('Unexpected initial font recipe layout')
     files = {n: patched[a:b] for n, (a, b) in after.items()}
     for name, (lo, hi) in before.items():

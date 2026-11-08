@@ -72,12 +72,13 @@ def patch_archive(archive):
     blob = archive[lo:hi]
     body, key = font_body(blob)
     patched = bytearray(patch_external(body))
+    header = struct.pack('<II', key ^ 0x18029a7f,
+                         int.from_bytes(len(patched).to_bytes(4, 'big'), 'little') ^ key)
     for at in range(0, len(patched) - len(patched) % 4, 4):
         struct.pack_into('<I', patched, at, struct.unpack_from('<I', patched, at)[0] ^ key)
-    result = archive[:lo + 8] + patched + archive[hi:]
-    if len(result) != len(archive) or result[:lo + 8] != archive[:lo + 8] or result[hi:] != archive[hi:]:
-        raise ValueError('Font replacement changed unrelated archive bytes')
-    return result
+    files = {name: archive[a:b] for name, (a, b) in entries.items()}
+    files['scft/External.bfotf'] = header + patched
+    return world.sarc_pack(files)
 
 
 def build(root, output):
@@ -123,10 +124,10 @@ def build(root, output):
                              original_size=len(original), patched_size=len(encoded), archive_size=len(archive),
                              patched_archive_size=len(patched)))
     (output / 'fonts.bin').write_bytes(records)
-    (output / 'recipe.json').write_text(json.dumps(dict(schema=2, recipe='deck-world-menu-v2', files=manifest,
+    (output / 'recipe.json').write_text(json.dumps(dict(schema=2, recipe='deck-world-menu-shoulders-v3', files=manifest,
         allocation_growth=growth,
         converter_sha256={name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
-                          for name in ('deck_font_glyphs.py', 'deck_font_prompts.py', 'deck_font_world.py', 'zstd_codec.py',
+                          for name in ('deck_font_glyphs.py', 'deck_font_shoulders.py', 'deck_font_prompts.py', 'deck_font_world.py', 'zstd_codec.py',
                                        'deck_layout/resource_layout.py', 'deck_layout/anchor_contract.py',
                                        'deck_layout/build_controller_patch.py')}), indent=2) + '\n')
 
