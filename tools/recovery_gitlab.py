@@ -18,6 +18,15 @@ from urllib.parse import urlsplit, quote
 BLOCK=1024*1024
 
 
+def payload_schema(index):
+    if not isinstance(index,dict):
+        raise ValueError('Invalid recovery payload schema')
+    version=index.get('schema')
+    if type(version) is not int or version not in (1,3) or (version==3 and index.get('kind')!='native-recovery-bundle'):
+        raise ValueError('Unsupported recovery payload schema')
+    return version
+
+
 class GitLab:
     def __init__(self,url,token_file,project):
         self.url=urlsplit(url)
@@ -89,6 +98,7 @@ def main():
         stage=Path(tempfile.mkdtemp(prefix='.download-',dir=a.bundle.parent))
         try:
             raw=api.get(prefix+'index.json',limit=1024*1024);index=json.loads(raw)
+            if not isinstance(index,dict): raise ValueError('Invalid bundle index')
             if index.get('schema')==2 and index.get('kind')=='native-recovery-set':
                 components=index.get('components',[])
                 if not 1<=len(components)<=3 or components[0].get('role')!='base':
@@ -101,7 +111,8 @@ def main():
                 (stage/'index.json').write_bytes(raw)
                 os.rename(stage,a.bundle)
                 return
-            if index.get('schema')!=1 or not 0<len(index.get('parts',[]))<=10000:
+            payload_schema(index)
+            if not 0<len(index.get('parts',[]))<=10000:
                 raise ValueError('Invalid bundle index')
             total=0
             for i,item in enumerate(index['parts']):
@@ -120,6 +131,7 @@ def main():
             if stage.exists(): shutil.rmtree(stage)
     else:
         raw=(a.bundle/'index.json').read_bytes();index=json.loads(raw)
+        payload_schema(index)
         for i,item in enumerate(index['parts']):
             if item['name']!=f'payload-{i:05d}.age.part': raise ValueError('Invalid bundle part')
             path=a.bundle/item['name']
