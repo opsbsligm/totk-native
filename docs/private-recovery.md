@@ -27,4 +27,16 @@ python3 tools/recovery_gitlab.py publish --url https://gitlab.example.com:8445 \
 
 `seal` 只读取输入。输入变化、符号链接或非普通文件会被拒绝；加密清单包含逐文件摘要。发布会回读每个分片，下载会再次核对摘要，恢复最后核对加密清单。部分备份必须通过 `--missing` 明示缺项；一键重建遇到缺项会停止，不能把不完整资源当成可玩包。
 
+新建单包使用 schema 3，执行权限与内容摘要一起写入 age 认证的加密清单。入口和程序只恢复为属主可执行的 `0700`，普通文件为 `0600`；组、其他用户及特殊权限均不保留。恢复先完成全部认证和内容校验，再设置权限并原子安装。非法权限、内外格式不一致或未知格式会拒绝安装。schema 2 继续表示由 base/fonts/romfs 组成的恢复集合。
+
+根目录的 `recovery-receipt.json` 为恢复工具保留，归档不能占用该路径，避免生成回执时覆盖已认证成员。
+
+旧 schema 1 可以继续还原文件，文件权限保持 `0600`。旧包没有记录可执行属性，不能把摘要校验通过当成运行入口已经恢复。便携运行包应使用新版工具重新封装；恢复完成后可直接验证入口：
+
+```sh
+python3 tools/recovery.py restore --bundle /mnt/my-runtime-bundle \
+  --identity /private/age-identity.txt --destination /mnt/restored-runtime
+/mnt/restored-runtime/runtime/run.sh --verify
+```
+
 完整构建输入版本名为 `20261105-totk143-complete`。恢复工具会核对所有组件和缺项；版本只有在发布完成且全部回读验证通过后才能用于重建。存档、Steam入口和图片单独保存为个人配置快照，恢复构建不会覆盖现有存档。
