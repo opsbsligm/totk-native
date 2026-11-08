@@ -9,7 +9,6 @@ Usage: gen.py <name> <nso> <base> <outdir> [--hle hle_symbols.txt] [--chunk N] [
 """
 import argparse
 import array
-import bisect
 import os
 import platform
 import re
@@ -18,14 +17,10 @@ import sys
 import time
 from collections import Counter
 
-import unicorn as uc
-from unicorn import arm64_const as A
-
 from analyze import eh_frame_functions
-from lifter import Insn, Lifter, Unsupported, bits, emit_asm_batch, hx, sext
+from lifter import Insn, Lifter, Unsupported, bits, emit_asm_batch, hx
 from nso import Nso, R_AARCH64_RELATIVE
 
-SCRATCH_MEM = 0x7300000000
 PROBE_DELTA = 0x12345674   # Module.lift: changes the page and the low bits of an address
 
 
@@ -70,7 +65,6 @@ class Module:
         self.by_word = {}        # word -> Insn, for words whose lifting does not
         self.pc_words = set()    # words known to depend on the address
         self.stats = Counter()
-        self.mu = None
 
     def in_text(self, a):
         return self.lo <= a < self.hi and a % 4 == 0
@@ -127,330 +121,15 @@ class Module:
 
     # ------------------------------------------------------------ jump tables
 
-    def emu(self):
-        if self.mu is None:
-            mu = uc.Uc(uc.UC_ARCH_ARM64, uc.UC_MODE_ARM)
-            n = self.nso
-            mu.mem_map(self.base, len(n.image))
-            mu.mem_write(self.base, bytes(n.image))
-            mu.mem_map(SCRATCH_MEM, 0x100000)
-            mu.reg_write(A.UC_ARM64_REG_CPACR_EL1, 0x300000)
-
-            # [TOTK] Loads unrelated to the table between the bounds check and the br (e.g. `ldr q29, [x8, x13]`
-            # with both registers holding the scratch address) used to fault and drop the whole table (798
-            # functions in main fell back to an all-instruction switch). Unmapped pages now read as zeros.
-            def unmapped(uc_, access, address, size, value, data):
-                page = address & ~0xFFF
-                if page >= 1 << 48:
-                    return False
-                try:
-                    uc_.mem_map(page, 0x1000)
-                except uc.UcError:
-                    return False
-                return True
-            mu.hook_add(uc.UC_HOOK_MEM_READ_UNMAPPED | uc.UC_HOOK_MEM_WRITE_UNMAPPED, unmapped)
-            self.mu = mu
-        return self.mu
-
     def jump_table(self, br_pc, entry, end):
         """Resolve `br xN` targets from a bounds-checked jump table, or None."""
-        r = self._jump_table_fallthrough(br_pc, entry, end)
-        if r is None:
-            r = self._jump_table_taken(br_pc, entry, end)
-        # [TOTK] The emulation sets the register the bounds check compares; when the load indexes the table with
-        # another register holding the same value (main 0x80209aa08: `cmp w22, #0xb` ... `ldrh w10, [x8, x28, lsl #1]`)
-        # every index gives the same target (a table read at a fixed scratch address). Such a single-target result is
-        # replaced by the entries read from the image. (Adding the scanned entries to every table instead put
-        # trailing data that looks like entries into 1619 of main's 2367 tables.)
-        if r is not None and len(set(r)) > 1:
-            return r
-        s = self._jump_table_scan(br_pc, entry, end)
-        if r is not None and s is not None:
-            self.stats['jumptables_single_target_rescanned'] += 1
-            return sorted(set(r) | set(s))
-        # A single target the image scan cannot confirm is a guess (main 0x8006eb84c: a byte table of 7 targets whose
-        # register is reused before the br, so the scan misses its adrp/add and the emulation reads one entry at the
-        # scratch address; loading a save then ran into "no function at 8006eb850", GitHub issue #18). No table: the
-        # br takes the computed-target fallback over all of the function's labels.
-        if s is None and r is not None and len(set(r)) <= 1:
-            self.stats['jumptables_single_unconfirmed'] += 1
-            return None
-        return r if r is not None else s
-
-    def _jump_table_scan(self, br_pc, entry, end):
-        """[TOTK] A table whose bounds check the compiler hoisted far from the br (main: functions with thousands of
-        cases): `adr xB, base; adrp/add xT, table; ldr{b,h,sw} wO, [xT, xI, ...]; add xD, xB, wO, {lsl,sxt*} #k; br xD`.
-        The entries are read from the image until one points outside the function or is misaligned; trailing bytes
-        that happen to look like entries only add labels (an index the table never had is never taken)."""
-        import capstone
-        if not hasattr(self, '_cs'):
-            self._cs = capstone.Cs(capstone.CS_ARCH_ARM64, capstone.CS_MODE_ARM)
-            self._cs.detail = True
-        cs = self._cs
-        window = []
-        a = br_pc
-        while a >= entry and br_pc - a <= 4 * 24:
-            window.append(a)
-            a -= 4
-        insns = {}
-        for x in window:
-            got = list(cs.disasm(struct.pack('<I', self.word(x)), x))
-            if not got:
-                return None
-            insns[x] = got[0]
-        rn = bits(self.word(br_pc), 5, 5)
-        # add xD(=rn), xB, wO, <ext|lsl> #k
-        add = load = None
-        for x in window[1:]:
-            i = insns[x]
-            if i.mnemonic == 'add' and len(i.operands) == 3 and i.reg_name(i.operands[0].reg) == f'x{rn}':
-                add = i
-                break
-            if self.lift(x).kind not in ('op', 'asm'):
-                return None
-        if add is None or add.operands[2].type != capstone.arm64.ARM64_OP_REG:
-            return None
-        base_reg = add.reg_name(add.operands[1].reg)
-        off_reg = add.reg_name(add.operands[2].reg)
-        shift = add.operands[2].shift.value if add.operands[2].shift.type else 0
-        values = {}   # register -> constant from adr / adrp+add before the add
-
-        def scan_back(reg, before):
-            for x in window:
-                if x >= before:
-                    continue
-                i = insns[x]
-                if not i.operands or i.operands[0].type != capstone.arm64.ARM64_OP_REG:
-                    continue
-                if i.reg_name(i.operands[0].reg) != reg:
-                    continue
-                return x, i
-            return None, None
-        x, i = scan_back(base_reg, add.address)
-        if i is None or i.mnemonic != 'adr':
-            return None
-        base = i.operands[1].imm
-        # the load of the offset
-        x, i = scan_back(off_reg.replace('x', 'w'), add.address)
-        if i is None:
-            x, i = scan_back(off_reg.replace('w', 'x'), add.address)
-        if i is None or i.mnemonic not in ('ldrb', 'ldrh', 'ldrsb', 'ldrsh', 'ldrsw', 'ldr'):
-            return None
-        mem = i.operands[1]
-        if mem.type != capstone.arm64.ARM64_OP_MEM or not mem.mem.index:
-            return None
-        size = {'ldrb': 1, 'ldrsb': 1, 'ldrh': 2, 'ldrsh': 2, 'ldrsw': 4, 'ldr': 4}[i.mnemonic]
-        signed = i.mnemonic.startswith('ldrs')
-        table_reg = i.reg_name(mem.mem.base)
-        # table address: adrp + add on table_reg, near the br or (hoisted out of a loop) anywhere earlier in the
-        # function: the closest earlier write of table_reg must be that add, and the write before it the adrp.
-        def writer_before(reg, before):
-            for y in range(before - 4, entry - 4, -4):
-                got = list(cs.disasm(struct.pack('<I', self.word(y)), y))
-                if not got:
-                    return None
-                j = got[0]
-                if j.operands and j.operands[0].type == capstone.arm64.ARM64_OP_REG and j.reg_name(j.operands[0].reg) == reg \
-                        and j.mnemonic not in ('str', 'stp', 'stur', 'strb', 'strh', 'cmp', 'cmn', 'tst'):
-                    return j
-            return None
-        ti = writer_before(table_reg, x)
-        if ti is None or ti.mnemonic != 'add' or len(ti.operands) != 3 or ti.operands[2].type != capstone.arm64.ARM64_OP_IMM \
-                or ti.reg_name(ti.operands[1].reg) != table_reg:
-            return None
-        pi = writer_before(table_reg, ti.address)
-        if pi is None or pi.mnemonic != 'adrp':
-            return None
-        table = pi.operands[1].imm + ti.operands[2].imm
-        lo, hi = self.base, self.base + len(self.nso.image)
-        targets = set()
-        for k in range(4096):
-            at = table + k * size
-            if at + size > hi or at < lo:
-                break
-            raw = int.from_bytes(self.nso.image[at - self.base:at - self.base + size], 'little', signed=signed)
-            t = base + (raw << shift)
-            if not (entry <= t < end) or t % 4:
-                break
-            targets.add(t)
-        if len(targets) < 2:
-            return None
-        self.stats['jumptables_scanned'] += 1
-        return sorted(targets)
-
-    def _index_regs(self, start, at, idx):
-        """The index register plus registers holding the same value in start..at: sources it was
-        copied/masked from, and copies of those (the table lookup sometimes recomputes the index
-        from another copy after the bounds check)."""
-        def copy_src(w):
-            if (w & 0x7F800000) == 0x12000000:  # AND (imm)
-                return bits(w, 5, 5)
-            if (w & 0x7FE0FFE0) == 0x2A0003E0:  # MOV (ORR with zr)
-                return bits(w, 16, 5)
-            if (w & 0x7F800000) in (0x53000000, 0x13000000):  # UBFM/SBFM (uxtb, uxth, sxtw...)
-                return bits(w, 5, 5)
-            return None
-        regs = {idx}
-        changed = True
-        while changed:
-            changed = False
-            for a in range(start, at, 4):
-                w = self.word(a)
-                rd, src = w & 31, copy_src(w)
-                if src is None or src >= 31 or rd >= 31:
-                    continue
-                for x, y in ((rd, src), (src, rd)):
-                    if x in regs and y not in regs:
-                        regs.add(y)
-                        changed = True
-        return sorted(regs)
-
-    def _set_index(self, mu, regs, i):
-        for r in regs:
-            mu.reg_write(A.UC_ARM64_REG_X0 + r if r < 29 else A.UC_ARM64_REG_X29, i)
-
-    def _emulate_table(self, br_pc, entry, end, start, idx, count, set_at):
-        """Run start..br for each index value (set at address set_at), collect targets."""
-        mu = self.emu()
-        rn = bits(self.word(br_pc), 5, 5)
-
-        def step_to(frm, to):
-            pc = frm
-            for _ in range(64):
-                if pc == to:
-                    return True
-                mu.emu_start(pc, 0, count=1)
-                pc = mu.reg_read(A.UC_ARM64_REG_PC)
-            return False
-
-        targets = []
-        try:
-            for i in range(count):
-                for r in range(29):
-                    mu.reg_write(A.UC_ARM64_REG_X0 + r, SCRATCH_MEM + 0x80000)
-                mu.reg_write(A.UC_ARM64_REG_SP, SCRATCH_MEM + 0x80000)
-                a2 = entry
-                while a2 < start:
-                    w2 = self.word(a2)
-                    if (w2 & 0x1F000000) == 0x10000000 or (w2 & 0xFF800000) == 0x91000000:
-                        mu.emu_start(a2, 0, count=1)
-                    a2 += 4
-                if set_at != start and not step_to(start, set_at):
-                    return None
-                self._set_index(mu, [idx], i)
-                if not step_to(set_at, br_pc):
-                    return None
-                t = mu.reg_read(A.UC_ARM64_REG_X0 + rn if rn < 29 else
-                                (A.UC_ARM64_REG_X29 if rn == 29 else A.UC_ARM64_REG_X30))
-                if not (entry <= t < end) or t % 4:
-                    return None
-                targets.append(t)
-        except uc.UcError:
-            return None
-        return sorted(set(targets))
-
-    def _jump_table_taken(self, br_pc, entry, end):
-        """Form: cmp idx, #N ; b.ls/b.lo table ... table: <address math> ; br"""
-        # start of the block holding the br
-        s = br_pc
-        while s - 4 >= entry and br_pc - (s - 4) <= 4 * 12 and self.lift(s - 4).kind in ('op', 'asm'):
-            s -= 4
-        for g in range(entry, end, 4):
-            w = self.word(g)
-            if (w & 0xFF000010) != 0x54000000 or bits(w, 0, 4) not in (9, 3):
-                continue
-            t = g + sext(bits(w, 5, 19), 19) * 4
-            if t != s:
-                continue
-            cw = self.word(g - 4) if g - 4 >= entry else 0
-            if (cw & 0x7F80001F) != 0x7100001F or bits(cw, 22, 1):
-                continue
-            limit = bits(cw, 10, 12)
-            count = limit + 1 if bits(w, 0, 4) == 9 else limit
-            if count <= 0 or count > 4096:
-                continue
-            return self._emulate_table(br_pc, entry, end, s, bits(cw, 5, 5), count, s)
-        return None
-
-    def _jump_table_fallthrough(self, br_pc, entry, end):
-        rn = bits(self.word(br_pc), 5, 5)
-        # find the guarding b.hi / b.hs and its cmp, scanning backwards
-        a = br_pc - 4
-        guard = cmp = None
-        while a >= entry and br_pc - a <= 4 * 16:
-            w = self.word(a)
-            if (w & 0xFF000010) == 0x54000000 and bits(w, 0, 4) in (8, 2):
-                guard = a
-                break
-            if self.lift(a).kind in ('b', 'bl', 'blr', 'br', 'ret', 'trap'):
-                return None
-            a -= 4
-        if guard is None:
-            return None
-        a = guard - 4
-        while a >= entry and guard - a <= 4 * 8:
-            w = self.word(a)
-            # SUBS (imm) with Rd = zr, i.e. CMP #imm
-            if (w & 0x7F80001F) == 0x7100001F:
-                cmp = a
-                break
-            if self.lift(a).kind != 'op':
-                return None
-            a -= 4
-        if cmp is None:
-            return None
-        w = self.word(cmp)
-        if bits(w, 22, 1):
-            return None
-        limit = bits(w, 10, 12)
-        count = limit + 1 if bits(self.word(guard), 0, 4) == 8 else limit
-        if count <= 0 or count > 4096:
-            return None
-        idx = bits(w, 5, 5)
-        # window start: back from cmp to the first control-flow instruction
-        start = cmp
-        while start - 4 >= entry and cmp - (start - 4) <= 4 * 12 and self.lift(start - 4).kind in ('op', 'asm'):
-            start -= 4
-        idx_regs = self._index_regs(start, cmp, idx)
-        mu = self.emu()
-        targets = []
-
-        def step_to(frm, to):
-            # single-step: Unicorn's `until` is unreliable mid translation-block
-            pc = frm
-            for _ in range(64):
-                if pc == to:
-                    return True
-                mu.emu_start(pc, 0, count=1)
-                pc = mu.reg_read(A.UC_ARM64_REG_PC)
-            return False
-
-        try:
-            for i in range(count):
-                for r in range(29):
-                    mu.reg_write(A.UC_ARM64_REG_X0 + r, SCRATCH_MEM + 0x80000)
-                mu.reg_write(A.UC_ARM64_REG_SP, SCRATCH_MEM + 0x80000)
-                # replay address materialization (ADRP/ADR/ADD-imm) from the function entry, so table
-                # bases computed before loops or branches are known
-                a2 = entry
-                while a2 < start:
-                    w2 = self.word(a2)
-                    if (w2 & 0x1F000000) == 0x10000000 or (w2 & 0xFF800000) == 0x91000000:
-                        mu.emu_start(a2, 0, count=1)
-                    a2 += 4
-                if not step_to(start, cmp):
-                    return None
-                self._set_index(mu, idx_regs, i)
-                if not step_to(cmp, br_pc):
-                    return None
-                t = mu.reg_read(A.UC_ARM64_REG_X0 + rn if rn < 29 else
-                                (A.UC_ARM64_REG_X29 if rn == 29 else A.UC_ARM64_REG_X30))
-                if not (entry <= t < end) or t % 4:
-                    return None
-                targets.append(t)
-        except uc.UcError:
-            return None
-        return sorted(set(targets))
+        from table_flow import resolve
+        if not hasattr(self, '_flow_tables'):
+            self._flow_tables = {}
+        key = (entry, end)
+        if key not in self._flow_tables:
+            self._flow_tables[key] = resolve(self, entry, end)
+        return self._flow_tables[key].get(br_pc)
 
     # ------------------------------------------------------------ functions
 
@@ -529,6 +208,12 @@ class Module:
         raise Unsupported(k)
 
     def emit_function(self, entry, end, labels, tables, hle):
+        """Emit certified target cases or the complete in-function dispatch fallback."""
+        from segmented import MIN_SPLIT_BYTES, emit
+        if (entry not in hle and end - entry >= MIN_SPLIT_BYTES
+                and any(value == 'all' for value in tables.values())
+                and not any(entry <= address < end for address in PATCHES)):
+            return emit(self, entry, end, tables)
         out = [f'void {fname(entry)}(Cpu *c) {{']
         if entry in hle:
             out.append(f'    {sanitize(hle[entry])}(c);')
@@ -551,10 +236,6 @@ class Module:
             refs.add(t)
             return f'__attribute__((musttail)) return {fname(t)}(c);'
 
-        # [TOTK] Only functions with an unresolved computed branch ('all') get the all-instruction fallback. LASRecomp
-        # gave it to every function with a jump table: thousands of labels made clang take hours on single functions
-        # (main_127.c: 15 880 labels, >2.5 h at -O2) and kept it from optimizing them. A resolved table's targets are
-        # complete (each index was emulated); an index outside them reaches rt_dispatch and fails loudly.
         all_labels = any(v == 'all' for v in tables.values())
         if all_labels:
             labels = set(range(entry, end, 4))

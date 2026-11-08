@@ -44,6 +44,9 @@ void host_services_register(void);  // services_*.c: IPC services the SDK opens
 void hle_bind_system_event(void *event, int autoclear);
 void hle_signal_system_event(void *event);
 int hle_try_signal_system_event(void *event);
+// Atomically update a mutually exclusive pair without creating/reviving SDK events.
+// level: 1 selects first, -1 selects second, 0 clears both.
+void hle_update_system_event_pair(void *first, void *second, int level);
 uint32_t runtime_thread_current_handle(void);
 
 // ---- loader (src/runtime/loader.c): module memory for QueryMemory / SetMemoryPermission
