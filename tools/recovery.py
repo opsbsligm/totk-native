@@ -20,6 +20,18 @@ import tempfile
 
 CHUNK = 512 * 1024 * 1024
 BLOCK = 1024 * 1024
+# Schema 2 belongs to native-recovery-set, not a single encrypted payload.
+PAYLOAD_SCHEMA = 3
+PAYLOAD_KIND = 'native-recovery-bundle'
+
+
+def payload_schema(value):
+    if not isinstance(value, dict) or type(value.get('schema')) is not int:
+        raise ValueError('Invalid recovery payload schema')
+    version = value['schema']
+    if version not in (1, PAYLOAD_SCHEMA) or (version == PAYLOAD_SCHEMA and value.get('kind') != PAYLOAD_KIND):
+        raise ValueError('Unsupported recovery payload schema')
+    return version
 
 
 def digest(path):
@@ -96,7 +108,7 @@ def seal(args):
     stage = Path(tempfile.mkdtemp(prefix='.recovery-seal-', dir=destination.parent))
     try:
         ciphertext = stage/'payload.age'
-        manifest = dict(schema=1, label=args.label, files=[], missing=args.missing,
+        manifest = dict(schema=PAYLOAD_SCHEMA, kind=PAYLOAD_KIND, label=args.label, files=[], missing=args.missing,
                         completeness='partial' if args.missing else 'provided-inputs')
         proc = subprocess.Popen([age_tool(), '-R', args.recipients, '-o', str(ciphertext)], stdin=subprocess.PIPE)
         try:
@@ -111,12 +123,14 @@ def seal(args):
                         stream.seek(0)
                         info = tarfile.TarInfo(name)
                         info.size = opened.st_size
-                        info.mode = 0o600
+                        # Preserve executable intent for the restoring owner,
+                        # never group/world access or setuid/setgid/sticky bits.
+                        info.mode = 0o700 if opened.st_mode & stat.S_IXUSR else 0o600
                         archive.addfile(info, stream)
                         after = os.fstat(stream.fileno())
                         if (after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns):
                             raise ValueError('Input changed during archiving')
-                    manifest['files'].append(dict(path=name, bytes=opened.st_size, sha256=sha))
+                    manifest['files'].append(dict(path=name, bytes=opened.st_size, sha256=sha, mode=info.mode))
                     if i % 5000 == 0:
                         print(json.dumps(dict(phase='archive', files=i+1, total=len(files))), flush=True)
                 raw = json.dumps(manifest, ensure_ascii=False).encode()
@@ -137,7 +151,7 @@ def seal(args):
                 parts.append(dict(name=name, bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest()))
                 index += 1
         ciphertext.unlink()
-        index = dict(schema=1, label=args.label, cipher='age', archive='tar.gz', parts=parts,
+        index = dict(schema=PAYLOAD_SCHEMA, kind=PAYLOAD_KIND, label=args.label, cipher='age', archive='tar.gz', parts=parts,
                      input_bytes=total, files=len(files), missing=args.missing,
                      completeness=manifest['completeness'])
         (stage/'index.json').write_text(json.dumps(index, indent=2)+'\n')
@@ -154,7 +168,8 @@ def restore(args):
     if len(raw_index) > 1024*1024:
         raise ValueError('Oversized bundle index')
     index = json.loads(raw_index)
-    if index.get('schema') != 1 or index.get('cipher') != 'age' or not index.get('parts'):
+    version = payload_schema(index)
+    if index.get('cipher') != 'age' or not index.get('parts'):
         raise ValueError('Invalid bundle index')
     parts = index['parts']
     if len(parts) > 10000:
@@ -191,6 +206,8 @@ def restore(args):
         with tarfile.open(payload, 'r|gz') as archive:
             for item in archive:
                 safe_name(item.name)
+                if item.name.casefold() == 'recovery-receipt.json':
+                    raise ValueError('Reserved recovery receipt member')
                 if not item.isfile() or item.name in seen or item.size < 0:
                     raise ValueError('Duplicate or nonregular archive member')
                 seen.add(item.name); expanded += item.size
@@ -207,17 +224,29 @@ def restore(args):
                 with path.open('xb') as output:
                     shutil.copyfileobj(stream, output, BLOCK)
                 path.chmod(0o600)
-        if not manifest or manifest.get('schema') != 1:
+        if not manifest:
             raise ValueError('Encrypted manifest missing')
+        if payload_schema(manifest) != version:
+            raise ValueError('Encrypted manifest schema differs from bundle index')
         expected = manifest['files']
         names = [item['path'] for item in expected]
         if len(names) != len(set(names)) or set(names) != seen - {'manifest.json'}:
             raise ValueError('Manifest file set mismatch')
+        permissions = []
         for item in expected:
             safe_name(item['path']); path = root/item['path']
             if path.stat().st_size != item['bytes'] or digest(path) != item['sha256']:
                 raise ValueError('Restored content does not match encrypted manifest')
+            # Old bundles have no authenticated executable metadata. Retain
+            # their conservative 0600 behavior rather than guessing from names.
+            mode = item.get('mode') if version == PAYLOAD_SCHEMA else 0o600
+            if type(mode) is not int or mode not in (0o600, 0o700):
+                raise ValueError('Invalid executable permission metadata')
+            permissions.append((path, mode))
+        for path, mode in permissions:
+            path.chmod(mode)
         (root/'recovery-receipt.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
+        (root/'recovery-receipt.json').chmod(0o600)
         os.rename(root, destination)
         print(json.dumps(dict(phase='restored', files=len(names), missing=manifest['missing'],
                              destination=str(destination))), flush=True)
