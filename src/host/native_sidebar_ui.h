@@ -19,7 +19,8 @@ static inline void nd_sidebar_style(float scale) {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(10*scale,12*scale));
     ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize,24*scale);
     ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize,24*scale);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.035f,.055f,.075f,.98f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.035f,.055f,.075f,1));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg,ImVec4(.035f,.055f,.075f,1));
     ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(0,0,0,0));
     ImGui::PushStyleColor(ImGuiCol_Border,ImVec4(.18f,.29f,.28f,1));
     ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(.91f,.95f,.93f,1));
@@ -36,7 +37,7 @@ static inline void nd_sidebar_style(float scale) {
     ImGui::PushStyleColor(ImGuiCol_Header,ImVec4(.16f,.32f,.28f,1));
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered,ImVec4(.23f,.43f,.35f,1));
 }
-static inline void nd_sidebar_unstyle() {ImGui::PopStyleColor(16);ImGui::PopStyleVar(7);}
+static inline void nd_sidebar_unstyle() {ImGui::PopStyleColor(17);ImGui::PopStyleVar(7);}
 static inline void nd_ui_status(const char *text,int status=0) {
     ImGui::TextColored(status>0?ImVec4(.55f,.91f,.69f,1):status<0?ImVec4(1,.70f,.40f,1):ImVec4(.62f,.74f,.70f,1),"%s",text);
 }
