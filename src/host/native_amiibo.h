@@ -8,7 +8,10 @@ extern "C" {
 #endif
 #define ND_NFP_NOT_FOUND 0x8073u
 #define ND_AMIIBO_MAX_FILES 64
-typedef struct { int initialized,state,loaded; char name[256],error[160]; uint64_t generation,scans,mounts,tag_reads,model_reads; int virtual_index; } NdAmiiboSnapshot;
+typedef struct { int initialized,state,loaded; char name[256],error[160]; uint64_t generation,scans,mounts,tag_reads,model_reads; int virtual_index;
+    /* Current identity only; retained across reader stop/start, never a reward receipt. */
+    int current_identity_read;
+} NdAmiiboSnapshot;
 void nd_amiibo_set_notify(void (*notify)(int activated));
 void nd_amiibo_initialize(int on);
 void nd_amiibo_snapshot(NdAmiiboSnapshot *out);

@@ -55,7 +55,7 @@ int nd_amiibo_load(const char *path) {
     pthread_mutex_lock(&mutex);
     // Do not replace a mounted tag beneath a game operation. Remove it first.
     if(state.state==4 || state.state==2) {pthread_mutex_unlock(&mutex);return fail("Remove the current tag before loading another");}
-    memcpy(tag,data,sizeof tag);state.virtual_index=-1;state.loaded=1;state.error[0]=0;state.generation++;
+    memcpy(tag,data,sizeof tag);state.virtual_index=-1;state.loaded=1;state.current_identity_read=0;state.error[0]=0;state.generation++;
     const char *name=strrchr(path,'/');snprintf(state.name,sizeof state.name,"%s",name?name+1:path);
     int activate=state.initialized && state.state==1;
     if(activate) state.state=2;
@@ -65,7 +65,7 @@ int nd_amiibo_load(const char *path) {
 }
 void nd_amiibo_remove(void) {
     pthread_mutex_lock(&mutex);int active=state.state==2 || state.state==4;
-    state.loaded=0;state.virtual_index=-1;memset(tag,0,sizeof tag);state.name[0]=0;state.state=state.initialized?3:0;state.generation++;
+    state.loaded=0;state.virtual_index=-1;state.current_identity_read=0;memset(tag,0,sizeof tag);state.name[0]=0;state.state=state.initialized?3:0;state.generation++;
     void (*fn)(int)=notification;pthread_mutex_unlock(&mutex);if(active && fn) fn(0);
 }
 unsigned nd_amiibo_start(void) {
@@ -104,7 +104,7 @@ unsigned nd_amiibo_model_info(void *out,size_t size) {
     if(!out || size<0x40) return ND_NFP_NOT_FOUND;
     pthread_mutex_lock(&mutex);unsigned result=ND_NFP_NOT_FOUND;
     if(state.loaded && state.state==4) {
-        unsigned char *p=out;memset(p,0,0x40);memcpy(p,tag+0x54,3);p[3]=tag[0x5a];p[4]=tag[0x59];p[5]=tag[0x58];p[6]=tag[0x57];state.model_reads++;result=0;
+        unsigned char *p=out;memset(p,0,0x40);memcpy(p,tag+0x54,3);p[3]=tag[0x5a];p[4]=tag[0x59];p[5]=tag[0x58];p[6]=tag[0x57];state.model_reads++;state.current_identity_read=1;result=0;
     }
     pthread_mutex_unlock(&mutex);return result;
 }
@@ -149,7 +149,7 @@ int nd_amiibo_scan_virtual(size_t index) {
     pthread_mutex_lock(&mutex);
     int remove=state.state==2 || state.state==4;
     int activate=!remove && state.initialized && state.state==1;
-    memcpy(tag,data,sizeof tag);state.loaded=1;state.virtual_index=(int)index;state.error[0]=0;
+    memcpy(tag,data,sizeof tag);state.loaded=1;state.virtual_index=(int)index;state.current_identity_read=0;state.error[0]=0;
     state.generation++;state.scans++;
     snprintf(state.name,sizeof state.name,"%s",nd_virtual_figures[index].name);
     // A mounted tag is removed once. The next StartDetection activates the new
