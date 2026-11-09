@@ -29,7 +29,7 @@ void mtl_ub_present(double iv_ms) { (void)iv_ms; }
 uint32_t mtl_present_qos(void) { return 0; }
 int mtl_link_active(void) { return 0; }
 int mtl_link_wait_tick(uint64_t timeout_ns, unsigned frame_ticks) { (void)timeout_ns; (void)frame_ticks; return 0; }
-double mtl_gpu_ms(uint64_t f) { (void)f; return 0; }
+double mtl_gpu_ms(uint64_t f) { (void)f; return -1; } // no completed per-frame GPU timing
 int mtl_gpu_span(uint64_t f, uint64_t *t0, uint64_t *t1) { (void)f; *t0 = *t1 = 0; return 0; }
 
 // ---------------- mtl_*: statistics (all zero) ----------------
