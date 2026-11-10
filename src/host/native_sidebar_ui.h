@@ -12,32 +12,33 @@ struct NdSidebar {
 };
 static const ImVec2 nd_docks[]={{0,0},{.5f,0},{1,0},{1,.5f},{1,1},{.5f,1},{0,1},{0,.5f}};
 static inline void nd_sidebar_style(float scale) {
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(18*scale,16*scale));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,16*scale);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,9*scale);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(20*scale,18*scale));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,18*scale);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,10*scale);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(12*scale,12*scale));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(10*scale,12*scale));
-    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize,24*scale);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(12*scale,14*scale));
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize,20*scale);
     ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize,24*scale);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.035f,.055f,.075f,1));
-    ImGui::PushStyleColor(ImGuiCol_PopupBg,ImVec4(.035f,.055f,.075f,1));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.045f,.075f,.10f,1));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg,ImVec4(.055f,.090f,.120f,1));
     ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(0,0,0,0));
-    ImGui::PushStyleColor(ImGuiCol_Border,ImVec4(.18f,.29f,.28f,1));
-    ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(.91f,.95f,.93f,1));
-    ImGui::PushStyleColor(ImGuiCol_TextDisabled,ImVec4(.57f,.68f,.65f,1));
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,ImVec4(.10f,.17f,.18f,1));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,ImVec4(.16f,.29f,.28f,1));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,ImVec4(.20f,.36f,.33f,1));
-    ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(.085f,.135f,.16f,1));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(.14f,.28f,.30f,1));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(.18f,.38f,.37f,1));
-    ImGui::PushStyleColor(ImGuiCol_CheckMark,ImVec4(.49f,.88f,.67f,1));
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab,ImVec4(.39f,.75f,.58f,1));
-    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive,ImVec4(.59f,.93f,.72f,1));
-    ImGui::PushStyleColor(ImGuiCol_Header,ImVec4(.16f,.32f,.28f,1));
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered,ImVec4(.23f,.43f,.35f,1));
+    ImGui::PushStyleColor(ImGuiCol_Border,ImVec4(.22f,.45f,.42f,.6f));
+    ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(.95f,.97f,.96f,1));
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled,ImVec4(.55f,.72f,.72f,1));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,ImVec4(.09f,.15f,.19f,1));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,ImVec4(.14f,.24f,.30f,1));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,ImVec4(.18f,.32f,.38f,1));
+    ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(.10f,.16f,.21f,1));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(.16f,.27f,.34f,1));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(.22f,.40f,.48f,1));
+    ImGui::PushStyleColor(ImGuiCol_CheckMark,ImVec4(.50f,.95f,.72f,1));
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab,ImVec4(.40f,.82f,.62f,1));
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive,ImVec4(.60f,.96f,.74f,1));
+    ImGui::PushStyleColor(ImGuiCol_Header,ImVec4(.18f,.36f,.40f,1));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered,ImVec4(.25f,.48f,.53f,1));
+    ImGui::PushStyleColor(ImGuiCol_Separator,ImVec4(.22f,.42f,.40f,.5f));
 }
-static inline void nd_sidebar_unstyle() {ImGui::PopStyleColor(17);ImGui::PopStyleVar(7);}
+static inline void nd_sidebar_unstyle() {ImGui::PopStyleColor(18);ImGui::PopStyleVar(7);}
 static inline void nd_ui_status(const char *text,int status=0) {
     ImGui::TextColored(status>0?ImVec4(.55f,.91f,.69f,1):status<0?ImVec4(1,.70f,.40f,1):ImVec4(.62f,.74f,.70f,1),"%s",text);
 }
@@ -59,7 +60,8 @@ static inline bool nd_ui_choice(const char *id,int *selected,const char *const n
 static inline void nd_sidebar_drag(NdSidebar &s,float k) {
     ImVec2 at=ImGui::GetCursorScreenPos();float width=ImGui::GetContentRegionAvail().x;
     ImGui::InvisibleButton("##dock-drag",ImVec2(width,std::max(44.f,36*k)));
-    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(at.x+width*.38f,at.y+12*k),ImVec2(at.x+width*.62f,at.y+16*k),IM_COL32(103,151,151,220),2*k);
+    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(at.x+width*.36f,at.y+12*k),ImVec2(at.x+width*.64f,at.y+17*k),
+        ImGui::IsItemHovered()?IM_COL32(120,220,190,235):IM_COL32(96,170,155,190),3*k);
     if(ImGui::IsItemActivated()) {s.start=s.position;s.dragged=false;}
     if(ImGui::IsItemActive() && ImGui::IsMouseDragging(0,8*k)) {
         s.dragging=s.dragged=true;ImVec2 d=ImGui::GetMouseDragDelta();s.position=ImVec2(s.start.x+d.x,s.start.y+d.y);
@@ -84,6 +86,10 @@ static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char
     ImGui::SetNextWindowPos(s.position,ImGuiCond_Always);ImGui::SetNextWindowSize(size,ImGuiCond_Always);
     ImGui::Begin("##native-touch-sidebar",nullptr,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|
                  ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoScrollbar);
+    if(open) {
+        ImDrawList *frame=ImGui::GetWindowDrawList();ImVec2 wp=ImGui::GetWindowPos();
+        frame->AddRect(wp,ImVec2(wp.x+size.x,wp.y+size.y),ImGui::GetColorU32(ImGuiCol_Border),18*k,0,1.2f*k);
+    }
     if(!open) {
         ImGui::SetCursorPos(ImVec2(0,0));
         bool clicked=ImGui::InvisibleButton("##edge-badge",size);
@@ -93,12 +99,18 @@ static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char
         }
         if(clicked && !s.dragged) *toggle=true;
         ImDrawList *draw=ImGui::GetWindowDrawList();ImVec2 c=ImGui::GetWindowPos();c.x+=size.x*.5f;c.y+=size.y*.5f;
-        ImU32 ink=ImGui::IsItemHovered()?IM_COL32(137,232,211,255):IM_COL32(201,225,223,255);
+        bool hot=ImGui::IsItemHovered();
+        draw->AddRectFilled(ImVec2(c.x-22*k,c.y-22*k),ImVec2(c.x+22*k,c.y+22*k),
+            hot?IM_COL32(24,48,56,235):IM_COL32(12,26,33,215),12*k);
+        draw->AddRect(ImVec2(c.x-22*k,c.y-22*k),ImVec2(c.x+22*k,c.y+22*k),
+            hot?IM_COL32(120,220,190,255):IM_COL32(90,180,155,200),12*k,0,1.4f*k);
+        ImU32 ink=hot?IM_COL32(151,235,211,255):IM_COL32(210,229,225,255);
         for(int i=0;i<8;i++) {
-            float a=i*3.14159265f*.25f;ImVec2 x(c.x+std::cos(a)*15*k,c.y+std::sin(a)*15*k),y(c.x+std::cos(a)*19*k,c.y+std::sin(a)*19*k);
-            draw->AddLine(x,y,ink,4*k);
+            if(i%2) continue;
+            float a=i*3.14159265f*.25f;ImVec2 x(c.x+std::cos(a)*13*k,c.y+std::sin(a)*13*k),y(c.x+std::cos(a)*17*k,c.y+std::sin(a)*17*k);
+            draw->AddLine(x,y,ink,3.4f*k);
         }
-        draw->AddCircle(c,12*k,ink,24,3*k);draw->AddCircle(c,4*k,ink,16,2*k);
+        draw->AddCircle(c,10*k,ink,24,2.6f*k);draw->AddCircleFilled(c,3.4f*k,ink,16);
         return false;
     }
     if(layer==2) {
@@ -107,7 +119,10 @@ static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char
     } else ImGui::TextDisabled("%s",zh?"快捷面板":"QUICK PANEL");
     ImGui::SameLine(ImGui::GetWindowWidth()-76*k);
     if(ImGui::Button(zh?"收起":"Hide",ImVec2(56*k,std::max(44.f,44*k)))) *toggle=true;
-    ImGui::TextUnformatted(title);nd_sidebar_drag(s,k);
+    {ImVec2 tl=ImGui::GetCursorScreenPos();ImDrawList *td=ImGui::GetWindowDrawList();
+     td->AddRectFilled(ImVec2(tl.x,tl.y+4*k),ImVec2(tl.x+4*k,tl.y+std::max(18.f,24*k)),IM_COL32(120,220,190,255),2*k);
+     ImGui::Indent(10*k);}
+    ImGui::TextUnformatted(title);ImGui::Unindent(10*k);nd_sidebar_drag(s,k);
     const char *tabs_en[]={"Display","Controls","Amiibo","Cheats"},*tabs_zh[]={"画面","控制","Amiibo","金手指"};
     if(layer==1) {
         float width=(ImGui::GetContentRegionAvail().x-ImGui::GetStyle().ItemSpacing.x)*.5f;
@@ -125,7 +140,7 @@ static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char
     float gap=ImGui::GetStyle().ItemSpacing.x,w=(ImGui::GetContentRegionAvail().x-3*gap)/4;
     for(int i=0;i<4;i++) {
         if(i) ImGui::SameLine();ImGui::PushID(i);bool selected=i==s.page;
-        if(selected) ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(.16f,.37f,.35f,1));
+        if(selected) ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(.20f,.44f,.48f,1));
         if(ImGui::Button(zh?tabs_zh[i]:tabs_en[i],ImVec2(w,std::max(44.f,46*k)))) s.page=i;
         if(selected) ImGui::PopStyleColor();ImGui::PopID();
     }
