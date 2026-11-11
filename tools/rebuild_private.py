@@ -59,6 +59,11 @@ def main():
         receipt=json.loads((work/'restored/recovery-receipt.json').read_text())
         if receipt['missing']:
             raise SystemExit('Recovery authenticated and restored; build blocked by recorded missing inputs: '+', '.join(receipt['missing']))
+        if (work/'restored/run.sh').is_file() and not (work/'restored/dump').is_dir():
+            # Portable runtime package: already built; verify and use in place.
+            subprocess.run([str(work/'restored/run.sh'),'--verify'],check=True)
+            print(str(work/'restored/run.sh'))
+            return
     dump=work/'restored/dump'
     run(ROOT/'build.py','doctor','--dump',dump,'--work',work/'build')
     run(ROOT/'build.py','build','--dump',dump,'--work',work/'build','--jobs',a.jobs)
