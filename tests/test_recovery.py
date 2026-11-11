@@ -151,3 +151,37 @@ class Recovery(unittest.TestCase):
             (root/'index.json').write_text(json.dumps(index))
             with self.assertRaisesRegex(ValueError,'sequence'):
                 recovery.restore(SimpleNamespace(bundle=str(root),identity='unused',destination=str(root/'out'),max_bytes=1024))
+
+
+class RebuildPrivatePortableRuntime(unittest.TestCase):
+    def test_portable_runtime_package_verifies_in_place_without_rebuild(self):
+        import types
+        spec = importlib.util.spec_from_file_location('rebuild_private', ROOT/'tools/rebuild_private.py')
+        rp = importlib.util.module_from_spec(spec); spec.loader.exec_module(rp)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp).resolve(); work = tmp/'work'
+            calls = []
+            def fake_run(*args, **kw):
+                calls.append(args)
+                joined = ' '.join(map(str, args))
+                if 'fetch' in joined:
+                    encrypted = work/'encrypted'; encrypted.mkdir(parents=True)
+                    (encrypted/'index.json').write_text(json.dumps(dict(schema=3, kind='native-recovery-bundle', parts=[])))
+                if 'restore' in joined and 'run.sh' not in joined:
+                    restored = work/'restored'; restored.mkdir(parents=True, exist_ok=True)
+                    (restored/'run.sh').write_text('#!/bin/sh\nexit 0\n')
+                    (restored/'recovery-receipt.json').write_text(json.dumps(dict(missing=[])))
+                return types.SimpleNamespace(returncode=0)
+            fake_subprocess = types.SimpleNamespace(run=fake_run)
+            fake_shutil = types.SimpleNamespace(disk_usage=lambda p: types.SimpleNamespace(free=200*1024**3))
+            with patch.object(rp, 'subprocess', fake_subprocess), patch.object(rp, 'shutil', fake_shutil), \
+                 patch.object(rp.sys, 'argv', ['rebuild_private.py', '--version', 'v',
+                                                '--token-file', str(tmp/'tok'),
+                                                '--identity', str(tmp/'ident'),
+                                                '--work', str(work), '--jobs', '1']):
+                rp.main()
+            self.assertEqual(len(calls), 3)
+            self.assertIn('fetch', ' '.join(map(str, calls[0])))
+            self.assertIn('restore', ' '.join(map(str, calls[1])))
+            self.assertEqual(calls[2][0], [str(work/'restored/run.sh'), '--verify'])
+            self.assertFalse((work/'build').exists())
