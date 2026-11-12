@@ -40,7 +40,7 @@ static std::atomic<bool> expanded{false};
 // Owned only by SDL's event thread; publish capture to the game thread.
 static NdPointer pointer={};
 static std::atomic<bool> pointer_active{false};
-static std::atomic<int> fps{-1}, request_w{0}, request_h{0}, perf_mode{0};
+static std::atomic<int> fps{-1}, request_w{0}, request_h{0}, perf_mode{0}, aniso_setting{0};
 static std::atomic<uint32_t> held_buttons{0}, suppressed_buttons{0};
 static std::atomic<bool> reset_input{false};
 static float hit_left, hit_top, hit_right, hit_bottom, touch_width, touch_height;
@@ -136,7 +136,7 @@ static void fonts(ImGuiIO &io) {
             static ImVector<ImWchar> ranges;ImFontGlyphRangesBuilder builder;
             builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
             builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
-            builder.AddText("画面功能说明高级数据补丁画面扩展控制重新加载匹配的金手指文件与支持范围权限只数据堆内存默认全部关闭后停止写入已经改变可能保留刷新本地标签库已读取检测到等待扫描器空闲移开文件选择将自有的放入此目录然后与支持范围身份应用区存档写画面上采样双线性锐化扩展设置收起王国之泪确认返回帧率上限输出尺寸原生陀螺仪重新居中抗锯齿使用游戏默认目前不可用生成金手指未导入匹配版本的预设停靠左上右下边菜单触屏拖动选择位置保存数据已改变拒绝写入打开：性能浮层关闭帧率完整均值峰值内存（实验）仅整机；暂无计数器。");
+            builder.AddText("画面功能说明高级数据补丁画面扩展控制重新加载匹配的金手指文件与支持范围权限只数据堆内存默认全部关闭后停止写入已经改变可能保留刷新本地标签库已读取检测到等待扫描器空闲移开文件选择将自有的放入此目录然后与支持范围身份应用区存档写画面上采样双线性锐化扩展设置收起王国之泪确认返回帧率上限输出尺寸原生陀螺仪重新居中抗锯齿使用游戏默认目前不可用生成金手指未导入匹配版本的预设停靠左上右下边菜单触屏拖动选择位置保存数据已改变拒绝写入打开：性能浮层关闭帧率完整均值峰值内存（实验）仅整机；暂无计数器。各向异性过滤（游戏默认）");
             builder.AddText(nd_ui_zh_glyphs);
             for(const auto &figure:nd_virtual_figures) builder.AddText(figure.zh);
             builder.BuildRanges(&ranges);ImFontConfig config;config.MergeMode=true;
@@ -148,6 +148,7 @@ static void fonts(ImGuiIO &io) {
 int nd_control_captured(void) { return expanded.load() || pointer_active.load(); }
 uint32_t nd_control_suppressed_pad_buttons(void) {return suppressed_buttons.load();}
 int nd_control_fps_limit(void) { return fps.load(); }
+int nd_control_aniso_setting(void) { return aniso_setting.load(); }
 static void toggle() {
     expanded=!expanded.load();
     suppressed_buttons.fetch_or(held_buttons.load());
@@ -309,9 +310,9 @@ static void preferences(bool save) {
     if(n<0 || (size_t)n>=sizeof path) return;
     if(!save) {
         int a,rate,enabled,up,sharp;
-        int perf=0;
-        if(nd_control_preferences_read_extended(path,&a,&rate,&enabled,&up,&sharp,&perf)) {
-            anchor=a; fps=rate; gyro=enabled!=0;nd_fsr_configure(up,sharp); perf_mode=perf;
+        int perf=0,an=0;
+        if(nd_control_preferences_read_extended(path,&a,&rate,&enabled,&up,&sharp,&perf,&an)) {
+            anchor=a; fps=rate; gyro=enabled!=0;nd_fsr_configure(up,sharp); perf_mode=perf; aniso_setting=an;
             runtime_hid_feedback_flag("gyro",gyro);
         }
         return;
@@ -320,7 +321,7 @@ static void preferences(bool save) {
     if(n<0 || (size_t)n>=sizeof temp) return;
     int fd=mkstemp(temp); if(fd<0) return;
     FILE *f=fdopen(fd,"w"); if(!f) {close(fd);unlink(temp);return;}
-    bool ok=fprintf(f,"anchor=%d\nfps=%d\ngyro=%d\nupscaler=%d\nsharpness=%d\nperf=%d\n",anchor,fps.load(),gyro,nd_fsr_enabled(),nd_fsr_sharpness(),perf_mode.load())>0;
+    bool ok=fprintf(f,"anchor=%d\nfps=%d\ngyro=%d\nupscaler=%d\nsharpness=%d\nperf=%d\naniso=%d\n",anchor,fps.load(),gyro,nd_fsr_enabled(),nd_fsr_sharpness(),perf_mode.load(),aniso_setting.load())>0;
     if(fflush(f) || fsync(fd)) ok=false;
     if(fclose(f)) ok=false;
     if(!ok || rename(temp,path)) unlink(temp);
@@ -412,6 +413,12 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
                 nd_ui_status(status>0?label("FSR backend ready","FSR 后端已就绪"):status<0?label("FSR failed; bilinear fallback","FSR 不可用，已回退双线性"):label("Awaiting presentation frame","等待呈现帧应用"),status);
             }
             ImGui::TextWrapped("%s",label("FSR scales the presented image. It does not change game rendering resolution.","FSR 缩放最终画面，不改变游戏内部渲染分辨率。"));
+            nd_ui_label(label("Anisotropic filtering","各向异性过滤"));
+            {
+                static const char *aniso_names[]={label("Off (game default)","关闭（游戏默认）"),"2x","4x","8x","16x"};
+                int an=aniso_setting.load();
+                if(nd_ui_choice("##aniso",&an,aniso_names,5)) {aniso_setting=an;dirty=true;}
+            }
             if(ImGui::TreeNode(label("Window size / capabilities","窗口尺寸与能力说明"))) {
                 nd_ui_label(label("Window size (windowed mode)","窗口尺寸（窗口模式）"));
                 const char *sizes[]={"960 x 540","1280 x 720","1280 x 800","1920 x 1080"};

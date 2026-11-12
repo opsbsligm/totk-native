@@ -339,6 +339,19 @@ void mtl_reg_samp(int id, const samp_par *p) {
     if (old) { mtl_finish(); vk.vkDestroySampler(vkc.device, old, NULL); }   // [temporary] waits for the GPU
 }
 void mtl_set_tex_pool_n(int n) { (void)n; }
+// Anisotropic filtering, set by the host (control bar video page): the factor to apply to
+// mipmap-filtered, non-comparison samplers (0 keeps the game's own max anisotropy, the
+// console's look). The limit is read from the device on first use.
+extern int nd_control_aniso_setting(void);
+extern int nd_aniso_max(void);
+static int aniso_factor(void) {
+    static int limit = -1;
+    int st = nd_control_aniso_setting();
+    if (st <= 0) return 0;
+    if (limit < 0) limit = nd_aniso_max();
+    int f = 1 << st;
+    return limit > 0 ? (f < limit ? f : limit) : f;
+}
 
 static VkSamplerAddressMode wrap(uint8_t w) {
     switch (w) {
@@ -384,7 +397,13 @@ static VkSampler sampler(int id) {
         .minFilter = p->minf == 1 || p->minf == 3 || p->minf == 5 ? VK_FILTER_LINEAR : VK_FILTER_NEAREST,
         .mipmapMode = p->minf == 4 || p->minf == 5 ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST,
         .addressModeU = wrap(p->ws), .addressModeV = wrap(p->wt), .addressModeW = wrap(p->wr),
-        .mipLodBias = p->lod_bias, .anisotropyEnable = p->aniso > 1.0f, .maxAnisotropy = p->aniso > 16.0f ? 16.0f : p->aniso,
+        .mipLodBias = p->lod_bias, .anisotropyEnable = p->aniso > 1.0f, .maxAnisotropy = p->aniso > 16.0f ? 16.0f : p->aniso};
+    {   // control-bar override (setting > 0) on the samplers it is safe for: linear mag,
+        // mipmap filtering, a real mip range, no depth compare (shadow maps); otherwise the
+        // game's own anisotropy is kept as-is
+        int f = aniso_factor();
+        if (f > 1 && !ci.compareEnable && p->magf == 1 && (p->minf == 3 || p->minf == 5) &&
+            p->lod_max - p->lod_min >= 0.5f) { ci.anisotropyEnable = VK_TRUE; ci.maxAnisotropy = f; } }
         .compareEnable = p->cmp_mode == 1, .compareOp = (VkCompareOp)(p->cmp_func ? p->cmp_func - 1 : 7),
         .minLod = p->lod_min, .maxLod = mip ? p->lod_max : 0.25f,   // no mipmap filter: the base level only (GL)
         .borderColor = border};
