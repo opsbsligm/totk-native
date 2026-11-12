@@ -444,7 +444,7 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
         int pm=perf_mode.load();
         if(pm && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)==false) {
             ImGui::SetNextWindowPos(ImVec2(24,24),ImGuiCond_Always);
-            ImGuiWindowFlags of=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoFocusOnPopup;
+            ImGuiWindowFlags of=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoNav;
             ImGui::SetNextWindowBgAlpha(0.72f);
             if(ImGui::Begin("##perf-overlay",nullptr,of)) {
                 char line[96];
