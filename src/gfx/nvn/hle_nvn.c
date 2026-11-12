@@ -2850,7 +2850,7 @@ extern int nd_control_fps_limit(void) __attribute__((weak));
 static uint64_t present_period(const win_t *o) {
     if(nd_control_fps_limit && uncapped_now() && !dm_detclock_enabled()) {
         int cap=nd_control_fps_limit();
-        if(cap>=30 && cap<=120) return 1000000000ull/(unsigned)cap;
+        if(cap>=30 && cap<=144) return 1000000000ull/(unsigned)cap;
     }
     unsigned itv = present_ticks(o); int m = mfx_enabled(), hz = g_uncapped && !uncapped_now() ? g_paced_hz : g_hz;
     { static int was = -1; if (was >= 0 && m != was)
