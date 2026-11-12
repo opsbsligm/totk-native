@@ -16,6 +16,7 @@
 #include <SDL3/SDL_vulkan.h>
 #include <atomic>
 #include <mutex>
+#include <pthread.h>
 #include <vector>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +24,9 @@
 #include <algorithm>
 #include <unistd.h>
 #include <sys/stat.h>
+#ifdef __linux__
+#include <sys/sysinfo.h>
+#endif
 extern "C" {
 #include "../vk/vk.h"
 void runtime_input_clear(void);
@@ -36,7 +40,7 @@ static std::atomic<bool> expanded{false};
 // Owned only by SDL's event thread; publish capture to the game thread.
 static NdPointer pointer={};
 static std::atomic<bool> pointer_active{false};
-static std::atomic<int> fps{-1}, request_w{0}, request_h{0};
+static std::atomic<int> fps{-1}, request_w{0}, request_h{0}, perf_mode{0};
 static std::atomic<uint32_t> held_buttons{0}, suppressed_buttons{0};
 static std::atomic<bool> reset_input{false};
 static float hit_left, hit_top, hit_right, hit_bottom, touch_width, touch_height;
@@ -46,6 +50,52 @@ static ImGuiContext *context;
 static VkDescriptorPool descriptors;
 static VkFormat backend_format;
 static bool backend_ready;
+
+// Performance numbers for the overlay (Off / FPS / Full): frame times of the presented
+// frames, plus the whole machine's CPU load and memory. A value the platform doesn't
+// give stays negative. Refreshed once a second while the overlay is up.
+static std::mutex perf_lock;
+static uint64_t perf_frame_count=0;
+static double perf_ms_max=0;
+static double perf_last=0, perf_window=0, perf_window_ms=0;
+static float perf_fps=0, perf_avg_ms=0, perf_max_ms=0, perf_cpu=0, perf_ram=0;
+static double perf_last_scan=0;
+static void perf_scan() {
+    double cpu=0, ram=0;
+#ifdef __linux__
+    static long long last_cpu=0, last_total=0;
+    FILE *f=fopen("/proc/stat","r");
+    if(f) {
+        unsigned long long user,nice,system,idle,iowait,irq,softirq,steal;
+        int n=fscanf(f,"cpu %llu %llu %llu %llu %llu %llu %llu %llu",&user,&nice,&system,&idle,&iowait,&irq,&softirq,&steal);
+        fclose(f);
+        if(n==8) {
+            unsigned long long idle_all=idle+iowait, total=user+nice+system+idle_all+irq+softirq+steal;
+            if(last_total && total>last_total) {
+                cpu=100.0-100.0*(double)(idle_all-last_cpu)/(double)(total-last_total);
+            }
+            last_cpu=idle_all;last_total=total;
+        }
+    }
+    struct sysinfo si;
+    if(sysinfo(&si)==0 && si.totalram>0) ram=100.0*(double)(si.totalram-si.freeram)/(double)si.totalram;
+#endif
+    perf_cpu=cpu;perf_ram=ram;
+}
+static void perf_present(double ms) {
+    std::lock_guard<std::mutex> guard(perf_lock);
+    ++perf_frame_count;perf_window_ms+=ms;if(ms>perf_ms_max) perf_ms_max=ms;
+    double now=SDL_GetTicksNS()*1e-9;
+    if(!perf_last) {perf_last=now;perf_window=now;perf_window_ms=0;perf_ms_max=0;perf_last_scan=0;return;}
+    if(now-perf_window>=1.0) {
+        perf_fps=(float)(perf_frame_count/(now-perf_window));
+        perf_avg_ms=(float)(perf_window_ms/(now-perf_window));
+        perf_max_ms=(float)perf_ms_max;
+        perf_window=now;perf_window_ms=0;perf_frame_count=0;perf_ms_max=0;
+        if(now-perf_last_scan>=1.0) {perf_last_scan=now;perf_scan();}
+    }
+    perf_last=now;
+}
 
 static bool chinese, scalable_font;
 
@@ -86,7 +136,7 @@ static void fonts(ImGuiIO &io) {
             static ImVector<ImWchar> ranges;ImFontGlyphRangesBuilder builder;
             builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
             builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
-            builder.AddText("画面功能说明高级数据补丁画面扩展控制重新加载匹配的金手指文件与支持范围权限只数据堆内存默认全部关闭后停止写入已经改变可能保留刷新本地标签库已读取检测到等待扫描器空闲移开文件选择将自有的放入此目录然后与支持范围身份应用区存档写画面上采样双线性锐化扩展设置收起王国之泪确认返回帧率上限输出尺寸原生陀螺仪重新居中抗锯齿使用游戏默认目前不可用生成金手指未导入匹配版本的预设停靠左上右下边菜单触屏拖动选择位置保存数据已改变拒绝写入打开：");
+            builder.AddText("画面功能说明高级数据补丁画面扩展控制重新加载匹配的金手指文件与支持范围权限只数据堆内存默认全部关闭后停止写入已经改变可能保留刷新本地标签库已读取检测到等待扫描器空闲移开文件选择将自有的放入此目录然后与支持范围身份应用区存档写画面上采样双线性锐化扩展设置收起王国之泪确认返回帧率上限输出尺寸原生陀螺仪重新居中抗锯齿使用游戏默认目前不可用生成金手指未导入匹配版本的预设停靠左上右下边菜单触屏拖动选择位置保存数据已改变拒绝写入打开：性能浮层关闭帧率完整均值峰值内存（实验）仅整机；暂无计数器。");
             builder.AddText(nd_ui_zh_glyphs);
             for(const auto &figure:nd_virtual_figures) builder.AddText(figure.zh);
             builder.BuildRanges(&ranges);ImFontConfig config;config.MergeMode=true;
@@ -259,8 +309,10 @@ static void preferences(bool save) {
     if(n<0 || (size_t)n>=sizeof path) return;
     if(!save) {
         int a,rate,enabled,up,sharp;
-        if(nd_control_preferences_read_extended(path,&a,&rate,&enabled,&up,&sharp)) {
-            anchor=a; fps=rate; gyro=enabled!=0;nd_fsr_configure(up,sharp); runtime_hid_feedback_flag("gyro",gyro);
+        int perf=0;
+        if(nd_control_preferences_read_extended(path,&a,&rate,&enabled,&up,&sharp,&perf)) {
+            anchor=a; fps=rate; gyro=enabled!=0;nd_fsr_configure(up,sharp); perf_mode=perf;
+            runtime_hid_feedback_flag("gyro",gyro);
         }
         return;
     }
@@ -268,7 +320,7 @@ static void preferences(bool save) {
     if(n<0 || (size_t)n>=sizeof temp) return;
     int fd=mkstemp(temp); if(fd<0) return;
     FILE *f=fdopen(fd,"w"); if(!f) {close(fd);unlink(temp);return;}
-    bool ok=fprintf(f,"anchor=%d\nfps=%d\ngyro=%d\nupscaler=%d\nsharpness=%d\n",anchor,fps.load(),gyro,nd_fsr_enabled(),nd_fsr_sharpness())>0;
+    bool ok=fprintf(f,"anchor=%d\nfps=%d\ngyro=%d\nupscaler=%d\nsharpness=%d\nperf=%d\n",anchor,fps.load(),gyro,nd_fsr_enabled(),nd_fsr_sharpness(),perf_mode.load())>0;
     if(fflush(f) || fsync(fd)) ok=false;
     if(fclose(f)) ok=false;
     if(!ok || rename(temp,path)) unlink(temp);
@@ -337,10 +389,18 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
             nd_ui_status(label("Live presentation settings","即时画面设置"));
             ImGui::Text(label("Current output: %u x %u","当前输出：%u × %u"),width,height);
             nd_ui_label(label("Frame cap","帧率上限"));
-            static const char *rates[]={"30","40","45","60","90","120"};
-            static const int values[]={30,40,45,60,90,120};int selected=3;
-            for(int i=0;i<6;++i) if(fps.load()==values[i]) selected=i;
-            if(nd_ui_choice("##frame-cap",&selected,rates,6)) {fps=values[selected];dirty=true;}
+            static const char *rates[]={"30","40","45","60","90","120",label("144 (experimental)","144（实验）")};
+            static const int values[]={30,40,45,60,90,120,144};int selected=3;
+            for(int i=0;i<7;++i) if(fps.load()==values[i]) selected=i;
+            if(nd_ui_choice("##frame-cap",&selected,rates,7)) {fps=values[selected];dirty=true;}
+            nd_ui_label(label("Performance overlay","性能浮层"));
+            {
+                static const char *modes[]={label("Off","关闭"),label("FPS","帧率"),label("Full","完整")};
+                int pm=perf_mode.load();
+                if(nd_ui_choice("##perf-overlay",&pm,modes,3)) {perf_mode=pm;dirty=true;}
+                if(pm==2)
+                    ImGui::TextWrapped("%s",label("Machine CPU and memory only; GPU counters are unavailable on the Deck.","仅整机 CPU 与内存；Deck 暂无 GPU 计数器。"));
+            }
             nd_ui_label(label("Presentation upscaling","画面上采样"));
             int up=nd_fsr_enabled();const char *methods[]={label("Bilinear","双线性"),"AMD FSR 1"};
             if(nd_ui_choice("##upscaler",&up,methods,2)) {nd_fsr_configure(up,nd_fsr_sharpness());dirty=true;}
@@ -377,6 +437,27 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
     {std::lock_guard<std::mutex> guard(lock);hit_left=lower.x;hit_top=lower.y;hit_right=upper.x;hit_bottom=upper.y;}
     if(want_toggle) {toggle();dirty=true;}
     if(dirty) preferences(true);
+    {   // one presented frame per draw: frame times now feed the performance numbers
+        static uint64_t last_perf;uint64_t now_perf=SDL_GetTicksNS();
+        if(last_perf) perf_present((double)(now_perf-last_perf)*1e-6);
+        last_perf=now_perf;
+        int pm=perf_mode.load();
+        if(pm && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)==false) {
+            ImGui::SetNextWindowPos(ImVec2(24,24),ImGuiCond_Always);
+            ImGuiWindowFlags of=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoNav;
+            ImGui::SetNextWindowBgAlpha(0.72f);
+            if(ImGui::Begin("##perf-overlay",nullptr,of)) {
+                char line[96];
+                snprintf(line,sizeof line,"%s %0.1f  %s %0.1f ms",label("FPS","帧率"),perf_fps,label("avg","均值"),perf_avg_ms);
+                ImGui::TextUnformatted(line);
+                if(pm==2) {
+                    ImGui::Text("%s %0.1f ms   %s %0.0f%%",label("max","峰值"),perf_max_ms,label("CPU",""),perf_cpu);
+                    ImGui::Text("%s %0.0f%%",label("RAM","内存"),perf_ram);
+                }
+                ImGui::End();
+            }
+        }
+    }
     ImGui::Render();
     VkRenderingAttachmentInfo color={};color.sType=VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     color.imageView=target;color.imageLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
