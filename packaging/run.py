@@ -135,7 +135,7 @@ def main():
     data.mkdir(parents=True, exist_ok=True, mode=0o700)
     cache.mkdir(parents=True, exist_ok=True, mode=0o700)
     extensions = xdg('XDG_DATA_HOME', '.local/share') / 'totk-native'
-    for category in ('amiibo', 'cheats'):
+    for category in ('amiibo', 'cheats', 'mods'):
         (extensions / category).mkdir(parents=True, exist_ok=True, mode=0o700)
     lock_path = data / 'session.lock'
     lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -149,7 +149,7 @@ def main():
         env.update(TOTK_PROFILE_DIR=str(data / 'userdata'), TOTK_SHADER_BIN=str(cache / 'compiled.bin'),
             TOTK_ROMFS=str(ROOT / 'data/romfs'), TOTK_SHADER_PACK=str(ROOT / 'data/shaders/translated.pack'),
             TOTK_BC7_DIR=str(ROOT / 'data/textures'), TOTK_BC7_CACHE_DIR=str(cache / 'textures'),
-            TOTK_SHARED_FONTS=str(ROOT / 'data/fonts'))
+            TOTK_SHARED_FONTS=str(ROOT / 'data/fonts'), TOTK_MODS_DIR=str(extensions / 'mods'))
         for key, value in dict(TOTK_LANG='zh-Hans', TOTK_OPERATION_MODE='handheld',
             TOTK_VK_POOL_SHADOW='0', TOTK_UNCAPPED='1', TOTK_UNCAPPED_HZ='60',
             TOTK_FPS60='1', TOTK_REALTIME='1', TOTK_UNCAPPED_INTERVAL='1',

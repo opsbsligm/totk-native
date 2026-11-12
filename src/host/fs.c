@@ -4,8 +4,9 @@
  *  - Windows file calls (mkdir, directory types via stat, rename that refuses to replace, _commit);
  *  - RomFS: the runtime index (tools/make_romfs_index.py, MacNativeGames' TOTKRFS1 layout) and the extracted
  *    romfs.bin, both already verified at extraction, or (the player's dump) a folder of plain files, indexed by
- *    walking it at start (tools/setup.py checks it against the expected version); only four packaged, hash-bound Deck icon
- *    fonts can override read-only files. General overlays (mods, data patches), split images and the startup
+ *    walking it at start (tools/setup.py checks it against the expected version); six packaged, hash-bound Deck UI
+ *    fonts take precedence over read-only RomFS mods. Mod folders are opened once at startup;
+ *    reads resolve in reverse bytewise name order without following symbolic links. Split images and the startup
  *    re-hash are not ported yet. RomFS directory listing stays unsupported, as in MacNativeGames.
  * Save, temporary and cache storage are host directories under the profile directory (TOTK_PROFILE_DIR, default
  * userdata); application save data is created on first start, as the system launcher does. */
@@ -25,6 +26,7 @@
 #include "host.h"
 #include "../runtime/hle.h"
 #include "deck_font_files.h"
+#include "native_mods.h"
 
 #define R_PATH_NOT_FOUND 0x202u
 #define R_ALREADY_EXISTS 0x402u
@@ -68,6 +70,9 @@ static const char *entry_name(Entry e) { return (const char *)index_bytes + stri
    runtime index, with each entry's offset unused; a file is opened by its path when the game opens it. */
 static char rom_dir[4096];
 static int rom_folder;
+#ifndef _WIN32
+static NDMods rom_mods;
+#endif
 static int rom_fds[NROM];
 static uint64_t rom_sizes[NROM];
 typedef struct { char *path; uint64_t size; } Walked;
@@ -146,6 +151,10 @@ static void index_folder(const char *dir) {
 
 void runtime_fs_init(void) {
     if (image_fd >= 0 || rom_folder) return;
+#ifndef _WIN32
+    need(nd_mods_init(&rom_mods, getenv("TOTK_MODS_DIR")) == 0, "Invalid or unreadable RomFS mods directory");
+    if (rom_mods.count) fprintf(stderr, "[totk] RomFS mods: %zu enabled (later names take precedence)\n", rom_mods.count);
+#endif
     const char *dir = getenv("TOTK_ROMFS");
     if (!dir) dir = "data/romfs";
     char path[4096];
@@ -224,18 +233,31 @@ static unsigned romfs_open(uint64_t *out, const char *path, int mode) {
     const char *p = rom_path(path);
     if (!p) return R_PATH_NOT_FOUND;
     uint64_t i = file_index(p);
-    if (i == UINT64_MAX) return R_PATH_NOT_FOUND;
     int fd = -1;
-    if (rom_folder) {
+    uint64_t actual_size = i == UINT64_MAX ? 0 : entry(i).size;
+#ifndef _WIN32
+    const char *deck_ui = getenv("TOTK_STEAMDECK_UI");
+    int font = nd_font_index(p);
+    int deck_resource = font >= 0 && (!deck_ui || strcmp(deck_ui, "0"));
+    if (!deck_resource) {
+        struct stat st;
+        int found = nd_mods_open(&rom_mods, p, &fd, &st);
+        if (found < 0) return R_ROM_INVALID;
+        if (found) {
+            if (!S_ISREG(st.st_mode)) { close(fd); return R_PATH_NOT_FOUND; }
+            actual_size = (uint64_t)st.st_size;
+            runtime_fs_log("mod", p);
+        }
+    }
+#endif
+    if (i == UINT64_MAX && fd < 0) return R_PATH_NOT_FOUND;
+    if (rom_folder && fd < 0) {
         char full[8192];
         snprintf(full, sizeof full, "%s/%s", rom_dir, p);
         if ((fd = open(full, O_RDONLY | O_BINARY)) < 0) return R_PATH_NOT_FOUND;
     }
-    uint64_t actual_size = entry(i).size;
 #ifndef _WIN32
-    const char *deck_ui = getenv("TOTK_STEAMDECK_UI");
-    int font = nd_font_index(p);
-    if (font >= 0 && (!deck_ui || strcmp(deck_ui, "0"))) {
+    if (deck_resource) {
         int patched = nd_font_open("data/deck-ui", font, rom_folder ? fd : image_fd,
                                   rom_folder ? 0 : entry(i).offset, actual_size, &actual_size);
         if (fd >= 0) close(fd);
@@ -246,7 +268,7 @@ static unsigned romfs_open(uint64_t *out, const char *path, int mode) {
 #endif
     pthread_mutex_lock(&rom_lock);
     for (uint64_t h = 1; h < NROM; h++)
-        if (!rom_handles[h]) { rom_handles[h] = i + 1; rom_fds[h] = fd; rom_sizes[h] = actual_size; *out = ROM_BASE + h; pthread_mutex_unlock(&rom_lock); return 0; }
+        if (!rom_handles[h]) { rom_handles[h] = i == UINT64_MAX ? UINT64_MAX : i + 1; rom_fds[h] = fd; rom_sizes[h] = actual_size; *out = ROM_BASE + h; pthread_mutex_unlock(&rom_lock); return 0; }
     pthread_mutex_unlock(&rom_lock);
     if (fd >= 0) close(fd);
     runtime_fail("RomFS handle table full");
@@ -255,7 +277,7 @@ static unsigned romfs_read(uint64_t *out, uint64_t h, int64_t offset, void *buff
     if (!out || offset < 0 || (!buffer && size)) return R_ROM_INVALID;
     uint64_t i = rom_handles[h - ROM_BASE];
     if (!i) return R_ROM_INVALID;
-    Entry e = entry(i - 1);
+    Entry e = i == UINT64_MAX ? (Entry){0} : entry(i - 1);
     e.size = rom_sizes[h - ROM_BASE];
     int fd = rom_fds[h - ROM_BASE];
     if (fd >= 0) e.offset = 0;
@@ -290,6 +312,16 @@ static unsigned romfs_entry_type(int *out, const char *path) {
     if (!out) return R_ROM_INVALID;
     const char *p = rom_path(path);
     if (!p) return R_PATH_NOT_FOUND;
+#ifndef _WIN32
+    struct stat st;
+    int fd;
+    const char *deck_ui = getenv("TOTK_STEAMDECK_UI");
+    if (nd_font_index(p) < 0 || (deck_ui && !strcmp(deck_ui, "0"))) {
+        int found = nd_mods_open(&rom_mods, p, &fd, &st);
+        if (found < 0) return R_ROM_INVALID;
+        if (found) { close(fd); *out = S_ISDIR(st.st_mode) ? 0 : 1; return 0; }
+    }
+#endif
     if (file_index(p) != UINT64_MAX) { *out = 1; return 0; }
     char dir[4096];
     if (snprintf(dir, sizeof dir, "%s/", p) >= (int)sizeof dir) return R_ROM_INVALID;
