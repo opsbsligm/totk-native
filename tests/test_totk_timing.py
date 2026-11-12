@@ -18,7 +18,7 @@ class ClockTests(unittest.TestCase):
             clock.nd_totk_step.restype=ctypes.c_float
             now=1_000_000_000
             clock.runtime_frame_step_update(now)
-            for hz in [30,60,90,120,60,30]:
+            for hz in [30,60,90,120,144,60,30]:
                 dt=round(1e9/hz)
                 for _ in range(10):
                     now+=dt;clock.runtime_frame_step_update(now)

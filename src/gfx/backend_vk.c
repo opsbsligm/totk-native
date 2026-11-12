@@ -44,6 +44,28 @@ static void pass_end_why(int why);
 int mtl_wait(uint64_t fence, uint64_t timeout_ns);
 static uint64_t gpu_ticks(void) { return runtime_now_ns() * 12 / 625; }   // the Switch's 19.2 MHz counter
 
+// Cumulative host timings, sampled by the existing per-frame diagnostics. Queue
+// host synchronization is unchanged; a long mutex wait is distinct from time
+// spent inside the driver. These do not measure GPU execution duration.
+static _Atomic uint64_t g_submit_lock_ns, g_submit_call_ns;
+int vkb_submit_timing(uint64_t *lock_ns, uint64_t *call_ns) {
+    if (atomic_load_explicit(&g_ok, memory_order_relaxed) != 1) return 0;
+    *lock_ns = atomic_load_explicit(&g_submit_lock_ns, memory_order_relaxed);
+    *call_ns = atomic_load_explicit(&g_submit_call_ns, memory_order_relaxed);
+    return 1;
+}
+static VkResult tracked_queue_submit(uint32_t count, const VkSubmitInfo2 *submits) {
+    uint64_t begin = runtime_now_ns();
+    vk_queue_lock();
+    uint64_t held = runtime_now_ns();
+    VkResult result = vk.vkQueueSubmit2(vkc.queue, count, submits, VK_NULL_HANDLE);
+    uint64_t finished = runtime_now_ns();
+    vk_queue_unlock();
+    atomic_fetch_add_explicit(&g_submit_lock_ns, held - begin, memory_order_relaxed);
+    atomic_fetch_add_explicit(&g_submit_call_ns, finished - held, memory_order_relaxed);
+    return result;
+}
+
 // ---------------- memory pools ----------------
 // sh..defer_pass: the pool's copy in device memory (below, "copies of the pools in device memory")
 typedef struct { uintptr_t lo, hi, base; VkBuffer buf; VkDeviceMemory mem; const void *key; VkDeviceSize bytes;
@@ -2311,9 +2333,7 @@ uint64_t mtl_sub_commit(void) {
     VkSubmitInfo2 si = {VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .commandBufferInfoCount = (uint32_t)ncbi, .pCommandBufferInfos = cbi,
                         .signalSemaphoreInfoCount = 1, .pSignalSemaphoreInfos = &sig};
     uint64_t ts0 = runtime_now_ns();
-    vk_queue_lock();
-    VkResult r = vk.vkQueueSubmit2(vkc.queue, 1, &si, VK_NULL_HANDLE);
-    vk_queue_unlock();
+    VkResult r = tracked_queue_submit(1, &si);
     vkb_step_add(PK_SUBMIT, ts0);
     if (r != VK_SUCCESS) { vk_check(r, "vkQueueSubmit2"); die("GPU submission failed"); }
     job *j = malloc(sizeof *j);
