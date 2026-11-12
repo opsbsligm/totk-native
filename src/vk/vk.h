@@ -78,3 +78,4 @@ int vk_init(SDL_Window *window);
 void vk_queue_lock(void);       // the queue is used by the replayer's submit thread and the present thread
 void vk_queue_unlock(void);
 int vk_check(VkResult r, const char *what);   // 1 on success, logs the failure otherwise
+int nd_aniso_max(void);   // the device's max sampler anisotropy (1 when the limit is unavailable)

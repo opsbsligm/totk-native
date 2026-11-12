@@ -21,6 +21,7 @@ static pthread_mutex_t queue_mu = PTHREAD_MUTEX_INITIALIZER;
 void vk_queue_lock(void) { pthread_mutex_lock(&queue_mu); }
 void vk_queue_unlock(void) { pthread_mutex_unlock(&queue_mu); }
 
+int nd_aniso_max(void) { return vkc.props.limits.maxSamplerAnisotropy > 0 ? (int)vkc.props.limits.maxSamplerAnisotropy : 1; }
 int vk_check(VkResult r, const char *what) {
     if (r == VK_SUCCESS) return 1;
     LOG("%s failed (%d)", what, (int)r);
