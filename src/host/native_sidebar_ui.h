@@ -113,12 +113,16 @@ static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char
         draw->AddCircle(c,10*k,ink,24,2.6f*k);draw->AddCircleFilled(c,3.4f*k,ink,16);
         return false;
     }
+    const ImGuiStyle &style=ImGui::GetStyle();
+    const char *hide=zh?"收起":"Hide",*back=zh?"返回":"Back";
+    float hide_width=std::max(56*k,ImGui::CalcTextSize(hide).x+2*style.FramePadding.x);
     if(layer==2) {
-        if(ImGui::Button(zh?"返回":"Back",ImVec2(70*k,std::max(44.f,44*k)))) s.layer=1;
+        float back_width=std::max(70*k,ImGui::CalcTextSize(back).x+2*style.FramePadding.x);
+        if(ImGui::Button(back,ImVec2(back_width,std::max(44.f,44*k)))) s.layer=1;
         ImGui::SameLine();ImGui::TextDisabled("%s",zh?"完整设置":"SETTINGS");
     } else ImGui::TextDisabled("%s",zh?"快捷面板":"QUICK PANEL");
-    ImGui::SameLine(ImGui::GetWindowWidth()-76*k);
-    if(ImGui::Button(zh?"收起":"Hide",ImVec2(56*k,std::max(44.f,44*k)))) *toggle=true;
+    ImGui::SameLine(ImGui::GetWindowWidth()-style.WindowPadding.x-hide_width);
+    if(ImGui::Button(hide,ImVec2(hide_width,std::max(44.f,44*k)))) *toggle=true;
     {ImVec2 tl=ImGui::GetCursorScreenPos();ImDrawList *td=ImGui::GetWindowDrawList();
      td->AddRectFilled(ImVec2(tl.x,tl.y+4*k),ImVec2(tl.x+4*k,tl.y+std::max(18.f,24*k)),IM_COL32(120,220,190,255),2*k);
      ImGui::Indent(10*k);}
@@ -137,11 +141,18 @@ static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char
         return false;
     }
     if(s.layer!=2) return false;
-    float gap=ImGui::GetStyle().ItemSpacing.x,w=(ImGui::GetContentRegionAvail().x-3*gap)/4;
+    float gap=style.ItemSpacing.x,available=ImGui::GetContentRegionAvail().x,total=3*gap;
+    float minimum[4];
     for(int i=0;i<4;i++) {
-        if(i) ImGui::SameLine();ImGui::PushID(i);bool selected=i==s.page;
+        minimum[i]=std::max(44.f,ImGui::CalcTextSize(zh?tabs_zh[i]:tabs_en[i]).x+2*style.FramePadding.x);
+        total+=minimum[i];
+    }
+    bool wrap=total>available;
+    for(int i=0;i<4;i++) {
+        if(i && (!wrap || i%2)) ImGui::SameLine();ImGui::PushID(i);bool selected=i==s.page;
+        float width=wrap?(available-gap)*.5f:minimum[i]+(available-total)*.25f;
         if(selected) ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(.20f,.44f,.48f,1));
-        if(ImGui::Button(zh?tabs_zh[i]:tabs_en[i],ImVec2(w,std::max(44.f,46*k)))) s.page=i;
+        if(ImGui::Button(zh?tabs_zh[i]:tabs_en[i],ImVec2(width,std::max(44.f,46*k)))) s.page=i;
         if(selected) ImGui::PopStyleColor();ImGui::PopID();
     }
     ImGui::Separator();
