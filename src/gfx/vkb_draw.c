@@ -397,17 +397,17 @@ static VkSampler sampler(int id) {
         .minFilter = p->minf == 1 || p->minf == 3 || p->minf == 5 ? VK_FILTER_LINEAR : VK_FILTER_NEAREST,
         .mipmapMode = p->minf == 4 || p->minf == 5 ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST,
         .addressModeU = wrap(p->ws), .addressModeV = wrap(p->wt), .addressModeW = wrap(p->wr),
-        .mipLodBias = p->lod_bias, .anisotropyEnable = p->aniso > 1.0f, .maxAnisotropy = p->aniso > 16.0f ? 16.0f : p->aniso};
+        .mipLodBias = p->lod_bias, .anisotropyEnable = p->aniso > 1.0f, .maxAnisotropy = p->aniso > 16.0f ? 16.0f : p->aniso,
+        .compareEnable = p->cmp_mode == 1, .compareOp = (VkCompareOp)(p->cmp_func ? p->cmp_func - 1 : 7),
+        .minLod = p->lod_min, .maxLod = mip ? p->lod_max : 0.25f,   // no mipmap filter: the base level only (GL)
+        .borderColor = border};
+    if (ci.maxLod < ci.minLod) ci.maxLod = ci.minLod;
     {   // control-bar override (setting > 0) on the samplers it is safe for: linear mag,
         // mipmap filtering, a real mip range, no depth compare (shadow maps); otherwise the
         // game's own anisotropy is kept as-is
         int f = aniso_factor();
         if (f > 1 && !ci.compareEnable && p->magf == 1 && (p->minf == 3 || p->minf == 5) &&
             p->lod_max - p->lod_min >= 0.5f) { ci.anisotropyEnable = VK_TRUE; ci.maxAnisotropy = f; } }
-        .compareEnable = p->cmp_mode == 1, .compareOp = (VkCompareOp)(p->cmp_func ? p->cmp_func - 1 : 7),
-        .minLod = p->lod_min, .maxLod = mip ? p->lod_max : 0.25f,   // no mipmap filter: the base level only (GL)
-        .borderColor = border};
-    if (ci.maxLod < ci.minLod) ci.maxLod = ci.minLod;
     VkSampler s;
     if (!vk_check(vk.vkCreateSampler(vkc.device, &ci, NULL, &s), "sampler")) return sampler(-1);
     vkb_rw_write(&g_reg_mu, LK_TEXREG);
