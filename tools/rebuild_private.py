@@ -59,11 +59,19 @@ def main():
         receipt=json.loads((work/'restored/recovery-receipt.json').read_text())
         if receipt['missing']:
             raise SystemExit('Recovery authenticated and restored; build blocked by recorded missing inputs: '+', '.join(receipt['missing']))
-        if (work/'restored/run.sh').is_file() and not (work/'restored/dump').is_dir():
-            # Portable runtime package: already built; verify and use in place.
-            subprocess.run([str(work/'restored/run.sh'),'--verify'],check=True)
-            print(str(work/'restored/run.sh'))
-            return
+    # The include label is part of the authenticated archive: production bundles
+    # use dump/, while standalone runtime bundles can use runtime/ or the root.
+    entries = [work/'restored'/prefix/'run.sh' for prefix in ('', 'dump', 'runtime')]
+    entries = [entry for entry in entries if entry.exists() or entry.is_symlink()]
+    if len(entries) > 1:
+        raise SystemExit('Ambiguous portable runtime entries; select a bundle with one run.sh')
+    if entries:
+        entry = entries[0]
+        if entry.is_symlink() or not entry.is_file() or not os.access(entry, os.X_OK):
+            raise SystemExit('Portable runtime entry is not a regular executable; reseal with schema 3')
+        subprocess.run([str(entry), '--verify'], check=True)
+        print(str(entry))
+        return
     dump=work/'restored/dump'
     run(ROOT/'build.py','doctor','--dump',dump,'--work',work/'build')
     run(ROOT/'build.py','build','--dump',dump,'--work',work/'build','--jobs',a.jobs)
