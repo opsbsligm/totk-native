@@ -582,7 +582,8 @@ void mtl_pool_add(const void *mem, uint64_t size) {
         uint64_t probe, page;
         if (plat_written_pages(GUEST_LO, 4096, &probe, 1, &page) < 0)
             die("pool copies require asynchronous write watch; restart without TOTK_POOL_COPY");
-        if (vkb_shadow_on()) die("experimental pool copies require an integrated GPU without pool shadows");
+        if (vkc.props.deviceType != VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU || vkb_shadow_on())
+            die("experimental pool copies require an integrated GPU without pool shadows");
     }
 #endif
 #ifdef __linux__
