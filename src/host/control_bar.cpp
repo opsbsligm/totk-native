@@ -87,7 +87,6 @@ static void perf_present(uint64_t now_ns) {
         double now=(double)now_ns*1e-9;
         if(now-perf_last_scan>=1.0) {perf_last_scan=now;perf_scan();}
     }
-    perf_last=now;
 }
 
 static bool chinese, scalable_font;
