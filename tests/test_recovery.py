@@ -170,6 +170,7 @@ class RebuildPrivatePortableRuntime(unittest.TestCase):
                 if 'restore' in joined and 'run.sh' not in joined:
                     restored = work/'restored'; restored.mkdir(parents=True, exist_ok=True)
                     (restored/'run.sh').write_text('#!/bin/sh\nexit 0\n')
+                    (restored/'run.sh').chmod(0o700)
                     (restored/'recovery-receipt.json').write_text(json.dumps(dict(missing=[])))
                 return types.SimpleNamespace(returncode=0)
             fake_subprocess = types.SimpleNamespace(run=fake_run)
