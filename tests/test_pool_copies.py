@@ -34,7 +34,8 @@ typedef int vkb_rw;
 #define GUEST_HI UINT64_MAX
 typedef struct { uintptr_t lo,hi,base;VkBuffer buf;uint8_t *cmap;uint8_t cfilled;uint64_t cstamp,pc_sub,used_sub; } pool_ent;
 static pool_ent g_pools[1];
-static int g_npools=1,dirty,untracked,gpu_begin,gpu_end,allocation_fails;
+static int g_npools=1,dirty,untracked,gpu_begin,gpu_end,allocation_fails,mark_fails;
+static uint8_t *late_cpu_target,*late_end_target;
 static vkb_rw g_pool_mu;
 static uint64_t clock_ns,stamp=1;
 static int vkb_pool_copies(void) {return 1;}
@@ -50,13 +51,29 @@ static int nvn_dirty_runs(const void *p,uint64_t n,uint64_t s,size_t gap,void (*
 }
 static void dm_guest_write_prepare(void *p,size_t n) {(void)p;(void)n;}
 static void *nvn_dirty_gpu_write_begin(void *p,size_t n) {(void)n;gpu_begin++;return p;}
-static void nvn_dirty_gpu_write_end(void *p) {assert(p);gpu_end++;}
+static void nvn_dirty_gpu_write_end(void *p) {
+    assert(p);gpu_end++;
+    if(late_end_target) {*late_end_target=99;late_end_target=NULL;dirty=0;}
+}
+static int nvn_dirty_mark_range(const void *p,size_t n) {(void)p;(void)n;dirty=1;return !mark_fails;}
+static void inject_before_write(const void *p,size_t n) {
+    if(late_cpu_target && (uintptr_t)late_cpu_target>=(uintptr_t)p &&
+       (uintptr_t)late_cpu_target-(uintptr_t)p<n) {*late_cpu_target=99;late_cpu_target=NULL;}
+}
+static int interleaved_memcmp(const void *a,const void *b,size_t n) {
+    int result=memcmp(a,b,n);inject_before_write(a,n);return result;
+}
+#define memcmp interleaved_memcmp
+#define __atomic_compare_exchange_n(P,E,D,W,S,F) \
+    (inject_before_write((P),sizeof *(P)),__atomic_compare_exchange_n((P),(E),(D),(W),(S),(F)))
 #define die(...) do {fprintf(stderr,__VA_ARGS__);fputc('\n',stderr);exit(73);}while(0)
 static void *snapshot_malloc(size_t n) {return allocation_fails?NULL:malloc(n);}
 #define malloc snapshot_malloc
 '''
         suffix = r'''
 #undef malloc
+#undef memcmp
+#undef __atomic_compare_exchange_n
 static const pool_ent *pool_find(uintptr_t addr,uint64_t n) {
     pool_ent *p=&g_pools[0];return addr>=p->lo && addr<=p->hi && n<=p->hi-addr?p:NULL;
 }
@@ -68,6 +85,19 @@ int main(int argc,char **argv) {
     g_pools[0]=(pool_ent){.lo=lo,.hi=lo+8192,.base=lo,.buf=7,.cmap=copy};
     sync_used(1);assert(!memcmp(game,copy,8192));
     if(argc>1) {
+        if(!strncmp(argv[1],"copy-race",9) || !strcmp(argv[1],"dirty-race")) {
+            int unaligned=strstr(argv[1],"unaligned") || strstr(argv[1],"tail");
+            size_t off=unaligned?1:0,bytes=unaligned?4094:4096;
+            size_t target=strstr(argv[1],"tail")?4094:7;
+            pc_pend_add(7,lo+off,bytes);sync_used(2);memset(copy+off,33,bytes);
+            if(!strncmp(argv[1],"copy-race",9)) late_cpu_target=game+target;
+            else late_end_target=game+target;
+            pc_writeback(2);assert(!late_cpu_target && !late_end_target && game[target]==99);
+            assert(game[target-1]==33 && game[target+1]==(target+1<off+bytes?33:10));
+            if(unaligned) assert(game[0]==10 && game[4095]==10);
+            sync_used(3);assert(copy[target]==99);
+            free(g_pc_pend);free(copy);free(game);return 0;
+        }
         if(!strcmp(argv[1],"watch-lost")) {untracked=1;sync_used(2);}
         if(!strcmp(argv[1],"pending-limit")) {
             g_pc_pend=calloc(65536,sizeof *g_pc_pend);assert(g_pc_pend);g_npc_pend=g_cappc_pend=65536;
@@ -76,7 +106,10 @@ int main(int argc,char **argv) {
         pc_pend_add(7,lo,128);
         if(!strcmp(argv[1],"snapshot-limit")) g_pc_pend[0].hi=lo+PC_SNAP_MAX+1;
         if(!strcmp(argv[1],"snapshot-memory")) allocation_fails=1;
-        sync_used(2);return 74;
+        sync_used(2);
+        if(!strcmp(argv[1],"snapshot-missing")) {free(g_pc_pend[0].was);g_pc_pend[0].was=NULL;pc_writeback(2);}
+        if(!strcmp(argv[1],"writeback-watch-lost")) {mark_fails=1;pc_writeback(2);}
+        return 74;
     }
     // One range is bound twice. A later CPU byte survives GPU writeback;
     // neighbouring bytes still receive the GPU's output.
@@ -125,8 +158,17 @@ int main(int argc,char **argv) {
     def test_copy_merge_late_cpu_writes_and_pool_identity(self):
         subprocess.run([str(self.binary)], check=True, timeout=8)
 
+    def test_cpu_write_between_comparison_and_writeback_survives(self):
+        for case in ['copy-race', 'copy-race-unaligned', 'copy-race-tail']:
+            with self.subTest(case=case):
+                subprocess.run([str(self.binary), case], check=True, timeout=8)
+
+    def test_cpu_write_during_gpu_dirty_clear_reaches_next_submission(self):
+        subprocess.run([str(self.binary), 'dirty-race'], check=True, timeout=8)
+
     def test_unsafe_conditions_fail_explicitly(self):
-        for case in ['watch-lost', 'pending-limit', 'snapshot-limit', 'snapshot-memory']:
+        for case in ['watch-lost', 'pending-limit', 'snapshot-limit', 'snapshot-memory',
+                     'snapshot-missing', 'writeback-watch-lost']:
             with self.subTest(case=case):
                 result = subprocess.run([str(self.binary), case], capture_output=True, text=True, timeout=8)
                 self.assertEqual(result.returncode, 73, result.stderr)

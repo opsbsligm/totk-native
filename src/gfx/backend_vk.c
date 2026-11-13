@@ -474,7 +474,8 @@ static void pc_sync(uint64_t fence) {
     vkb_rw_read_end(&g_pool_mu);
 }
 // g_pc_mu held: write r of a completed submission, from p's copy into game memory. With a snapshot, a byte the CPU
-// changed since it stays (its page is marked written again: an atomic no-op on one byte, for the next sync to copy);
+// changed since it stays. Compare/exchange closes the race between comparing and writing. After the GPU watch
+// reset, explicitly mark the entire range: a CPU store can race with that reset even on a byte we did not keep.
 // the GPU's bytes put in are also put into the snapshots of later writes not back yet (from index k on): for those
 // they are what their GPU started from, not changes of the CPU.
 static void pc_back(const pool_ent *p, const pc_range *r, int k) {
@@ -482,34 +483,32 @@ static void pc_back(const pool_ent *p, const pc_range *r, int k) {
     void *tok = nvn_dirty_gpu_write_begin((void *)(uintptr_t)r->lo, r->hi - r->lo);
     const uint8_t *c = p->cmap + (r->lo - p->base);
     uint8_t *g = (uint8_t *)(uintptr_t)r->lo;
-    uint64_t n = r->hi - r->lo, kept = 0;
-    // the first byte the CPU kept on each page (marked written again below), up to KMAX; more: found by a scan
-    enum { KMAX = 64 };
-    uint64_t kept_at[KMAX];
-    // Blocks of 4 KiB where game memory still holds the snapshot (nearly all: the CPU rarely writes what the GPU
-    // writes) go over whole; a block that differs, by 64 bytes; only a 64-byte piece that differs, byte by byte (the
-    // retire thread took ~18 % of a Steam Deck core byte by byte, 2026-11-04).
-    if (!r->was) memcpy(g, c, n);
-    else
-        for (uint64_t x = 0, kept_page = UINT64_MAX; x < n;) {
-            uint64_t big = n - x < 4096 ? n - x : 4096;
-            if (!memcmp(g + x, r->was + x, big)) { memcpy(g + x, c + x, big); x += big; continue; }
-            for (uint64_t eb = x + big; x < eb;) {
-                uint64_t m = eb - x < 64 ? eb - x : 64;
-                if (!memcmp(g + x, r->was + x, m)) { memcpy(g + x, c + x, m); x += m; continue; }
-                for (uint64_t e = x + m; x < e; x++) {
-                    if (g[x] == r->was[x]) { g[x] = c[x]; continue; }
-                    uint64_t page = (r->lo + x) >> 12;
-                    if (page != kept_page) { if (kept < KMAX) kept_at[kept] = x; kept_page = page; kept++; }
-                }
-            }
+    uint64_t n = r->hi - r->lo, kept = 0, kept_page = UINT64_MAX;
+    if (!r->was) die("pool copies: completed GPU write has no snapshot");
+    for (uint64_t x = 0; x < n;) {
+        uint64_t end = x + 1;
+        if (!((r->lo + x) & 7) && n - x >= 8) {
+            uint64_t before, value;
+            memcpy(&before, r->was + x, 8);
+            memcpy(&value, c + x, 8);
+            // Unchanged GPU words need no store, regardless of a CPU update.
+            if (before == value || __atomic_compare_exchange_n((uint64_t *)(void *)(g + x),
+                    &before, value, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) { x += 8; continue; }
+            end = x + 8;
         }
-    nvn_dirty_gpu_write_end(tok);   // before the marks below: they are the CPU's
-    if (kept <= KMAX)
-        for (uint64_t i = 0; i < kept; i++) __atomic_fetch_or(&g[kept_at[i]], 0, __ATOMIC_RELAXED);
-    else
-        for (uint64_t x = 0; x < n; x++)   // the first kept byte of each page
-            if (g[x] != c[x]) { __atomic_fetch_or(&g[x], 0, __ATOMIC_RELAXED); x += 0xfff - ((r->lo + x) & 0xfff); }
+        // A changed word, unaligned prefix or tail: preserve CPU bytes while
+        // still publishing the neighbouring bytes the GPU actually changed.
+        for (; x < end; x++) {
+            uint8_t before = r->was[x];
+            if (before == c[x] || __atomic_compare_exchange_n(g + x, &before, c[x], 0,
+                    __ATOMIC_RELAXED, __ATOMIC_RELAXED)) continue;
+            uint64_t page = (r->lo + x) >> 12;
+            if (page != kept_page) { kept_page = page; kept++; }
+        }
+    }
+    nvn_dirty_gpu_write_end(tok);
+    if (!nvn_dirty_mark_range(g, n) && r->lo >= GUEST_LO && r->hi <= GUEST_HI)
+        die("pool copies: writeback range lost its dirty tracking");
     g_pc_kept += kept;
     for (int j = k; j < g_npc_pend; j++) {   // the GPU's bytes into the snapshots of later writes over them
         pc_range *o = &g_pc_pend[j];
@@ -561,7 +560,7 @@ static int pc_alloc(uintptr_t a, uintptr_t b, VkBuffer *out_buf, uint8_t **map, 
 static void pool_copy_log(void) {
     if (!vkb_pool_copies()) return;
     pthread_mutex_lock(&g_pc_mu);
-    VLOG("pool copies cumulative: in %.1f MiB, back %.1f MiB, kept CPU pages %llu, snapshots %.1f MiB (live %.1f); "
+    VLOG("pool copies cumulative: in %.1f MiB, back %.1f MiB, observed kept CPU pages %llu, snapshots %.1f MiB (live %.1f); "
          "sync %.1f ms (copy %.1f ms)", g_pc_in_bytes / 1048576.0, g_pc_back_bytes / 1048576.0,
          (unsigned long long)g_pc_kept, g_pc_snap_bytes / 1048576.0, g_pc_snapshot_live / 1048576.0,
          g_pc_ns / 1000000.0, g_pc_copy_ns / 1000000.0);
