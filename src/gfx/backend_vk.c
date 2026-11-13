@@ -396,7 +396,7 @@ static void pc_pend_add(VkBuffer buf, uint64_t addr, uint64_t len) {
 static void pc_put(const pool_ent *p, uint64_t a, uint64_t b, int i, int whole) {
     for (; i < g_npc_pend; i++) {
         const pc_range *r = &g_pc_pend[i];
-        if (!r->fence || r->lo >= b || r->hi <= a) continue;
+        if (!r->fence || r->buf != p->buf || r->lo >= b || r->hi <= a) continue;
         uint64_t lo = r->lo > a ? r->lo : a, hi = r->hi < b ? r->hi : b;
         if (lo > a) pc_put(p, a, lo, i + 1, whole);
         if (!whole && r->was) {

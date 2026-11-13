@@ -102,6 +102,16 @@ int main(int argc,char **argv) {
     pc_pend_add(7,lo+512,16);sync_used(8);g_pools[0].buf=8;
     memset(copy+512,99,16);pc_writeback(8);
     assert(game[512]==10 && !g_npc_pend && !g_pc_snapshot_live && gpu_begin==gpu_end);
+    // A deleted pool can still have a pending completion when its address is
+    // reused. That old buffer must not reserve bytes in the new pool's first
+    // CPU-to-GPU fill, nor in a later dirty-page synchronization.
+    pc_pend_add(8,lo+600,16);sync_used(9);
+    g_pools[0].buf=9;g_pools[0].cfilled=0;
+    memset(game,77,8192);memset(copy,0,8192);
+    sync_used(10);assert(!memcmp(game,copy,8192));
+    memset(game+600,10,16);dirty=1;
+    sync_used(11);assert(!memcmp(game,copy,8192));
+    pc_writeback(11);assert(!g_npc_pend && !g_pc_snapshot_live);
     free(g_pc_pend);free(copy);free(game);return 0;
 }
 '''
