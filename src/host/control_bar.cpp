@@ -8,6 +8,7 @@
 #include "imgui.h"
 #include "native_imgui_input.h"
 #include "native_sidebar_ui.h"
+#include "native_frame_metrics.h"
 #include "native_amiibo_catalog.h"
 #include "native_amiibo_ui.h"
 #include "native_atmosphere_ui.h"
@@ -55,10 +56,8 @@ static bool backend_ready;
 // frames, plus the whole machine's CPU load and memory. A value the platform doesn't
 // give stays negative. Refreshed once a second while the overlay is up.
 static std::mutex perf_lock;
-static uint64_t perf_frame_count=0;
-static double perf_ms_max=0;
-static double perf_last=0, perf_window=0, perf_window_ms=0;
-static float perf_fps=0, perf_avg_ms=0, perf_max_ms=0, perf_cpu=0, perf_ram=0;
+static NdFrameMetrics perf_frames={};
+static float perf_cpu=0, perf_ram=0;
 static double perf_last_scan=0;
 static void perf_scan() {
     double cpu=0, ram=0;
@@ -82,16 +81,10 @@ static void perf_scan() {
 #endif
     perf_cpu=cpu;perf_ram=ram;
 }
-static void perf_present(double ms) {
+static void perf_present(uint64_t now_ns) {
     std::lock_guard<std::mutex> guard(perf_lock);
-    ++perf_frame_count;perf_window_ms+=ms;if(ms>perf_ms_max) perf_ms_max=ms;
-    double now=SDL_GetTicksNS()*1e-9;
-    if(!perf_last) {perf_last=now;perf_window=now;perf_window_ms=0;perf_ms_max=0;perf_last_scan=0;return;}
-    if(now-perf_window>=1.0) {
-        perf_fps=(float)(perf_frame_count/(now-perf_window));
-        perf_avg_ms=(float)(perf_window_ms/(now-perf_window));
-        perf_max_ms=(float)perf_ms_max;
-        perf_window=now;perf_window_ms=0;perf_frame_count=0;perf_ms_max=0;
+    if(nd_frame_metrics_present(&perf_frames,now_ns)) {
+        double now=(double)now_ns*1e-9;
         if(now-perf_last_scan>=1.0) {perf_last_scan=now;perf_scan();}
     }
     perf_last=now;
@@ -445,9 +438,7 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
     if(want_toggle) {toggle();dirty=true;}
     if(dirty) preferences(true);
     {   // one presented frame per draw: frame times now feed the performance numbers
-        static uint64_t last_perf;uint64_t now_perf=SDL_GetTicksNS();
-        if(last_perf) perf_present((double)(now_perf-last_perf)*1e-6);
-        last_perf=now_perf;
+        perf_present(SDL_GetTicksNS());
         int pm=perf_mode.load();
         if(pm && ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)==false) {
             ImGui::SetNextWindowPos(ImVec2(24,24),ImGuiCond_Always);
@@ -455,10 +446,10 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
             ImGui::SetNextWindowBgAlpha(0.72f);
             if(ImGui::Begin("##perf-overlay",nullptr,of)) {
                 char line[96];
-                snprintf(line,sizeof line,"%s %0.1f  %s %0.1f ms",label("FPS","帧率"),perf_fps,label("avg","均值"),perf_avg_ms);
+                snprintf(line,sizeof line,"%s %0.1f  %s %0.1f ms",label("FPS","帧率"),perf_frames.fps,label("avg","均值"),perf_frames.average_ms);
                 ImGui::TextUnformatted(line);
                 if(pm==2) {
-                    ImGui::Text("%s %0.1f ms   %s %0.0f%%",label("max","峰值"),perf_max_ms,label("CPU",""),perf_cpu);
+                    ImGui::Text("%s %0.1f ms   %s %0.0f%%",label("max","峰值"),perf_frames.maximum_ms,label("CPU","CPU"),perf_cpu);
                     ImGui::Text("%s %0.0f%%",label("RAM","内存"),perf_ram);
                 }
                 ImGui::End();
