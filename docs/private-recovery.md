@@ -14,6 +14,17 @@ python3 tools/rebuild_private.py --version YOUR_PACKAGE_VERSION \
 
 该命令下载校验全部加密分片、完成 age 认证后解包、逐文件核对加密清单，再检查和构建。完整运行包会识别恢复目录中的 `run.sh`、`dump/run.sh` 或 `runtime/run.sh`，直接原地校验并输出入口，不再重新构建；多个入口或入口不可执行时会停止。只有不含上述入口的构建输入包（`dump/`）才走 doctor/build 路径。输出目录必须是新目录，避免覆盖已有安装或存档。工作目录需要容纳加密分片、解密暂存、恢复文件和构建产物；大文件直接使用数据盘/NAS，不能放 Mac 的 tmp。
 
+密文分片可放在另一块磁盘、USB盘或已挂载的 NAS，共享盘不需要保存 Unix 可执行权限。使用新目录指定 `--encrypted-work`；认证后的临时归档、还原文件、运行入口和构建输出仍留在 `--work` 所在的 Linux 文件系统：
+
+```sh
+python3 tools/rebuild_private.py --version YOUR_PACKAGE_VERSION \
+  --token-file /private/gitlab-token --identity /private/age-identity.txt \
+  --work /mnt/linux-work/native-restore \
+  --encrypted-work /mnt/encrypted-disk/native-cipher
+```
+
+两处目录均须是新目录，不能相互包含、放入源码目录、经过符号链接或包含 `..` 路径段。schema 2 集合的全部密文组件也使用独立目录。令牌和 age identity 仍由原私有路径读取，不复制到共享盘；解密认证、摘要和入口权限检查保持一致。只有位于不同文件系统时才会分摊实际空间峰值，同盘不同目录不会增加可用空间。下载前仍核对分片总量及空间，还原工作盘的既有容量门禁保留；命令结束后目录供用户检查与使用，不自动删除。
+
 备份创建示例：
 
 ```sh
