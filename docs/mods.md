@@ -45,6 +45,8 @@ python3 build.py build --dump /mnt/private/totk-1.4.3 \
 
 现有安装的只读诊断已确认贴图资源链与渲染目标链分别存在；具体表值和输入摘要留在私有核验记录。后续必须分别绑定实际叶子及父节点，不能把渲染目标的增长配方套到贴图资源链。BYML 诊断只解释标量与所需名称引用，未知字段保留类型标记，不据此猜测根堆类型或可用容量；累计字段遍历、资源帧与输出均有独立上限。
 
+诊断还核对包内 Deck UI 的 RESTBL：`recipe.json`、`fonts.bin` 第六条记录和 `5.zs` 必须一致，原表的每个分配值仅允许按声明增长，表头、哈希排序及碰撞区保持一致。这不是游戏内已激活的证明，也不验证其他五份图示资源的像素。运行时保留 UI 资源优先级，因此 HD 的最终 RESTBL 必须合并既有 UI 增长并绑定同一覆盖记录；不能把新表放在低优先级 Mod 路径后就称生效。
+
 固定核对的 [上游 resolution.c](https://github.com/valentderah/totk-pc-recomp/blob/0ae47a578285cde080642c9e6c40316c99171ef1/runtime/resolution.c) 按输出／场景尺寸和阴影计算增量，改写 `System/HeapSize/Product.Nin_NX_NVN.HeapDef.byml.zs` 中的 `DynamicTextureAllocatorMem` 与父级 `Graphics`，并由 [memory.c](https://github.com/valentderah/totk-pc-recomp/blob/0ae47a578285cde080642c9e6c40316c99171ef1/runtime/memory.c) 同步增加应用内存池。这个路径证明的是渲染目标扩容，不能直接当作任意 HD 贴图包已支持自动扩容。上游 [Mods 说明](https://github.com/valentderah/totk-pc-recomp/blob/0ae47a578285cde080642c9e6c40316c99171ef1/docs/mods.md) 还把资源大小表合并与包内资源列为独立能力。
 
 本作当前 `src/host/svc.c` 的 `GetInfo`、`SetHeapSize` 和 alias 映射仍使用固定应用内存池。HD 接入按下列四层一起完成：

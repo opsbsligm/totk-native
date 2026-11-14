@@ -192,6 +192,63 @@ def restbl_summary(raw):
                 collision_name_width=width, heapdef_crc_allocation_raw=heap_allocation)
 
 
+def inspect_packaged_ui(root, original, original_decoded, decode):
+    """Check the packaged UI table, not whether a live game enabled it."""
+    if not (root/'data/deck-ui').exists():
+        return dict(present=False, runtime_active_verified=False)
+    with checked_file(root, 'data/deck-ui/recipe.json', 1 << 20) as stream:
+        recipe = json.load(stream)
+    with checked_file(root, 'data/deck-ui/fonts.bin', 4096) as stream:
+        header = stream.read(4097)
+    files = recipe.get('files')
+    if (recipe.get('schema') != 2 or not isinstance(files, list) or len(files) != 6
+            or len(header) != 8+80*6 or header[:8] != b'NDUIF002'):
+        raise ValueError('Unsupported packaged Deck UI recipe/header')
+    for i, row in enumerate(files):
+        if not isinstance(row, dict): raise ValueError('Invalid Deck UI recipe record')
+        old_size, new_size, old_hash, new_hash = struct.unpack_from('<QQ32s32s', header, 8+80*i)
+        if (old_size != row.get('original_size') or new_size != row.get('patched_size')
+                or old_hash.hex() != row.get('original_sha256') or new_hash.hex() != row.get('patched_sha256')):
+            raise ValueError('Packaged UI header differs from its recipe')
+    row = files[5]
+    if (row.get('path') != RESTBL or row.get('original_size') != len(original)
+            or row.get('original_sha256') != hashlib.sha256(original).hexdigest()):
+        raise ValueError('Packaged UI table is for a different original resource')
+    with checked_file(root, 'data/deck-ui/5.zs', MAX_RESOURCE) as stream:
+        patched = stream.read(MAX_RESOURCE+1)
+    if len(patched) != row.get('patched_size') or hashlib.sha256(patched).hexdigest() != row.get('patched_sha256'):
+        raise ValueError('Packaged UI allocation table differs from its record')
+    raw = decode(patched); summary = restbl_summary(raw)
+    if raw[:22] != original_decoded[:22] or len(raw) != len(original_decoded):
+        raise ValueError('Packaged UI changed allocation-table layout')
+    growth = recipe.get('allocation_growth')
+    if not isinstance(growth, dict) or len(growth) > 16:
+        raise ValueError('Invalid packaged UI growth inventory')
+    targets = {}
+    for name, extra in growth.items():
+        if (not isinstance(name, str) or len(name.encode()) > 512 or '\0' in name
+                or PurePosixPath(name).is_absolute() or '..' in PurePosixPath(name).parts
+                or PurePosixPath(name).as_posix() != name or type(extra) is not int or not 0 < extra <= 1 << 20):
+            raise ValueError('Invalid packaged UI allocation growth')
+        key = zlib.crc32(name.removesuffix('.zs').encode())
+        if key in targets: raise ValueError('Ambiguous packaged UI resource hash')
+        targets[key] = extra
+    changed = 0
+    for i in range(summary['crc_entries']):
+        at = 22+8*i; key, before = struct.unpack_from('<II', original_decoded, at)
+        other_key, after = struct.unpack_from('<II', raw, at); extra = targets.get(key, 0)
+        if other_key != key or before > 0xffffffff-extra or after != before+extra:
+            raise ValueError('Packaged UI table differs from declared allocation growth')
+        changed += bool(extra)
+    end = 22+8*summary['crc_entries']
+    if changed != len(targets) or raw[end:] != original_decoded[end:]:
+        raise ValueError('Packaged UI growth targets/collision entries differ')
+    return dict(present=True, recipe_schema=2, table_sha256=hashlib.sha256(patched).hexdigest(),
+                declared_growth_entries=len(growth), changed_crc_entries=changed,
+                table_matches_declared_growth=True, runtime_active_verified=False,
+                other_ui_asset_payloads_verified=False)
+
+
 def inspect_release(root, profile):
     """Caller supplies a controlled profile, never one read from a mod/dump."""
     import zstd_codec as zstd
@@ -261,6 +318,7 @@ def inspect_release(root, profile):
             raise ValueError('Controlled original RESTBL fingerprint differs')
         heap_data, table_data = decode(heap_raw), decode(table_raw)
         byml = Byml(heap_data); heaps = byml.heaps()
+        packaged_ui = inspect_packaged_ui(root, table_raw, table_data, decode)
     selected_heaps = {}
     pending = [name for name in heaps if 'texture' in name.lower() or name == 'Graphics']
     while pending:
@@ -282,7 +340,8 @@ def inspect_release(root, profile):
                      selected_heaps=selected_heaps),
         restbl=dict(path=RESTBL, compressed_sha256=hashlib.sha256(table_raw).hexdigest(),
                     decoded_bytes=len(table_data), original_pin_verified=True, **restbl_summary(table_data)),
-        dictionary_sources=dictionary_record, hardware_validated=False, hd_heap_expansion_validated=False)
+        dictionary_sources=dictionary_record, packaged_deck_ui_restbl=packaged_ui,
+        hardware_validated=False, hd_heap_expansion_validated=False)
 
 
 def main():
