@@ -32,6 +32,16 @@ TOTK：新增呈现端 FSR 1 EASU＋RCAS，可调锐化 0–100；不支持的 V
 
 Steam Deck 使用 AMD GPU，本轮没有 DLSS。FSR3/4、帧生成不能仅靠移植一个菜单开关获得；深度、运动向量、抖动及 HUD 分离必须接到对应渲染后端并验证后才开放。
 
+### FSR4 / DLSS 评估更新（2026-11-15）
+
+AMD 在 2026-10-28 发布的 FSR SDK 2.4 已将 Upscaling 4.1.2 扩展到 RX 6000 独显及部分 Ryzen APU，其中包含 Z2 A，并增加 Vulkan 后端。因此不再采用“FSR4 仅限 RDNA4”的旧判断。[官方发布说明](https://gpuopen.com/learn/amd-fsr-sdk-2-4-rx-6000-ryzen-apus/)
+
+不过，官方支持名单未列 Steam Deck；同属 RDNA2 不能代替具体设备支持查询。固定检查的 [SDK v2.4.0](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/tree/7539ae8b6568ad29ed78a753404351daf3b5cca7/Kits/FidelityFX/signedbin) 中，Vulkan loader/upscaler/framegeneration 仍是 `.dll`／`.lib`，该目录无 Linux `.so`。这是当前原生 ELF 接入的缺口，Vulkan API 支持不能直接视为原生 Linux 支持；未下载 SDK、安装兼容层或修改掌机环境。
+
+后续接入须分别证明：可用的原生 Linux 库与许可；设备和 Vulkan 特性查询；对应场景的深度、运动向量、抖动、曝光和历史重置；HUD／透明物分离及资源生命周期；实际 GPU 时间、额外内存与画面收益。按官方资源查询区分必需和可选输入，FSR4 的 reactive／composition mask 不能误列为始终必需。[输入与资源要求](https://gpuopen.com/manuals/fsr_sdk/techniques/super-resolution-ml/)
+
+当前 TOTK 仍是呈现端 FSR1，不声明已接入 FSR3/4。DLSS 仍按 [NVIDIA RTX SDK](https://github.com/NVIDIA/DLSS) 的实际设备能力评估；Steam Deck 的 AMD GPU 没有可据此开放 DLSS 的证据。新后端只有通过实际调用、帧时间、重投影／拖影、回退、持久化和 Deck 使用链验收后才进入控制栏，默认画面路径保持原契约。`hardware_validated=false`。
+
 ## 上游与许可
 
 - [totk-pc-recomp](https://github.com/valentderah/totk-pc-recomp/tree/0ae47a578285cde080642c9e6c40316c99171ef1)：MIT；借鉴只读 Amiibo ABI 与 Atmosphère VM 执行。原作者 MIT 声明在 licenses/ 和 third_party/native-atmosphere/。
