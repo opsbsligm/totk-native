@@ -71,3 +71,7 @@ RESTBL 采用最终胜出的资源集合计算分配需求，结合受检原表�
 当前代码需经完整 CI／安全审查、私有整游戏重建、精确包验证及 Deck 游戏内回归后才能发布。原创微型 NSO／编译夹具、真实游戏输入、画面效果和长时间稳定性分开记录，不以组件通过宣称整机完成。
 
 HD 接入前的客体总账修正：`SetHeapSize` 和别名页映射共用同一把内存锁，核对模块镜像、堆和别名页的总占用；`GetInfo` 已用量与 `QueryMemory` 在锁内取一致视图。请求超出池时保留原分配，重复映射只计算新页，解除映射释放的额度可供之后请求使用。应用池与堆上限保持原值，不因此开放 HD 扩容。新增回归直接调用生产 SVC，覆盖满池后堆增长、释放后重试、交叠映射与并发请求；该修正仍须远端测试与完整 CI 验证。
+
+内存失败原因按接口分别返回：尺寸未对齐或超出 NX 参数范围用 `InvalidSize`，超过本作堆区域上限用 `OutOfMemory`，总池剩余额度不足用 `LimitReached`；堆尾仍被线程栈借用时拒绝缩小，保留原分配。语义依据固定核对的 Atmosphère [物理内存 SVC](https://github.com/Atmosphere-NX/Atmosphere/blob/3e8915011e1de89f595462d929c1cc3294470896/libraries/libmesosphere/source/svc/kern_svc_physical_memory.cpp)、[堆调整](https://github.com/Atmosphere-NX/Atmosphere/blob/3e8915011e1de89f595462d929c1cc3294470896/libraries/libmesosphere/source/kern_k_page_table_base.cpp)和 [NX 参数范围](https://github.com/Atmosphere-NX/Atmosphere/blob/3e8915011e1de89f595462d929c1cc3294470896/libraries/libmesosphere/include/mesosphere/board/nintendo/nx/kern_k_memory_layout.hpp)，本仓独立实现，不引入其内核代码。原生夹具中借用堆尾的案例仅构造映射登记，随后调用真实 `SetHeapSize`；它不冒称执行了完整线程栈映射或验证了游戏 SDK 的失败恢复。
+
+本次回收的是客体额度。现有 `decommit` 的 Linux 分支没有释放物理页，故不能把 `UnmapPhysicalMemory` 的计数下降当作宿主 RSS／GPU 引用已释放或重映射已清零。HD 后续必须结合活跃 GPU 资源引用和同步，验证真实页回收、重新映射的零填充及实际峰值；不得在设备仍使用页面时直接丢弃其背衬。

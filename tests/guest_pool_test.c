@@ -62,7 +62,7 @@ static void boundaries(void) {
     assert(!map(0, ALIAS_START, aliases));
     assert(used(7) == APP_POOL && used(22) == APP_POOL);
     /* Each request fits without the other allocation, but their sum must not. */
-    assert(resize(2 * unit) == 0xd401);
+    assert(resize(2 * unit) == 0x10801);
     assert(heap_size == unit && used(7) == APP_POOL);
     assert(map(0, ALIAS_START + aliases, 4096) == 0x10801);
     assert(used(22) == APP_POOL);
@@ -75,9 +75,25 @@ static void boundaries(void) {
     assert(used(7) == APP_POOL);
     assert(!map(1, ALIAS_START, aliases));
     assert(used(7) == image + unit);
-    assert(resize(1) == 0xd401 && resize(HEAP_CAP + unit) == 0xd401);
-    assert(resize(UINT64_MAX & ~(unit - 1)) == 0xd401);
+    assert(resize(1) == 0xca01 && resize(HEAP_CAP + unit) == 0xd001);
+    assert(resize(NX_HEAP_REQUEST_LIMIT) == 0xca01);
+    assert(resize(UINT64_MAX & ~(unit - 1)) == 0xca01);
     assert(used(7) == image + unit);
+    assert(!resize(0) && used(7) == image);
+}
+
+static void borrowed_tail(void) {
+    const uint64_t unit = 0x200000, image = runtime_image_bytes();
+    reset(); assert(!resize(3 * unit));
+    /* Seed a live stack's bookkeeping without allocating or copying guest RAM.
+       The resize itself still enters the actual SVC and production registry. */
+    pthread_mutex_lock(&memory_lock);
+    stack_maps[0] = (StackMap){STACK_START, HEAP_START + 2 * unit, 4096}; nstack_maps = 1;
+    pthread_mutex_unlock(&memory_lock);
+    assert(resize(2 * unit) == 0xd401 && used(7) == image + 3 * unit);
+    assert(!resize(4 * unit) && !resize(3 * unit)); /* keep the borrowed page */
+    pthread_mutex_lock(&memory_lock); nstack_maps = 0; pthread_mutex_unlock(&memory_lock);
+    assert(!resize(2 * unit) && used(7) == image + 2 * unit);
 }
 
 static void overlaps(void) {
@@ -131,7 +147,7 @@ static void concurrent_growth(void) {
 int main(void) {
     g_nmodules = 1; g_modules[0].size = 32ULL << 20;
     runtime_memory_init();
-    boundaries(); overlaps(); concurrent_growth();
-    puts("Guest pool: actual SetHeapSize/GetInfo/MapPhysicalMemory, exact capacity, overlap and 32 concurrent races PASS");
+    boundaries(); borrowed_tail(); overlaps(); concurrent_growth();
+    puts("Guest pool: actual memory SVCs, ABI errors, borrowed tail, exact capacity, overlap and 32 concurrent races PASS");
     return 0;
 }

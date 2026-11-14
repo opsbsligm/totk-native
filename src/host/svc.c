@@ -28,6 +28,7 @@
 #define STACK_START   (LOW_START + STACK_OFF)
 #define HEAP_START    (LOW_START + STACK_OFF + STACK_SIZE + 0x10000000ULL)
 #define HEAP_CAP      (4ULL << 30)   /* 1.4.3 sets a 2.2 GiB heap during nninitStartup */
+#define NX_HEAP_REQUEST_LIMIT (8ULL << 30) /* NX SVC parameter bound, not an allocation budget */
 #define ASLR_START    LOW_START
 #define ASLR_SIZE     ((1ULL << 39) - LOW_START)
 #define SYSTEM_RESOURCE_BUDGET (32ULL << 20)
@@ -336,13 +337,23 @@ uint64_t runtime_svc(unsigned num, uint64_t *r, uint64_t pc) {
     }
     case 0x01: {   /* SetHeapSize */
         uint64_t size = r[1];
-        if (size > HEAP_CAP || size % 0x200000) { r[0] = 0xd401; return r[0]; }
+        if (size % 0x200000 || size >= NX_HEAP_REQUEST_LIMIT) { r[0] = 0xca01; return r[0]; }
+        if (size > HEAP_CAP) { r[0] = 0xd001; return r[0]; }
         pthread_mutex_lock(&memory_lock);
         if (!application_pool_fits(size, alias_bytes)) {
             pthread_mutex_unlock(&memory_lock);
-            r[0] = 0xd401; return r[0];
+            r[0] = 0x10801; return r[0];
         }
-        if (size < heap_size) decommit(HEAP_START + size, heap_size - size);
+        if (size < heap_size) {
+            /* A live stack borrows these backing pages until UnmapMemory. */
+            for (unsigned i = 0; i < nstack_maps; i++) {
+                if (overlaps(HEAP_START + size, heap_size - size, stack_maps[i].src, stack_maps[i].size)) {
+                    pthread_mutex_unlock(&memory_lock);
+                    r[0] = 0xd401; return r[0];
+                }
+            }
+            decommit(HEAP_START + size, heap_size - size);
+        }
         heap_size = size;
         pthread_mutex_unlock(&memory_lock);
         r[0] = 0; r[1] = HEAP_START;
