@@ -3,6 +3,7 @@
 Each stage is explicit: check, lift, romfs. Run only when existing games are idle.
 """
 import argparse
+from contextlib import nullcontext
 import os
 from pathlib import Path
 import subprocess
@@ -16,6 +17,7 @@ def main():
     p.add_argument('--dump', type=Path, required=True)
     p.add_argument('--data', type=Path, required=True)
     p.add_argument('--stage', choices=('check', 'lift', 'romfs'), default='check')
+    p.add_argument('--code-mods', type=Path, help='Read-only version-bound ExeFS patches before AOT')
     a = p.parse_args()
     try:
         check_exefs(a.dump / 'exefs')
@@ -25,6 +27,11 @@ def main():
             rows_for(a.dump / 'romfs')
         if not packed and not (a.dump / 'romfs/Pack/ZsDic.pack.zs').is_file():
             p.error('Missing extracted TOTK RomFS (Pack/ZsDic.pack.zs)')
+        context = None
+        if a.code_mods is not None and a.stage != 'romfs':
+            from static_mods import prepare
+            a.data.mkdir(parents=True, exist_ok=True)
+            context = prepare(a.dump/'exefs', a.code_mods, work=a.data)
         if a.stage == 'check':
             print('TOTK 1.4.3 code identity verified; RomFS content validation requires --stage romfs')
             return
@@ -33,15 +40,22 @@ def main():
             out = a.data / 'generated'
             out.mkdir(exist_ok=True)
             (out / 'manifest-linux.json').unlink(missing_ok=True)
-            for module, (base, _) in BASES.items():
-                directory = out / module
-                directory.mkdir(exist_ok=True)
-                with (out / (module + '.log')).open('w') as log:
-                    subprocess.run([sys.executable, '-X', 'faulthandler', str(ROOT/'tools/lifter/gen.py'),
-                                    module, str((a.dump/'exefs'/module).resolve()), hex(base), str(directory),
-                                    '--simd', 'c', *(['--native-60fps'] if module == 'main' else [])], stdout=log, stderr=subprocess.STDOUT, check=True)
-                print('Lifted ' + module, flush=True)
-            files = seal_generated(out, a.dump / 'exefs')
+            if context is None:
+                (out/'static-mods.json').unlink(missing_ok=True)
+            from static_mods import temporary_exefs, publish_context
+            inputs = temporary_exefs(context, a.data) if context is not None else nullcontext(a.dump/'exefs')
+            with inputs as exefs:
+                for module, (base, _) in BASES.items():
+                    directory = out / module
+                    directory.mkdir(exist_ok=True)
+                    with (out / (module + '.log')).open('w') as log:
+                        subprocess.run([sys.executable, '-X', 'faulthandler', str(ROOT/'tools/lifter/gen.py'),
+                                        module, str((exefs/module).resolve()), hex(base), str(directory),
+                                        '--simd', 'c', *(['--native-60fps'] if module == 'main' else [])], stdout=log, stderr=subprocess.STDOUT, check=True)
+                    print('Lifted ' + module, flush=True)
+            if context is not None:
+                publish_context(context, out)
+            files = seal_generated(out, a.dump / 'exefs', a.code_mods)
             print('Verified generated source files:', len(files))
         else:
             if packed:
@@ -56,7 +70,7 @@ def main():
             if n != want['ROMFS_FILES'] or size < want['ROMFS_BYTES'] or content != want['ROMFS_CONTENT']:
                 p.error('RomFS differs from upstream 1.4.3 content fingerprint')
             print('RomFS content verified:', content)
-    except (OSError, ValueError, subprocess.CalledProcessError) as e:
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
         p.exit(1, str(e) + '\n')
 
 

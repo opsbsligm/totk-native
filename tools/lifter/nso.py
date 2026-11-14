@@ -10,8 +10,12 @@ R_AARCH64_ABS64, R_AARCH64_GLOB_DAT, R_AARCH64_JUMP_SLOT, R_AARCH64_RELATIVE = 2
 
 
 class Nso:
-    def __init__(self, path):
-        raw = open(path, 'rb').read()
+    def __init__(self, path, *, raw=None):
+        if raw is None:
+            with open(path, 'rb') as stream:
+                raw = stream.read()
+        else:
+            raw = bytes(raw)
         assert raw[:4] == b'NSO0', path
         flags = struct.unpack_from('<I', raw, 0xC)[0]
         self.build_id = raw[0x40:0x60].rstrip(b'\0').hex()

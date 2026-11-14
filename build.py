@@ -21,6 +21,13 @@ def external_path(value):
     return path
 
 
+def mod_path(value):
+    path = Path(value).expanduser().absolute()
+    if '..' in path.parts or any(p.is_symlink() for p in (path, *path.parents)):
+        raise argparse.ArgumentTypeError('Code mods must not contain traversal or symlink path components')
+    return external_path(value)
+
+
 def image_name():
     digest = hashlib.sha256()
     for rel in ('Dockerfile', 'tools/build_deps.sh', 'requirements-build.lock'):
@@ -36,11 +43,18 @@ def main():
     p.add_argument('--distfiles', type=external_path, help='Optional cache of hash-verified public dependency archives')
     p.add_argument('--jobs', type=int, choices=(1, 2, 3, 4), default=2)
     p.add_argument('--stage', choices=('code', 'assets', 'package', 'all'), default='all')
+    p.add_argument('--code-mods', type=mod_path, help='Read-only mods/<name>/exefs patches; regeneration is required')
     a = p.parse_args()
     if a.command == 'build' and (a.dump is None or not a.dump.is_dir()):
         p.error('build requires --dump with a decrypted, updated game directory')
     if a.dump and (a.dump == a.work or a.dump.is_relative_to(a.work) or a.work.is_relative_to(a.dump)):
         p.error('Input dump and output work directories must not overlap')
+    if a.code_mods is not None:
+        if a.command != 'build' or not a.code_mods.is_dir():
+            p.error('--code-mods requires build and an existing private mod directory')
+        for other in (a.work, a.dump):
+            if a.code_mods == other or a.code_mods.is_relative_to(other) or other.is_relative_to(a.code_mods):
+                p.error('Code mods, dump and work directories must not overlap')
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         p.error('Use an x86_64 Linux build host, including Steam Deck Desktop Mode')
     if not shutil.which('docker'):
@@ -80,8 +94,12 @@ def main():
            '--env', 'HOME=/work/home', '--env', 'PYTHONDONTWRITEBYTECODE=1']
     if a.dump:
         cmd += ['--volume', f'{a.dump}:/input:ro']
+    if a.code_mods is not None:
+        cmd += ['--volume', f'{a.code_mods}:/mods:ro']
     cmd += [image, 'python3', '/src/tools/pipeline.py', a.command,
             '--work', '/work', '--jobs', str(a.jobs), '--stage', a.stage]
+    if a.code_mods is not None:
+        cmd += ['--code-mods', '/mods']
     subprocess.run(cmd, check=True)
 
 

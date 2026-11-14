@@ -58,33 +58,47 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--work', type=Path, required=True)
     p.add_argument('--dump', type=Path, required=True)
+    p.add_argument('--code-mods', type=Path, help='The same read-only static patches used for code and assets')
     a = p.parse_args()
     work, dump = a.work.resolve(), a.dump.resolve()
     ensure_clean(ROOT)
     commit = revision(ROOT)
-    verify(work, 'code')
-    verify(work, 'assets')
+    from linux_inputs import verify_generated_inputs
+    from static_mods import phase_inputs
+    _, context = verify_generated_inputs(work/'data/generated', dump/'exefs', a.code_mods)
+    verify(work, 'code', inputs=phase_inputs(context))
+    verify(work, 'assets', inputs=phase_inputs(context))
     profile = json.loads((ROOT / 'UPSTREAM.json').read_text())
     target = work / 'package'
     staging = work / 'package.new'
     if target.exists() or staging.exists():
         p.error('Package already exists; move it aside explicitly before creating a replacement')
     staging.mkdir()
+    staging_inode = staging.stat().st_ino
     try:
         from font_inputs import validate_shared_fonts
         validate_shared_fonts(dump / 'fonts')
-        from linux_inputs import check_exefs, verify_generated
+        from linux_inputs import check_exefs
         check_exefs(dump / 'exefs')
-        verify_generated(work / 'data/generated', dump / 'exefs')
         receipt = json.loads((work / 'game/ultratears.build.json').read_text())
         if receipt['binary_sha256'] != digest(work / 'game/ultratears'):
             raise ValueError('Game executable differs from successful build receipt')
+        from static_mods import record as mod_record
+        if (receipt.get('static_mods') != (mod_record(context) if context is not None else None)
+                or receipt.get('exefs') != check_exefs(dump/'exefs')
+                or receipt.get('generated_manifest_sha256') != digest(work/'data/generated/manifest-linux.json')):
+            raise ValueError('Game executable was built for different generated or static mod inputs')
         executable = 'ultratears'
         shutil.copy2(work / 'game' / executable, staging / executable)
         (staging / 'data').mkdir()
         for name in ('romfs', 'shaders', 'textures', 'deck-ui'):
             copy_tree(work / 'data' / name, staging / 'data' / name)
         copy_tree(dump / 'exefs', staging / 'data/exefs')
+        if context is not None:
+            for module, raw in context.prepared.modules.items():
+                (staging/'data/exefs'/module).write_bytes(raw)
+            (staging/'provenance').mkdir()
+            (staging/'provenance/static-mods.json').write_text(json.dumps(mod_record(context), indent=2)+'\n')
         copy_tree(dump / 'fonts', staging / 'data/fonts')
         fonts = ['0-standard', '1-chinese-simplified', '2-chinese-simplified-extension',
                  '3-chinese-traditional', '4-korean', '5-nintendo-extension']
@@ -111,10 +125,20 @@ def main():
             files={path.relative_to(staging).as_posix(): dict(size=path.stat().st_size, sha256=digest(path))
                    for path in sorted(staging.rglob('*')) if path.is_file()})
         (staging / 'bundle.json').write_text(json.dumps(manifest, indent=2) + '\n')
+        # Recheck original modules, patch bytes and generated output after copying.
+        # Nothing is installed if any input changed during package assembly.
+        _, final_context = verify_generated_inputs(work/'data/generated', dump/'exefs', a.code_mods)
+        if phase_inputs(final_context) != phase_inputs(context):
+            raise ValueError('Static mod inputs changed during package assembly')
+        verify(work, 'code', inputs=phase_inputs(final_context))
+        verify(work, 'assets', inputs=phase_inputs(final_context))
         staging.rename(target)
         print('Private package ready: ' + str(target))
     except BaseException:
-        # Keep a failed staging directory for diagnosis. Never publish it as package/.
+        # The original inputs/build outputs remain authoritative. A failed copy
+        # is reproducible, and must not strand another full private game tree.
+        if staging.is_dir() and not staging.is_symlink() and staging.stat().st_ino == staging_inode:
+            shutil.rmtree(staging)
         raise
 
 

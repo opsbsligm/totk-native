@@ -76,19 +76,30 @@ def generated_files(generated):
     return files
 
 
-def lifter_fingerprints():
+def lifter_fingerprints(code_mods=False):
     files = sorted((ROOT / 'tools/lifter').glob('*.py'))
+    if code_mods:
+        files += [ROOT/'tools'/name for name in ('code_mods.py', 'mods_snapshot.py', 'static_mods.py')]
     if not files:
         raise ValueError('Missing lifter sources')
     return {p.relative_to(ROOT).as_posix(): digest(p) for p in files}
 
 
-def seal_generated(generated, exefs):
+def seal_generated(generated, exefs, code_mods=None):
     hashes = check_exefs(exefs)
+    context = None
+    if code_mods is not None:
+        from static_mods import verify_context
+        context = verify_context(generated, exefs, code_mods)
+    elif (Path(generated)/'static-mods.json').exists():
+        raise ValueError('Static mod record present without --code-mods')
     files = generated_files(generated)
     payload = dict(schema=1, profile='native-60fps-v1', game='TOTK', version='1.4.3', upstream=UPSTREAM, exefs=hashes,
-                   lifter=lifter_fingerprints(),
+                   lifter=lifter_fingerprints(context is not None),
                    files={p.relative_to(generated).as_posix(): digest(p) for p in files})
+    if context is not None:
+        from static_mods import record
+        payload['static_mods'] = record(context)
     manifest = Path(generated) / 'manifest-linux.json'
     temporary = manifest.with_suffix('.json.new')
     temporary.write_text(json.dumps(payload, indent=2) + '\n')
@@ -96,16 +107,32 @@ def seal_generated(generated, exefs):
     return files
 
 
-def verify_generated(generated, exefs):
+def verify_generated_inputs(generated, exefs, code_mods=None):
     generated = Path(generated).resolve()
     hashes = check_exefs(exefs)
+    context = None
+    if code_mods is not None:
+        from static_mods import verify_context
+        context = verify_context(generated, exefs, code_mods)
+    elif (generated/'static-mods.json').exists():
+        raise ValueError('Static mod record present without --code-mods')
     data = json.loads((generated / 'manifest-linux.json').read_text())
     if (data.get('profile') != 'native-60fps-v1' or data.get('schema') != 1 or data.get('game') != 'TOTK' or data.get('version') != '1.4.3'
             or data.get('upstream') != UPSTREAM or data.get('exefs') != hashes
-            or data.get('lifter') != lifter_fingerprints()):
+            or data.get('lifter') != lifter_fingerprints(context is not None)):
         raise ValueError('Generated code provenance differs; regenerate from checked 1.4.3 input')
+    selected_mods = None
+    if context is not None:
+        from static_mods import record
+        selected_mods = record(context)
+    if data.get('static_mods') != selected_mods:
+        raise ValueError('Generated static mod identity differs; regenerate and recompile')
     files = generated_files(generated)
     actual = {p.relative_to(generated).as_posix(): digest(p) for p in files}
     if data.get('files') != actual:
         raise ValueError('Generated files changed or are incomplete; regenerate them')
-    return files
+    return files, context
+
+
+def verify_generated(generated, exefs, code_mods=None):
+    return verify_generated_inputs(generated, exefs, code_mods)[0]

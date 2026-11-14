@@ -6,4 +6,35 @@
 
 内置六项 Deck 图示/布局资源优先，以保持按键提示一致；使用 mod 替换这些路径前需要显式关闭 `TOTK_STEAMDECK_UI`。没有 mod 时沿用原文件路径。
 
-当前已接入 Linux 文件读取、大小与类型查询；RomFS 目录枚举继续沿用现有不支持行为。ExeFS IPS/PCHTXT 重编译、HD 贴图包的 guest 堆扩容及控制栏管理仍待实现。组件测试不能代替游戏内贴图、内存和性能验收，`hardware_validated=false`。
+当前 RomFS 已接入 Linux 文件读取、大小与类型查询；目录枚举继续沿用现有不支持行为。静态 ExeFS 代码补丁接入下述构建链；HD 贴图包的 guest 堆扩容及控制栏管理仍待实现。组件测试不能代替游戏内贴图、内存和性能验收，`hardware_validated=false`。
+
+
+## 静态 ExeFS 代码补丁（CA4）
+
+```text
+/private/totk-mods/
+  10-first/exefs/<完整 NSO Build ID>.ips
+  20-later/exefs/可读名称.pchtxt
+  .disabled/exefs/暂不启用.pchtxt
+```
+
+```sh
+python3 build.py build --dump /mnt/private/totk-1.4.3 \
+  --work /mnt/build/totk --code-mods /mnt/private/totk-mods
+```
+
+原始 dump 与 Mod 根目录分别只读挂载；源码、输入、Mod 和工作目录分离。`--code-mods` 仅用于 Linux 私有游戏构建，不用于公共 runtime 归档。没有该选项时保持原构建路径；帧时序、DRS、按键及用户配置的既有默认值不改变。
+
+构建先以受管 profile 核对全部原始 1.4.3 模块，再严格解析标准 IPS、IPS32 和 PCHTXT。完整 Build ID 绑定模块，IPS 文件名或 PCHTXT 首条指令必须匹配，允许省略完整的尾部零字节，不按任意短前缀猜测版本。支持零字节、RLE、enabled/disabled、offset_shift 和 UTF-8 字符串；点号目录停用，按目录／文件 UTF-8 字节顺序处理，后者覆盖前者。错版本、截断、非法范围、未知格式、符号链接／设备／FIFO 和预算超限明确失败。
+
+补丁先完整校验，再进入真实 AOT；不是运行时往已编译的宿主指令地址写数据。NSO 头、段间空洞、BSS、MOD0／dynamic／符号／异常表、重定位目标、由宿主 HLE 接管的函数、既有 DRS 替换点及18处原生帧时序校验点均受保护。HLE 名单用同一 Linux 构建生成的实际编译命令，经编译器预处理后读取注册表，包含包装宏和条件分支；无法完整识别就停止，不用字符串搜索猜测。
+
+准备好的模块只在私有同卷临时目录供生成和 shader 导出使用，成功或失败都清理，不为每个源码 SHA 保留整套 ExeFS 副本。生成成功后仅留下 `data/generated/static-mods.json`，其中绑定原始模块、活动补丁、有效模块及宿主 HLE 名单的摘要。生成清单、代码和资源阶段回执、成功 ELF 的构建记录均绑定同一组补丁；打包再次核原始输入、补丁、生成文件、二进制及两阶段回执，并复制与 AOT 相同的补丁后模块及 `provenance/static-mods.json`。补丁或任何阶段输入变化必须重新生成／编译，不会用新代码搭配旧 shader 资源。单独构建 assets 时须先有同组补丁的有效 code 生成结果。
+
+移除代码 Mod 后，使用原始 dump 重新构建并省略 `--code-mods`；旧 Mod 生成清单不能当默认输入复用。仅删除掌机上的 IPS/PCHTXT 不会还原已编译代码。工作盘既有容量门禁保留，物理宿主／快照余量仍须另核；这不是已部署的全局配额。失败打包只清理本次创建且身份未变的 `package.new`，原始输入和成功构建输出保留。
+
+## CA4 后续验收
+
+静态代码补丁、运行时 RomFS 覆盖与 HD 堆策略分别验收。HD 阶段须以本作 Build ID 和实际分配链为依据，绑定游戏堆请求、根堆、GPU资源池及预算表，评估 Steam Deck 共享内存、回退与移除行为；不能照搬 BOTW SDK7 的偏移／容量，也不把 host 告警阈值当堆扩容。控制栏管理只在后端和持久化行为验证后开放。
+
+当前代码需经完整 CI／安全审查、私有整游戏重建、精确包验证及 Deck 游戏内回归后才能发布。原创微型 NSO／编译夹具、真实游戏输入、画面效果和长时间稳定性分开记录，不以组件通过宣称整机完成。

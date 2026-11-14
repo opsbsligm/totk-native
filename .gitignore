@@ -73,3 +73,14 @@ id_rsa*
 *.key
 *.token
 *pat-secret*
+
+# Private test evidence stays outside source; block accidental local captures.
+/test-output/
+/screenshots/
+/recordings/
+/ui-snapshots/
+*.pcap
+*.pcapng
+*.sqlite
+*.sqlite3
+*.db

@@ -41,19 +41,23 @@ def output_files(work, directories):
     return result
 
 
-def publish(work, phase, directories, before):
+def publish(work, phase, directories, before, *, inputs=None):
     if source_stamp() != before:
         raise ValueError('Production source changed during build; refusing receipt')
     data = dict(schema=1, phase=phase, source=before, files=output_files(work, directories))
+    if inputs is not None:
+        data['inputs'] = inputs
     temporary = work / (phase + '-receipt.json.new')
     temporary.write_text(json.dumps(data, indent=2) + '\n')
     temporary.replace(work / (phase + '-receipt.json'))
 
 
-def verify(work, phase):
+def verify(work, phase, *, inputs=None):
     data = json.loads((work / (phase + '-receipt.json')).read_text())
     if data.get('schema') != 1 or data.get('phase') != phase or data.get('source') != source_stamp():
         raise ValueError('Phase receipt does not match production source: ' + phase)
+    if data.get('inputs') != inputs:
+        raise ValueError('Phase receipt does not match the selected static mod inputs: '+phase)
     if not isinstance(data.get('files'), dict) or not data['files']:
         raise ValueError('Missing phase output manifest: ' + phase)
     for name, record in data['files'].items():
