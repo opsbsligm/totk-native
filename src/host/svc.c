@@ -73,6 +73,13 @@ uint64_t runtime_image_bytes(void) {
     return (total + 0xfff) & ~0xfffULL;
 }
 
+/* Call with memory_lock held. Heap and alias pages share one application pool;
+   subtract before comparing so a future larger request cannot wrap the sum. */
+static int application_pool_fits(uint64_t heap, uint64_t aliases) {
+    uint64_t image = runtime_image_bytes();
+    return image <= APP_POOL && heap <= APP_POOL - image && aliases <= APP_POOL - image - heap;
+}
+
 /* ---------- MapMemory / UnmapMemory into the stack region (MacNativeGames stack_move) ---------- */
 typedef struct { uint64_t dst, src, size; } StackMap;
 static StackMap stack_maps[4096];
@@ -81,10 +88,10 @@ static int overlaps(uint64_t a, uint64_t n, uint64_t b, uint64_t m) { return a <
 static uint64_t stack_move(int unmap, uint64_t dst, uint64_t src, uint64_t size) {
     if (!size || ((dst | src | size) & 4095)) return 0xcc01;
     if (dst < STACK_START || size > STACK_SIZE || dst - STACK_START > STACK_SIZE - size) return 0xdc01;
-    int inHeap = src >= HEAP_START && size <= heap_size && src - HEAP_START <= heap_size - size;
     int inAlias = src >= ALIAS_START && size <= ALIAS_SIZE && src - ALIAS_START <= ALIAS_SIZE - size;
-    if (!inHeap && !inAlias) return 0xdc01;
     pthread_mutex_lock(&memory_lock);
+    int inHeap = src >= HEAP_START && size <= heap_size && src - HEAP_START <= heap_size - size;
+    if (!inHeap && !inAlias) { pthread_mutex_unlock(&memory_lock); return 0xdc01; }
     if (inAlias) {
         unsigned first = (unsigned)((src - ALIAS_START) / 4096);
         for (uint64_t i = 0; i < size / 4096; i++)
@@ -129,7 +136,7 @@ static uint64_t alias_map(int unmap, uint64_t addr, uint64_t size) {
     if (!unmap)
         for (unsigned i = 0; i < count; i++) if (!alias_pages[first + i]) fresh += 4096;
     /* Out of the application pool is LimitReached (0x10801), which the SDK treats as recoverable out-of-memory. */
-    if (!unmap && fresh + alias_bytes + heap_size + runtime_image_bytes() > APP_POOL) {
+    if (!unmap && !application_pool_fits(heap_size, alias_bytes + fresh)) {
         pthread_mutex_unlock(&memory_lock);
         return 0x10801;
     }
@@ -253,7 +260,11 @@ uint64_t runtime_svc(unsigned num, uint64_t *r, uint64_t pc) {
         case 4: value = HEAP_START; break;
         case 5: value = HEAP_CAP; break;
         case 6: case 21: value = APP_POOL; break;
-        case 7: case 22: value = runtime_image_bytes() + heap_size + alias_bytes; break;
+        case 7: case 22:
+            pthread_mutex_lock(&memory_lock);
+            value = runtime_image_bytes() + heap_size + alias_bytes;
+            pthread_mutex_unlock(&memory_lock);
+            break;
         case 8: value = 0; break;
         case 10: value = 0; break;
         case 11: value = ((uint64_t)rand() << 32) ^ (uint64_t)rand() ^ runtime_now_ns(); break;
@@ -275,16 +286,21 @@ uint64_t runtime_svc(unsigned num, uint64_t *r, uint64_t pc) {
     case 0x2c: case 0x2d: {
         uint64_t a = r[0], n = r[1];
         r[0] = alias_map(num == 0x2d, a, n);
-        if (r[0])
+        if (r[0]) {
+            pthread_mutex_lock(&memory_lock);
+            uint64_t aliases = alias_bytes, heap = heap_size;
+            pthread_mutex_unlock(&memory_lock);
             fprintf(stderr, "[totk] %sMapPhysicalMemory %#llx+%#llx failed %#llx (alias %#llx used, heap %#llx)\n",
                     num == 0x2d ? "Un" : "", (unsigned long long)a, (unsigned long long)n, (unsigned long long)r[0],
-                    (unsigned long long)alias_bytes, (unsigned long long)heap_size);
+                    (unsigned long long)aliases, (unsigned long long)heap);
+        }
         return r[0];
     }
     case 0x04: case 0x05: r[0] = stack_move(num == 5, r[0], r[1], r[2]); return r[0];
     case 0x06: {   /* QueryMemory(x0 info out, x2 address) */
         uint64_t addr = r[2], base = addr & ~0xfffULL, size = 0x1000;
         unsigned state = 0, perm = 0, attr = 0;
+        pthread_mutex_lock(&memory_lock);
         uint64_t heap_end = HEAP_START + heap_size;
         if (addr >= main_stack_lo && addr < main_stack_hi) { base = main_stack_lo; size = main_stack_hi - main_stack_lo; state = 0xb; perm = 3; }
         else if (addr >= HEAP_START && addr < heap_end) { base = HEAP_START; size = heap_size; state = 5; perm = 3; }
@@ -296,7 +312,6 @@ uint64_t runtime_svc(unsigned num, uint64_t *r, uint64_t pc) {
         } else if (!addr) { base = 0; size = ASLR_START; state = 0; perm = 0; }
         else if (runtime_module_query(addr, &base, &size, &state, &perm, &attr)) {}
         else { state = 3; perm = 5; }
-        pthread_mutex_lock(&memory_lock);
         if (addr >= ALIAS_START && addr < ALIAS_START + ALIAS_SIZE) {
             unsigned p = (unsigned)((addr - ALIAS_START) / 4096), low = p, high = p + 1;
             unsigned allocated = alias_pages[p];
@@ -321,9 +336,15 @@ uint64_t runtime_svc(unsigned num, uint64_t *r, uint64_t pc) {
     }
     case 0x01: {   /* SetHeapSize */
         uint64_t size = r[1];
-        if (size > HEAP_CAP || size % 0x200000 || size + runtime_image_bytes() > APP_POOL) { r[0] = 0xd401; return r[0]; }
+        if (size > HEAP_CAP || size % 0x200000) { r[0] = 0xd401; return r[0]; }
+        pthread_mutex_lock(&memory_lock);
+        if (!application_pool_fits(size, alias_bytes)) {
+            pthread_mutex_unlock(&memory_lock);
+            r[0] = 0xd401; return r[0];
+        }
         if (size < heap_size) decommit(HEAP_START + size, heap_size - size);
         heap_size = size;
+        pthread_mutex_unlock(&memory_lock);
         r[0] = 0; r[1] = HEAP_START;
         return 0;
     }
