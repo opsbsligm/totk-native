@@ -74,6 +74,7 @@ class Byml:
             raise ValueError('Unsupported HeapDef BYML header')
         self.version = self.number(2, '<H')
         self.keys, self.strings, self.root = struct.unpack_from('<III', raw, 4)
+        self.fields_remaining = 8192
 
     def number(self, at, kind='<I'):
         if at < 0 or at+struct.calcsize(kind) > len(self.raw):
@@ -100,6 +101,9 @@ class Byml:
 
     def fields(self, node):
         count = self.head(node, 0xc1, 8); result = {}
+        if count > self.fields_remaining:
+            raise ValueError('BYML field traversal exceeds its work budget')
+        self.fields_remaining -= count
         for i in range(count):
             key, value = struct.unpack_from('<II', self.raw, node+4+8*i)
             name = self.string(self.keys, key & 0xffffff)
@@ -286,7 +290,11 @@ def main():
     parser.add_argument('--release', type=Path, required=True)
     args = parser.parse_args()
     try:
-        report = json.dumps(inspect_release(args.release, canonical_profile()), ensure_ascii=False, indent=2)
+        result = inspect_release(args.release, canonical_profile())
+        result['diagnostic_source_sha256'] = {
+            name:hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest()
+            for name in ('inspect_hd_tables.py', 'zstd_codec.py')}
+        report = json.dumps(result, ensure_ascii=False, indent=2)
         if len(report.encode()) > 32 << 10:
             raise ValueError('Metadata report exceeds its output budget')
         print(report)
