@@ -112,6 +112,7 @@ class TotkStaticMods(unittest.TestCase):
             if command[index+1] == fail_module:
                 raise subprocess.CalledProcessError(7, ['synthetic-lift-failure'])
             with mock.patch.object(sys, 'argv', command[index:]), \
+                 mock.patch.object(sys, 'path', [str(ROOT/'tools/lifter'), *sys.path]), \
                  mock.patch.object(clock, 'configure', return_value=None), \
                  contextlib.redirect_stdout(kwargs['stdout']), contextlib.redirect_stderr(kwargs['stderr']):
                 gen.main()
