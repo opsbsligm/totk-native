@@ -194,10 +194,12 @@ def restbl_summary(raw):
 
 def inspect_packaged_ui(root, original, original_decoded, decode):
     """Check the packaged UI table, not whether a live game enabled it."""
-    if not (root/'data/deck-ui').exists():
+    if not os.path.lexists(root/'data/deck-ui'):
         return dict(present=False, runtime_active_verified=False)
     with checked_file(root, 'data/deck-ui/recipe.json', 1 << 20) as stream:
         recipe = json.load(stream)
+    if not isinstance(recipe, dict):
+        raise ValueError('Invalid packaged Deck UI recipe')
     with checked_file(root, 'data/deck-ui/fonts.bin', 4096) as stream:
         header = stream.read(4097)
     files = recipe.get('files')
@@ -226,7 +228,7 @@ def inspect_packaged_ui(root, original, original_decoded, decode):
         raise ValueError('Invalid packaged UI growth inventory')
     targets = {}
     for name, extra in growth.items():
-        if (not isinstance(name, str) or len(name.encode()) > 512 or '\0' in name
+        if (not isinstance(name, str) or not name or len(name.encode()) > 512 or '\0' in name or '\\' in name
                 or PurePosixPath(name).is_absolute() or '..' in PurePosixPath(name).parts
                 or PurePosixPath(name).as_posix() != name or type(extra) is not int or not 0 < extra <= 1 << 20):
             raise ValueError('Invalid packaged UI allocation growth')
@@ -243,13 +245,18 @@ def inspect_packaged_ui(root, original, original_decoded, decode):
     end = 22+8*summary['crc_entries']
     if changed != len(targets) or raw[end:] != original_decoded[end:]:
         raise ValueError('Packaged UI growth targets/collision entries differ')
+    for i in range(summary['collision_entries']):
+        at = end+i*(summary['collision_name_width']+4)
+        name = raw[at:at+summary['collision_name_width']].split(b'\0', 1)[0].decode('utf-8')
+        if name in {name.removesuffix('.zs') for name in growth}:
+            raise ValueError('Packaged UI growth needs a collision-specific resource profile')
     return dict(present=True, recipe_schema=2, table_sha256=hashlib.sha256(patched).hexdigest(),
                 declared_growth_entries=len(growth), changed_crc_entries=changed,
                 table_matches_declared_growth=True, runtime_active_verified=False,
                 other_ui_asset_payloads_verified=False)
 
 
-def inspect_release(root, profile):
+def inspect_release(root, profile, *, verify_romfs=False):
     """Caller supplies a controlled profile, never one read from a mod/dump."""
     import zstd_codec as zstd
     root = Path(root).resolve(strict=True)
@@ -283,10 +290,24 @@ def inspect_release(root, profile):
         raise ValueError('Packed index context differs from controlled profile')
     if set(selected) != {HEAPDEF, RESTBL, DICTIONARIES}:
         raise ValueError('Required HD source resources are missing')
-    del index, rows
+    del index
     with checked_file(root, 'data/romfs/romfs.bin', end) as image:
         if os.fstat(image.fileno()).st_size != end:
             raise ValueError('Packed image length differs from its index')
+        if verify_romfs:
+            # Match pack_romfs.py: hash each file, then hash the ordered digests.
+            # Alignment bytes are not resource content; never copy/extract files.
+            content = hashlib.sha256()
+            for row in rows:
+                image.seek(row['offset']); left = row['size']; digest = hashlib.sha256()
+                while left:
+                    block = image.read(min(left, 1 << 20))
+                    if not block: raise ValueError('Truncated packed resource during full content verification')
+                    digest.update(block); left -= len(block)
+                content.update(digest.digest())
+            if content.hexdigest() != profile['ROMFS_CONTENT']:
+                raise ValueError('Full packed resource content differs from controlled profile')
+        del rows
         def read(name):
             row = selected[name]
             if not 0 < row['size'] <= MAX_RESOURCE: raise ValueError('Oversized resource: '+name)
@@ -333,11 +354,11 @@ def inspect_release(root, profile):
     return dict(schema=1, kind='totk-hd-input-inspection', version='1.4.3', read_only=True,
         profile_source_sha256=profile['profile_source_sha256'], exefs_sha256=hashes,
         romfs_context=dict(index_sha256=index_sha, files=profile['ROMFS_FILES'], bytes=total,
-                           index_declaration_matched=True, full_payload_hash_verified=False),
+                           index_declaration_matched=True, full_payload_hash_verified=verify_romfs),
         heapdef=dict(path=HEAPDEF, compressed_sha256=hashlib.sha256(heap_raw).hexdigest(),
                      decoded_sha256=hashlib.sha256(heap_data).hexdigest(), decoded_bytes=len(heap_data),
                      version=byml.version, original_pin_verified=False, heap_count=len(heaps),
-                     selected_heaps=selected_heaps),
+                     original_payload_profile_verified=verify_romfs, selected_heaps=selected_heaps),
         restbl=dict(path=RESTBL, compressed_sha256=hashlib.sha256(table_raw).hexdigest(),
                     decoded_bytes=len(table_data), original_pin_verified=True, **restbl_summary(table_data)),
         dictionary_sources=dictionary_record, packaged_deck_ui_restbl=packaged_ui,
@@ -347,9 +368,11 @@ def inspect_release(root, profile):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--release', type=Path, required=True)
+    parser.add_argument('--verify-romfs', action='store_true',
+                        help='Read every packed resource and match the controlled full-content fingerprint')
     args = parser.parse_args()
     try:
-        result = inspect_release(args.release, canonical_profile())
+        result = inspect_release(args.release, canonical_profile(), verify_romfs=args.verify_romfs)
         result['diagnostic_source_sha256'] = {
             name:hashlib.sha256((Path(__file__).parent/name).read_bytes()).hexdigest()
             for name in ('inspect_hd_tables.py', 'zstd_codec.py')}
