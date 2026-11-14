@@ -41,6 +41,8 @@ python3 build.py build --dump /mnt/private/totk-1.4.3 \
 
 以下是确定的实现约束，尚未开放 HD 开关，不代表当前运行包已完成扩容。
 
+只读诊断入口：`python3 tools/inspect_hd_tables.py --release /mnt/private/totk-release`。它使用源码受管的三个 ExeFS 指纹和原始 RESTBL 指纹，检查打包索引的数量／长度／范围，并有界读取 HeapDef、RESTBL 和需要的压缩字典；不解包整棵资源树，也不生成改写表。输出仅含所需堆的标量信息、数量与摘要，按私有证据管理，不提交或随公开制品发布。索引内声明的内容摘要匹配不代表完整 RomFS 内容已逐文件复核；HeapDef 的新观察摘要也不冒称已有原始 pin。此诊断不扩大堆、不启用 HD，也不代替私有构建和游戏验收。
+
 固定核对的 [上游 resolution.c](https://github.com/valentderah/totk-pc-recomp/blob/0ae47a578285cde080642c9e6c40316c99171ef1/runtime/resolution.c) 按输出／场景尺寸和阴影计算增量，改写 `System/HeapSize/Product.Nin_NX_NVN.HeapDef.byml.zs` 中的 `DynamicTextureAllocatorMem` 与父级 `Graphics`，并由 [memory.c](https://github.com/valentderah/totk-pc-recomp/blob/0ae47a578285cde080642c9e6c40316c99171ef1/runtime/memory.c) 同步增加应用内存池。这个路径证明的是渲染目标扩容，不能直接当作任意 HD 贴图包已支持自动扩容。上游 [Mods 说明](https://github.com/valentderah/totk-pc-recomp/blob/0ae47a578285cde080642c9e6c40316c99171ef1/docs/mods.md) 还把资源大小表合并与包内资源列为独立能力。
 
 本作当前 `src/host/svc.c` 的 `GetInfo`、`SetHeapSize` 和 alias 映射仍使用固定应用内存池。HD 接入按下列四层一起完成：
