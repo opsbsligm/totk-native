@@ -114,7 +114,7 @@ class TotkStaticMods(unittest.TestCase):
             with mock.patch.object(sys, 'argv', command[index:]), \
                  mock.patch.object(sys, 'path', [str(ROOT/'tools/lifter'), *sys.path]), \
                  mock.patch.object(clock, 'configure', return_value=None), \
-                 contextlib.redirect_stdout(kwargs['stdout']), contextlib.redirect_stderr(kwargs['stderr']):
+                 contextlib.redirect_stdout(kwargs['stdout']), contextlib.redirect_stderr(kwargs['stdout']):
                 gen.main()
             return subprocess.CompletedProcess(command, 0)
         argv = ['prepare_linux_game.py', '--dump', str(self.dump), '--data', str(self.work/'data'), '--stage', 'lift']
