@@ -13,8 +13,8 @@ class GuestPool(unittest.TestCase):
     def test_shared_pool_boundary_overlap_and_concurrent_requests(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as folder:
             binary = Path(folder) / 'guest-pool'
-            # Match the C compiler and sanitizer runtime used by sibling regressions.
-            subprocess.run(['cc', '-std=gnu17', '-O1', '-g', '-pthread',
+            # Production CPU/vector helpers require Clang and its matching compiler-rt.
+            subprocess.run(['clang', '-std=gnu17', '-O1', '-g', '-pthread',
                 '-fsanitize=address,undefined', '-fno-sanitize-recover=all',
                 str(ROOT / 'tests/guest_pool_test.c'), '-o', str(binary)], check=True)
             subprocess.run([str(binary)], check=True, timeout=20)
