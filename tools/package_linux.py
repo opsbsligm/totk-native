@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 
@@ -20,13 +21,44 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def writable_output_directories(root):
+    """Only give the owner access to newly copied output directories."""
+    def prepare(path):
+        info = path.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+            raise ValueError('Package output directory identity/owner differs')
+        path.chmod(stat.S_IMODE(info.st_mode) | 0o700)
+    prepare(root)
+    for current, directories, _ in os.walk(root, followlinks=False):
+        for name in directories:
+            path = Path(current) / name
+            if stat.S_ISDIR(path.lstat().st_mode):
+                prepare(path)
+
+
+def discard_staging(staging, identity):
+    """Remove only our original staging tree, including read-only copies."""
+    try:
+        info = staging.lstat()
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISDIR(info.st_mode) or (info.st_dev, info.st_ino) != identity:
+        return False
+    writable_output_directories(staging)
+    shutil.rmtree(staging)
+    return True
+
+
 def copy_tree(source, dest):
+    if source.is_symlink():
+        raise ValueError('Private package inputs must not contain symlinks: ' + str(source))
     if not source.is_dir():
         raise ValueError('Missing input directory: ' + str(source))
     for path in source.rglob('*'):
         if path.is_symlink():
             raise ValueError('Private package inputs must not contain symlinks: ' + str(path))
     shutil.copytree(source, dest)
+    writable_output_directories(dest)
 
 
 def bundle_libraries(binary, directory):
@@ -73,8 +105,9 @@ def main():
     staging = work / 'package.new'
     if target.exists() or staging.exists():
         p.error('Package already exists; move it aside explicitly before creating a replacement')
-    staging.mkdir()
-    staging_inode = staging.stat().st_ino
+    staging.mkdir(mode=0o700)
+    staging_info = staging.stat()
+    staging_identity = (staging_info.st_dev, staging_info.st_ino)
     try:
         from font_inputs import validate_shared_fonts
         validate_shared_fonts(dump / 'fonts')
@@ -108,7 +141,7 @@ def main():
                 raise ValueError('Missing or invalid shared font: ' + name)
         shutil.copy2(ROOT / 'packaging/motion_session.py', staging / 'motion_session.py')
         bundle_libraries(staging / executable, staging / 'lib')
-        shutil.copytree(ROOT / 'licenses', staging / 'licenses', dirs_exist_ok=True)
+        copy_tree(ROOT / 'licenses', staging / 'licenses')
         for package in ('libssl3t64', 'libvpx9', 'libopus0', 'libzstd1', 'zlib1g'):
             copyright = Path('/usr/share/doc') / package / 'copyright'
             if copyright.is_file():
@@ -137,8 +170,7 @@ def main():
     except BaseException:
         # The original inputs/build outputs remain authoritative. A failed copy
         # is reproducible, and must not strand another full private game tree.
-        if staging.is_dir() and not staging.is_symlink() and staging.stat().st_ino == staging_inode:
-            shutil.rmtree(staging)
+        discard_staging(staging, staging_identity)
         raise
 
 
