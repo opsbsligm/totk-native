@@ -96,7 +96,7 @@ static void borrowed_tail(void) {
     assert(!resize(2 * unit) && used(7) == image + 2 * unit);
 }
 
-static void overlaps(void) {
+static void overlap_accounting(void) {
     reset(); uint64_t image = runtime_image_bytes();
     assert(!map(0, ALIAS_START, 8192));
     assert(!map(0, ALIAS_START + 4096, 8192));
@@ -147,7 +147,7 @@ static void concurrent_growth(void) {
 int main(void) {
     g_nmodules = 1; g_modules[0].size = 32ULL << 20;
     runtime_memory_init();
-    boundaries(); borrowed_tail(); overlaps(); concurrent_growth();
+    boundaries(); borrowed_tail(); overlap_accounting(); concurrent_growth();
     puts("Guest pool: actual memory SVCs, ABI errors, borrowed tail, exact capacity, overlap and 32 concurrent races PASS");
     return 0;
 }
