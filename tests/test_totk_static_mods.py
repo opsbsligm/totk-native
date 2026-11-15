@@ -61,7 +61,9 @@ def synthetic_module(identity):
 
 class TotkStaticMods(unittest.TestCase):
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory(prefix='totk-static-fixture-', dir=Path.cwd())
+        # Packaging must export source outside the checkout, including when CI
+        # runs unittest from its ignored out/public-tests directory.
+        temporary = tempfile.TemporaryDirectory(prefix='totk-static-fixture-')
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
         self.dump, self.work = self.root/'dump', self.root/'work'
