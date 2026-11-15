@@ -133,7 +133,8 @@ class TotkStaticMods(unittest.TestCase):
         target = out/'ultratears'
         result = subprocess.run(['clang', '-std=gnu17', '-O1', '-ffunction-sections', '-fdata-sections',
             '-I'+str(ROOT/'src/runtime'), '-I'+str(ROOT/'src/host'), '-Wl,--gc-sections',
-            *map(str, sorted((generated/'main').glob('main_[0-9]*.c'))), str(harness), '-lm', '-o', str(target)],
+            *map(str, sorted((generated/'main').glob('main_[0-9]*.c'))), str(harness),
+            str(ROOT/'src/runtime/dispatch.c'), '-lm', '-o', str(target)],
             capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(subprocess.run([str(target)], timeout=5).returncode, 0)
