@@ -18,8 +18,10 @@ _Static_assert(sizeof(totk_mapping_request) == 0x28, "NVNmappingRequest stride")
 
 // Called by MemoryPoolInitialize for PHYSICAL or VIRTUAL pools. Returns 0 with a logged reason on failure.
 int totk_vpool_init(pool_t *pool);
-// Called by MemoryPoolFinalize. Returns 1 when it released the pool's host storage.
-int totk_vpool_fini(pool_t *pool);
+// Detach host ownership and virtual mappings before the guest object can be reused.
+// The returned opaque storage must remain alive until its GPU import is destroyed.
+void *totk_vpool_take_storage(pool_t *pool);
+void totk_vpool_release_storage(void *storage);
 // All requests are validated before any mapping changes; returns 0 and leaves mappings intact on failure.
 int totk_vpool_map(pool_t *virtual_pool, int count, const totk_mapping_request *requests);
 // TOTK diagnostics: CPU address of the physical backing of a virtual-pool range (1 = mapped, *cpu set).

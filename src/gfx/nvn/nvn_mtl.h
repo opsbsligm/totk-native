@@ -15,6 +15,8 @@ void bf_want_note(const char *key);
 // Memory pool: [mem, mem+size) is expanded outward to page boundaries to build a zero-copy buffer; look up the buffer and offset by GPU address (= CPU address)
 void mtl_pool_add(const void *mem, uint64_t size);
 void mtl_pool_del(const void *mem);
+// Optional detached ownership is released after the imported Vulkan memory, at the same fence.
+void mtl_pool_del_release(const void *mem, void (*release)(void *), void *arg);
 int mtl_addr(uint64_t addr, uint64_t len, void **buf, uint64_t *off);   // 成功 1；buf 是 (__bridge) id<MTLBuffer> | 1 on success; buf is a (__bridge) id<MTLBuffer>
 
 typedef struct {

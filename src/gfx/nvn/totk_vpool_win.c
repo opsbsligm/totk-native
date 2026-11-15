@@ -79,20 +79,31 @@ int totk_vpool_init(pool_t *o) {
     return 1;
 }
 
-int totk_vpool_fini(pool_t *o) {
-    if (!o->host) return 0;
+typedef struct { void *address; uint64_t size; int physical; } pool_storage;
+
+void *totk_vpool_take_storage(pool_t *o) {
+    if (!o->host) return NULL;
+    pool_storage *storage = malloc(sizeof *storage);
+    if (!storage) die("vpool: storage retirement allocation");
+    *storage = (pool_storage){o->host, o->span, (o->flags & F_PHYSICAL) != 0};
     pthread_mutex_lock(&g_map_mu);
     for (vtable **p = &g_tables; *p; p = &(*p)->next)
         if ((*p)->pool == o) { vtable *t = *p; *p = t->next; free(t->pages); free(t); break; }
     pthread_mutex_unlock(&g_map_mu);
-    if (o->flags & F_PHYSICAL) { atomic_fetch_sub(&g_host_bytes, o->span); atomic_fetch_sub(&g_host_pools, 1); }
-#ifdef __linux__
-    munmap(o->host, o->span);
-#else
-    VirtualFree(o->host, 0, MEM_RELEASE);
-#endif
     o->host = NULL; o->mem = o->game_mem; o->span = 0;
-    return 1;
+    return storage;
+}
+
+void totk_vpool_release_storage(void *owned) {
+    pool_storage *storage = owned;
+    if (!storage) return;
+#ifdef __linux__
+    if (munmap(storage->address, storage->size)) die("vpool: storage munmap failed (%d)", errno);
+#else
+    if (!VirtualFree(storage->address, 0, MEM_RELEASE)) die("vpool: storage release failed (%lu)", GetLastError());
+#endif
+    if (storage->physical) { atomic_fetch_sub(&g_host_bytes, storage->size); atomic_fetch_sub(&g_host_pools, 1); }
+    free(storage);
 }
 
 static int check_request(const pool_t *v, const totk_mapping_request *r, int i) {

@@ -14,17 +14,19 @@ class VpoolRetirement(unittest.TestCase):
         vm = (ROOT/'src/gfx/nvn/totk_vpool_win.c').read_text()
         hle = (ROOT/'src/gfx/nvn/hle_nvn.c').read_text()
         backend = (ROOT/'src/gfx/backend_vk.c').read_text()
-        deferred = 'totk_vpool_take_storage' in vm
         vm = vm[vm.index('#define F_CPU_NO_ACCESS'):vm.index('static int check_request')]
         finalizer = hle[hle.index('NVN(nvnMemoryPoolFinalize,'):hle.index('NVN(nvnMemoryPoolFlushMappedRange,')]
         deletion = backend[backend.index('void mtl_pool_del('):backend.index('void mtl_pool_invalidate(')]
         retirement = backend[backend.index('typedef struct dead {'):backend.index('static void gpu_span(int slot, uint64_t fence);')]
+        jobs = hle[hle.index('enum { XJ_SUBMIT = 1,'):hle.index('#define XQ')]
+        limits = hle[hle.index('enum { XPOOLS = '):hle.index('static struct { uintptr_t lo, hi; } g_xpool')]
+        release = hle[hle.rindex('static void x_poolrel('):hle.index('static void x_pool_reuse(', hle.rindex('static void x_poolrel('))]
+        replay = hle.split('else if (j.kind == XJ_POOLREL) {', 1)[1].split('}', 1)[0]
         prefix = r'''
 #define _GNU_SOURCE
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
-#include <stdarg.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -41,13 +43,7 @@ static void nvn_dirty_remove_range(const void *p) {(void)p;}
 static int async_mode = 1;
 static int async_replay(void) {return async_mode;}
 static void va_release(uint64_t va) {(void)va;}
-static void *queued_mem, *queued_storage;
-static void x_poolrel(void *mem, uint64_t size, ...) {
-    (void)size; assert(!queued_mem); queued_mem=mem;
-#if HAS_DEFERRED_STORAGE
-    va_list args; va_start(args,size); queued_storage=va_arg(args,void *); va_end(args);
-#endif
-}
+static void *queued_mem;
 #define NVN(name, result, ...) static result h_##name(__VA_ARGS__)
 typedef int vkb_rw;
 static vkb_rw g_pool_mu;
@@ -81,16 +77,21 @@ static void destroy_later_release(VkImageView,VkImage,VkDeviceMemory,VkBuffer,vo
 void mtl_pool_del(const void *);
 void mtl_pool_del_release(const void *,void (*)(void *),void *);
 '''
+        queue = r'''
+#define XD_POOL 0
+static pthread_mutex_t g_xq_mu=PTHREAD_MUTEX_INITIALIZER;
+static struct {uintptr_t lo,hi;} g_xpool[XPOOLS];
+static int g_nxpool,drains;
+static xjob queued_job;
+static uint64_t x_push(xjob *j) {assert(!queued_mem);queued_job=*j;queued_mem=j->ucap;return 1;}
+static void x_drain(int why) {(void)why;drains++;g_nxpool=0;}
+'''
         suffix = r'''
 static void run_queued_delete(void) {
     assert(queued_mem);
-    nvn_dirty_remove_range(queued_mem);
-#if HAS_DEFERRED_STORAGE
-    mtl_pool_del_release(queued_mem,queued_storage?totk_vpool_release_storage:NULL,queued_storage);
-#else
-    mtl_pool_del(queued_mem);
-#endif
-    queued_mem=NULL;queued_storage=NULL;
+    xjob j=queued_job;
+    REPLAY_POOL_RELEASE
+    queued_mem=NULL;queued_job=(xjob){0};g_nxpool=0;
 }
 static void setup(pool_t *p,int flags,int imported) {
     memset(p,0,sizeof *p);p->flags=flags;p->size=0x10000;
@@ -124,6 +125,12 @@ int main(void) {
     h_nvnMemoryPoolFinalize((NVNmemoryPool *)&p);assert(mapped(expected_mapping));
     dead_tag(8);dead_reap(7);assert(mapped(expected_mapping));dead_reap(8);assert(!mapped(expected_mapping));
     assert(freed_imports==2 && destroyed_buffers==2);
+    // The actual full-queue fallback also transfers ownership through GPU retirement.
+    async_mode=1;g_nxpool=XPOOLS;
+    setup(&p,NVN_MEMORY_POOL_FLAGS_PHYSICAL|NVN_MEMORY_POOL_FLAGS_CPU_NO_ACCESS,1);
+    h_nvnMemoryPoolFinalize((NVNmemoryPool *)&p);assert(drains==1 && !queued_mem && mapped(expected_mapping));
+    dead_tag(9);dead_reap(8);assert(mapped(expected_mapping));dead_reap(9);assert(!mapped(expected_mapping));
+    assert(freed_imports==3 && destroyed_buffers==3);
     // Virtual, inaccessible storage with no Vulkan import is detached by the translation job.
     async_mode=1;setup(&p,NVN_MEMORY_POOL_FLAGS_VIRTUAL,0);
     h_nvnMemoryPoolFinalize((NVNmemoryPool *)&p);assert(mapped(expected_mapping));
@@ -144,7 +151,8 @@ int main(void) {
 '''
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as folder:
             source, binary = Path(folder)/'retirement.c', Path(folder)/'retirement'
-            source.write_text('#define HAS_DEFERRED_STORAGE '+str(int(deferred))+'\n'+prefix+vm+deletion+retirement+finalizer+suffix)
+            source.write_text(prefix+vm+deletion+retirement+jobs+limits+queue+release+finalizer+
+                              suffix.replace('REPLAY_POOL_RELEASE', replay))
             command = ['clang','-std=gnu17','-O1','-g','-pthread','-ffunction-sections','-fdata-sections',
                        '-fsanitize=address,undefined','-fno-sanitize-recover=all','-Wl,--gc-sections',
                        '-I'+str(ROOT/'src/gfx/nvn'),'-I'+str(ROOT/'src/gfx/nvn/include'),
