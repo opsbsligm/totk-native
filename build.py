@@ -91,7 +91,7 @@ def main():
            '--memory', '8g', '--memory-swap', '8g', '--cap-drop', 'ALL',
            '--security-opt', 'no-new-privileges', '--user', f'{os.getuid()}:{os.getgid()}',
            '--volume', f'{ROOT}:/src:ro', '--volume', f'{a.work}:/work',
-           '--env', 'HOME=/work/home', '--env', 'PYTHONDONTWRITEBYTECODE=1']
+           '--env', 'DOTNET_CLI_HOME=/work/home', '--env', 'PYTHONDONTWRITEBYTECODE=1']
     if a.dump:
         cmd += ['--volume', f'{a.dump}:/input:ro']
     if a.code_mods is not None:

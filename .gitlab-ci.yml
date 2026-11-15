@@ -45,7 +45,7 @@ native-build:
   image: native-games/toolchain:c0a18e93d70c048d8fee
   script:
     - mkdir -p out/home
-    - export HOME="$CI_PROJECT_DIR/out/home"
+    - export DOTNET_CLI_HOME="$CI_PROJECT_DIR/out/home"
     - export MAKEFLAGS="--output-sync=target"
     - export NATIVE_SOURCE_CHECK="/tmp/native-source-${CI_JOB_ID}"
     - mkdir -p "$NATIVE_SOURCE_CHECK/source"
