@@ -32,7 +32,7 @@ class VpoolRetirement(unittest.TestCase):
 #include <string.h>
 #include <sys/mman.h>
 #include <vulkan/vulkan.h>
-#include "nvn_obj.h"
+#include "totk_vpool.h"
 #define die(...) do {fprintf(stderr,__VA_ARGS__);abort();}while(0)
 #define LOG(...) ((void)0)
 #define VLOG(...) ((void)0)
