@@ -129,7 +129,11 @@ def main():
         copy_tree(dump / 'exefs', staging / 'data/exefs')
         if context is not None:
             for module, raw in context.prepared.modules.items():
-                (staging/'data/exefs'/module).write_bytes(raw)
+                output = staging/'data/exefs'/module
+                mode = stat.S_IMODE(output.stat().st_mode)
+                output.chmod(mode | stat.S_IWUSR)
+                output.write_bytes(raw)
+                output.chmod(mode)
             (staging/'provenance').mkdir()
             (staging/'provenance/static-mods.json').write_text(json.dumps(mod_record(context), indent=2)+'\n')
         copy_tree(dump / 'fonts', staging / 'data/fonts')

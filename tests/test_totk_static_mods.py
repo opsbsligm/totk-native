@@ -218,10 +218,19 @@ class TotkStaticMods(unittest.TestCase):
 
     def test_package_uses_the_same_patched_modules_and_rejects_a_stale_binary(self):
         generated = self.package_inputs()
+        for name in self.originals:
+            (self.exefs/name).chmod(0o444)
+        self.exefs.chmod(0o555)
+        self.addCleanup(self.exefs.chmod, 0o700)
         self.package()
         package = self.work/'package'
         context = static_mods.verify_context(generated, self.exefs, self.mods)
         self.assertEqual((package/'data/exefs/main').read_bytes(), context.prepared.modules['main'])
+        self.assertEqual(self.exefs.stat().st_mode & 0o777, 0o555)
+        for name, original in self.originals.items():
+            self.assertEqual((self.exefs/name).read_bytes(), original)
+            self.assertEqual((self.exefs/name).stat().st_mode & 0o777, 0o444)
+            self.assertEqual((package/'data/exefs'/name).stat().st_mode & 0o777, 0o444)
         self.assertEqual(json.loads((package/'provenance/static-mods.json').read_text()), static_mods.record(context))
         self.assertEqual(subprocess.run([str(package/'ultratears')], timeout=5).returncode, 0)
         self.write_patch(value=43)
