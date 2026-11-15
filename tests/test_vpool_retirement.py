@@ -61,12 +61,18 @@ static void wb_forget(VkBuffer b) {(void)b;}
 static void *expected_mapping;
 static uint64_t expected_span;
 static int destroyed_buffers, freed_imports;
+static struct {void *mapping;int buffer_destroyed,memory_freed;} imports[16];
+static unsigned nimports;
 static int mapped(void *p) {unsigned char vec;errno=0;return mincore(p,4096,&vec)==0;}
 static void VKAPI_CALL buffer_destroy(VkDevice d,VkBuffer b,const VkAllocationCallbacks *a) {
-    (void)d;(void)b;(void)a;assert(mapped(expected_mapping));destroyed_buffers++;
+    (void)d;(void)a;unsigned i=(unsigned)(uintptr_t)b;assert(i && i<=nimports);
+    assert(!imports[i].buffer_destroyed && mapped(imports[i].mapping));
+    imports[i].buffer_destroyed=1;destroyed_buffers++;
 }
 static void VKAPI_CALL memory_free(VkDevice d,VkDeviceMemory m,const VkAllocationCallbacks *a) {
-    (void)d;(void)m;(void)a;assert(destroyed_buffers>freed_imports);assert(mapped(expected_mapping));freed_imports++;
+    (void)d;(void)a;unsigned i=(unsigned)(uintptr_t)m;assert(i && i<=nimports);
+    assert(imports[i].buffer_destroyed && !imports[i].memory_freed && mapped(imports[i].mapping));
+    imports[i].memory_freed=1;freed_imports++;
 }
 static struct {
     PFN_vkDestroyShaderEXT vkDestroyShaderEXT;PFN_vkDestroyImageView vkDestroyImageView;
@@ -101,8 +107,9 @@ static void setup(pool_t *p,int flags,int imported) {
     p->magic=MAGIC('P','O','O','L');
     if(imported) {
         assert(!g_npools);g_npools=1;g_pool_bytes=p->size;
+        assert(++nimports<16);imports[nimports].mapping=p->mem;
         g_pools[0]=(pool_ent){.lo=(uintptr_t)p->mem,.hi=(uintptr_t)p->mem+p->size,
-            .buf=(VkBuffer)(uintptr_t)1,.mem=(VkDeviceMemory)(uintptr_t)2,.key=p->mem};
+            .buf=(VkBuffer)(uintptr_t)nimports,.mem=(VkDeviceMemory)(uintptr_t)nimports,.key=p->mem};
     }
 }
 int main(void) {
@@ -131,6 +138,15 @@ int main(void) {
     h_nvnMemoryPoolFinalize((NVNmemoryPool *)&p);assert(drains==1 && !queued_mem && mapped(expected_mapping));
     dead_tag(9);dead_reap(8);assert(mapped(expected_mapping));dead_reap(9);assert(!mapped(expected_mapping));
     assert(freed_imports==3 && destroyed_buffers==3);
+    // Reuse the same guest object while two independent backing allocations await different fences.
+    setup(&p,NVN_MEMORY_POOL_FLAGS_PHYSICAL|NVN_MEMORY_POOL_FLAGS_CPU_NO_ACCESS,1);
+    void *first=p.host;h_nvnMemoryPoolFinalize((NVNmemoryPool *)&p);run_queued_delete();dead_tag(10);
+    setup(&p,NVN_MEMORY_POOL_FLAGS_PHYSICAL|NVN_MEMORY_POOL_FLAGS_CPU_NO_ACCESS,1);
+    void *second=p.host;assert(first!=second);h_nvnMemoryPoolFinalize((NVNmemoryPool *)&p);run_queued_delete();dead_tag(11);
+    totk_vpool_host_stats(&bytes,&pools);assert(bytes==2*expected_span && pools==2);
+    dead_reap(10);assert(!mapped(first) && mapped(second));
+    totk_vpool_host_stats(&bytes,&pools);assert(bytes==expected_span && pools==1);
+    dead_reap(11);assert(!mapped(second) && freed_imports==5 && destroyed_buffers==5);
     // Virtual, inaccessible storage with no Vulkan import is detached by the translation job.
     async_mode=1;setup(&p,NVN_MEMORY_POOL_FLAGS_VIRTUAL,0);
     h_nvnMemoryPoolFinalize((NVNmemoryPool *)&p);assert(mapped(expected_mapping));

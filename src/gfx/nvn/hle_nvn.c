@@ -2039,7 +2039,8 @@ _Atomic int dm_submit_busy;   // TOTK diagnostic: submissions being replayed (ru
 // TOTK_ASYNC_REPLAY=0 runs everything on the calling thread as before. [Windows port] On by default since 2026-10-24: with
 // the Vulkan replay on the game's thread the Great Sky Island ran at ~95 ms a frame, with this thread at ~58 ms.
 enum { XJ_SUBMIT = 1, XJ_PRESENT, XJ_TEXREL, XJ_SHREL, XJ_POOLREL, XJ_TEXWRITE };
-typedef struct { int kind, n; uint64_t *h; void *ucap; win_t *win; int idx; double period; int crop[4]; uint64_t frame, sub; tex_t tex; void *pool_storage; } xjob;   // pool_storage: detached ownership, never a pointer to the reusable guest pool object
+typedef struct { int kind, n; uint64_t *h; void *ucap; win_t *win; int idx; double period; int crop[4]; uint64_t frame, sub; tex_t tex; void *pool_storage; } xjob;   // tex: copy of a finalized texture (XJ_TEXREL) or of the written one (XJ_TEXWRITE); ucap: uniforms captured at the submit call, the shaders a program let go of (XJ_SHREL), the pool's memory (XJ_POOLREL) or the texels (XJ_TEXWRITE, xtexw)
+// pool_storage: detached ownership, never a pointer to the reusable guest pool object.
 #define XQ 64
 #define XF 4096
 static xjob g_xq[XQ];
