@@ -15,6 +15,10 @@ int runtime_ipc_svc(unsigned num, uint64_t *r) { (void)num; (void)r; return 0; }
 uint64_t runtime_now_ns(void) { return 1; }
 _Noreturn void runtime_fail(const char *message) { fprintf(stderr, "%s\n", message); abort(); }
 void plat_commit(uint64_t address, uint64_t size) { (void)address; (void)size; abort(); }
+static int host_busy;
+int plat_decommit_guest(uint64_t address, uint64_t size, uint64_t restore_to) {
+    assert(size && !(address & 4095) && !restore_to); return host_busy;
+}
 int plat_protect(uint64_t address, uint64_t size, int protection) {
     (void)address; (void)size; (void)protection; abort();
 }
@@ -96,6 +100,19 @@ static void borrowed_tail(void) {
     assert(!resize(2 * unit) && used(7) == image + 2 * unit);
 }
 
+static void gpu_busy(void) {
+    reset(); assert(!resize(0x400000));
+    assert(!map(0, ALIAS_START, 8192));
+    uint64_t before = used(7);
+    host_busy = 1;
+    assert(resize(0x200000) == 0xd401 && heap_size == 0x400000);
+    assert(map(1, ALIAS_START, 8192) == 0xd401);
+    assert(alias_pages[0] && alias_pages[1] && used(7) == before);
+    host_busy = 0;
+    assert(!map(1, ALIAS_START, 8192) && !resize(0x200000));
+    assert(used(7) == before - 8192 - 0x200000);
+}
+
 static void overlap_accounting(void) {
     reset(); uint64_t image = runtime_image_bytes();
     assert(!map(0, ALIAS_START, 8192));
@@ -145,9 +162,10 @@ static void concurrent_growth(void) {
 }
 
 int main(void) {
+    setenv("TOTK_GUEST_RECLAIM", "1", 1);
     g_nmodules = 1; g_modules[0].size = 32ULL << 20;
     runtime_memory_init();
-    boundaries(); borrowed_tail(); overlap_accounting(); concurrent_growth();
+    boundaries(); borrowed_tail(); gpu_busy(); overlap_accounting(); concurrent_growth();
     puts("Guest pool: actual memory SVCs, ABI errors, borrowed tail, exact capacity, overlap and 32 concurrent races PASS");
     return 0;
 }

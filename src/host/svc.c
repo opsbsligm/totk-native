@@ -1,9 +1,10 @@
 /* Horizon memory and system SVCs for the recompiled game.
  * Ported from MacNativeGames games/totk/runtime/services.c (runtime_svc, memory_init, alias_map, stack_move) and
  * loader.c (module permissions / query) @b75be8c (MIT). Changes: guest regions live inside the window that
- * src/runtime reserves at startup (pages are committed when first touched); unmapping decommits pages, so a page
- * mapped again reads as zeros. Darwin's 16 KiB page handling is gone (Windows pages are 4 KiB, as on the Switch).
- * Unmapped guest pages are not made inaccessible yet: a stray access reads zeros instead of faulting. */
+ * src/runtime reserves at startup (pages are committed when first touched). Windows decommits on unmap;
+ * Linux physical reclamation is opt-in until full-game regression validates host-reference handling.
+ * Darwin's 16 KiB page handling is gone (Windows/Linux pages are 4 KiB, as on the Switch).
+ * Unmapped guest pages are not made inaccessible yet. */
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,12 +43,26 @@ static uint64_t main_stack_lo, main_stack_hi;
 static uint8_t *user_exception_context;
 static pthread_mutex_t memory_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static void decommit(uint64_t addr, uint64_t size) {
+static int decommit(uint64_t addr, uint64_t size, uint64_t restore_to) {
 #ifdef _WIN32
+    if (restore_to) memcpy((void *)(uintptr_t)restore_to, (void *)(uintptr_t)addr, size);
     if (size && !VirtualFree((void *)(uintptr_t)addr, size, MEM_DECOMMIT)) runtime_fail("decommit guest pages");
+#elif defined(__linux__)
+    /* Keep the accepted default until exact-build game regression validates the
+       new reclamation path. A live GPU reference must never lose its backing. */
+    static int reclaim = -1;
+    if (reclaim < 0) { const char *v = getenv("TOTK_GUEST_RECLAIM"); reclaim = v && !strcmp(v, "1"); }
+    if (reclaim) {
+        int result = plat_decommit_guest(addr, size, restore_to);
+        if (result < 0) runtime_fail("decommit guest pages");
+        return result == 0;
+    }
+    if (restore_to) memcpy((void *)(uintptr_t)restore_to, (void *)(uintptr_t)addr, size);
 #else
+    if (restore_to) memcpy((void *)(uintptr_t)restore_to, (void *)(uintptr_t)addr, size);
     (void)addr; (void)size;
 #endif
+    return 1;
 }
 
 void runtime_memory_init(void) {
@@ -103,9 +118,8 @@ static uint64_t stack_move(int unmap, uint64_t dst, uint64_t src, uint64_t size)
         if (stack_maps[i].dst == dst && stack_maps[i].src == src && stack_maps[i].size == size) found = i;
     if (unmap) {
         if (found == nstack_maps) { pthread_mutex_unlock(&memory_lock); return 0xd401; }
-        memcpy((void *)(uintptr_t)src, (const void *)(uintptr_t)dst, size);
+        if (!decommit(dst, size, src)) { pthread_mutex_unlock(&memory_lock); return 0xd401; }
         stack_maps[found] = stack_maps[--nstack_maps];
-        decommit(dst, size);
     } else {
         if (nstack_maps == 4096) { pthread_mutex_unlock(&memory_lock); return 0xd401; }
         // The main thread's stack is mapped too (QueryMemory reports it): the SDK places thread stacks at random
@@ -145,11 +159,13 @@ static uint64_t alias_map(int unmap, uint64_t addr, uint64_t size) {
         for (unsigned i = 0; i < nstack_maps; i++)
             if (overlaps(addr, size, stack_maps[i].src, stack_maps[i].size)) { pthread_mutex_unlock(&memory_lock); return 0xdc01; }
         uint64_t released = 0;
+        for (unsigned i = 0; i < count; i++) if (alias_pages[first + i]) released += 4096;
+        /* Reclaim the whole request once, including already-empty holes. The
+           metadata changes only after the host has accepted the whole range. */
+        if (released && !decommit(addr, size, 0)) { pthread_mutex_unlock(&memory_lock); return 0xd401; }
         for (unsigned i = 0; i < count; i++)
             if (alias_pages[first + i]) {
                 alias_pages[first + i] = 0;
-                released += 4096;
-                decommit(addr + (uint64_t)i * 4096, 4096);   // mapped again later: zero-filled like a fresh page
             }
         alias_bytes -= released;
     } else {
@@ -352,7 +368,10 @@ uint64_t runtime_svc(unsigned num, uint64_t *r, uint64_t pc) {
                     r[0] = 0xd401; return r[0];
                 }
             }
-            decommit(HEAP_START + size, heap_size - size);
+            if (!decommit(HEAP_START + size, heap_size - size, 0)) {
+                pthread_mutex_unlock(&memory_lock);
+                r[0] = 0xd401; return r[0];
+            }
         }
         heap_size = size;
         pthread_mutex_unlock(&memory_lock);

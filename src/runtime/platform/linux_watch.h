@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <linux/userfaultfd.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,12 +42,19 @@ struct pm_scan_arg {
 
 static int g_linux_uffd = -1, g_linux_pagemap = -1;
 static uint64_t g_linux_watch_lo, g_linux_watch_hi;
+static pthread_mutex_t g_linux_watch_mu = PTHREAD_MUTEX_INITIALIZER;
 
-static void linux_watch_close(void) {
+static void linux_watch_close_unlocked(void) {
     if (g_linux_uffd >= 0) close(g_linux_uffd);
     if (g_linux_pagemap >= 0) close(g_linux_pagemap);
     g_linux_uffd = g_linux_pagemap = -1;
     g_linux_watch_lo = g_linux_watch_hi = 0;
+}
+
+static void linux_watch_close(void) {
+    pthread_mutex_lock(&g_linux_watch_mu);
+    linux_watch_close_unlocked();
+    pthread_mutex_unlock(&g_linux_watch_mu);
 }
 
 static int linux_watch_register(uint64_t lo, uint64_t hi) {
@@ -57,14 +65,36 @@ static int linux_watch_register(uint64_t lo, uint64_t hi) {
     return ioctl(g_linux_uffd, UFFDIO_REGISTER, &reg) == 0;
 }
 
+static int linux_watch_rearm_unlocked(uint64_t address, uint64_t size) {
+    if (g_linux_uffd < 0 || !size || (address | size) & 4095 ||
+        address < g_linux_watch_lo || address >= g_linux_watch_hi || size > g_linux_watch_hi - address) return 0;
+    struct uffdio_writeprotect wp = {.range = {.start = address, .len = size}, .mode = UFFDIO_WRITEPROTECT_MODE_WP};
+    return ioctl(g_linux_uffd, UFFDIO_WRITEPROTECT, &wp) == 0;
+}
+
+/* Serialize capability loss/descriptor close against scans on other threads. */
+static int linux_watch_rearm(uint64_t address, uint64_t size) {
+    pthread_mutex_lock(&g_linux_watch_mu);
+    int result = linux_watch_rearm_unlocked(address, size);
+    if (!result && g_linux_uffd >= 0) linux_watch_close_unlocked();
+    pthread_mutex_unlock(&g_linux_watch_mu);
+    return result;
+}
+
+static void linux_watch_remapped(uint64_t lo, uint64_t hi) {
+    pthread_mutex_lock(&g_linux_watch_mu);
+    if (g_linux_uffd >= 0 && !linux_watch_register(lo, hi)) linux_watch_close_unlocked();
+    pthread_mutex_unlock(&g_linux_watch_mu);
+}
+
 static int linux_watch_requested(void) {
     const char *copy = getenv("TOTK_POOL_COPY"), *imp = getenv("TOTK_POOL_IMPORT");
     const char *watch = getenv("TOTK_WRITE_WATCH");
     return copy && !strcmp(copy, "1") && !(imp && !strcmp(imp, "1")) && !(watch && !strcmp(watch, "0"));
 }
 
-static void linux_watch_init(uint64_t lo, uint64_t hi) {
-    linux_watch_close();
+static void linux_watch_init_unlocked(uint64_t lo, uint64_t hi) {
+    linux_watch_close_unlocked();
     if (!linux_watch_requested() || lo >= hi || (lo | hi) & 4095) return;
     // Only asynchronous user-mode faults: no privileges or sysctl changes.
     int uffd = (int)syscall(SYS_userfaultfd, O_CLOEXEC | O_NONBLOCK | UFFD_USER_MODE_ONLY);
@@ -78,10 +108,16 @@ static void linux_watch_init(uint64_t lo, uint64_t hi) {
     g_linux_pagemap = pagemap;
     g_linux_watch_lo = lo;
     g_linux_watch_hi = hi;
-    if (!linux_watch_register(lo, hi)) linux_watch_close();
+    if (!linux_watch_register(lo, hi)) linux_watch_close_unlocked();
 }
 
-static int linux_watch_pages(uint64_t addr, uint64_t size, uint64_t *pages, int max, uint64_t *page) {
+static void linux_watch_init(uint64_t lo, uint64_t hi) {
+    pthread_mutex_lock(&g_linux_watch_mu);
+    linux_watch_init_unlocked(lo, hi);
+    pthread_mutex_unlock(&g_linux_watch_mu);
+}
+
+static int linux_watch_pages_unlocked(uint64_t addr, uint64_t size, uint64_t *pages, int max, uint64_t *page) {
     if (g_linux_pagemap < 0 || !pages || !page || !size || max <= 0 ||
         (addr | size) & 4095 || addr < g_linux_watch_lo || addr > g_linux_watch_hi || size > g_linux_watch_hi - addr) return -1;
     *page = 4096;
@@ -106,4 +142,11 @@ static int linux_watch_pages(uint64_t addr, uint64_t size, uint64_t *pages, int 
         at = scan.walk_end;
     }
     return n;
+}
+
+static int linux_watch_pages(uint64_t addr, uint64_t size, uint64_t *pages, int max, uint64_t *page) {
+    pthread_mutex_lock(&g_linux_watch_mu);
+    int count = linux_watch_pages_unlocked(addr, size, pages, max, page);
+    pthread_mutex_unlock(&g_linux_watch_mu);
+    return count;
 }

@@ -35,7 +35,7 @@ static int kernel_madvise(void *p, size_t n, int advice);
 #define close kernel_close
 #define madvise kernel_madvise
 #include "src/runtime/platform/linux_watch.h"
-enum { OK, NO_UFFD, BAD_API, MISSING_FEATURES, NO_PAGEMAP, BAD_REGISTER, BAD_ADVISE, BAD_SCAN, BAD_REGION, NO_PROGRESS, TOO_MANY };
+enum { OK, NO_UFFD, BAD_API, MISSING_FEATURES, NO_PAGEMAP, BAD_REGISTER, BAD_ADVISE, BAD_SCAN, BAD_REGION, NO_PROGRESS, TOO_MANY, BAD_REARM };
 static int mode, calls, closed, written[4];
 static const uint64_t base = 0x40000000;
 static long kernel_syscall(long n, ...) {
@@ -64,6 +64,11 @@ static int kernel_ioctl(int fd,unsigned long request,...) {
         struct uffdio_register *r=arg;assert(fd==10 && r->mode==UFFDIO_REGISTER_MODE_WP && r->range.start==base && r->range.len==16384);
         return mode==BAD_REGISTER?-1:0;
     }
+    if(request==UFFDIO_WRITEPROTECT) {
+        struct uffdio_writeprotect *w=arg;
+        assert(fd==10 && w->range.start==base && w->range.len==16384 && w->mode==UFFDIO_WRITEPROTECT_MODE_WP);
+        return mode==BAD_REARM?-1:0;
+    }
     assert(request==PAGEMAP_SCAN && fd==11);
     struct pm_scan_arg *a=arg;assert(a->flags==(PM_SCAN_WP_MATCHING|PM_SCAN_CHECK_WPASYNC));
     if(mode==BAD_SCAN) return -1;
@@ -91,6 +96,11 @@ int main(void) {
         assert(closed-before==(mode==NO_UFFD?0:mode<=NO_PAGEMAP?1:2));
     }
     mode=OK;linux_watch_init(base,base+16384);assert(g_linux_uffd==10 && g_linux_pagemap==11);
+    assert(linux_watch_rearm(base,16384));
+    int prior=calls;
+    assert(!linux_watch_rearm(base+1,4096) && !linux_watch_rearm(base,0));
+    assert(!linux_watch_rearm(UINT64_MAX-4095,8192) && calls==prior);
+    mode=OK;linux_watch_init(base,base+16384);
     uint64_t pages[2]={123,456},size=0;
     int before=calls;
     assert(linux_watch_pages(base,16384,pages,0,&size)==-1);
@@ -104,6 +114,8 @@ int main(void) {
     assert(linux_watch_pages(base+8192,8192,pages,2,&size)==1 && pages[0]==base+12288);
     assert(linux_watch_pages(base,16384,pages,2,&size)==0);
     for(mode=BAD_SCAN;mode<=TOO_MANY;mode++) assert(linux_watch_pages(base,16384,pages,2,&size)==-1);
+    mode=BAD_REARM;assert(!linux_watch_rearm(base,16384));
+    assert(g_linux_uffd<0 && g_linux_pagemap<0);
     linux_watch_close();assert(g_linux_uffd<0 && g_linux_pagemap<0);
     return 0;
 }

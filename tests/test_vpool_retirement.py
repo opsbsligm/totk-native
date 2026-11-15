@@ -16,8 +16,11 @@ class VpoolRetirement(unittest.TestCase):
         backend = (ROOT/'src/gfx/backend_vk.c').read_text()
         vm = vm[vm.index('#define F_CPU_NO_ACCESS'):vm.index('static int check_request')]
         finalizer = hle[hle.index('NVN(nvnMemoryPoolFinalize,'):hle.index('NVN(nvnMemoryPoolFlushMappedRange,')]
-        deletion = backend[backend.index('void mtl_pool_del('):backend.index('void mtl_pool_invalidate(')]
+        deletion = backend[backend.index('#ifdef __linux__\ntypedef struct pool_release'):backend.index('void mtl_pool_invalidate(')]
         retirement = backend[backend.index('typedef struct dead {'):backend.index('static void gpu_span(int slot, uint64_t fence);')]
+        registration = backend[backend.index('void mtl_pool_add('):backend.index('static void destroy_later(VkImageView view', backend.index('void mtl_pool_add('))]
+        importing = backend[backend.index('static int import_host('):backend.index('// Pinned adaptation:', backend.index('static int import_host('))]
+        pool_type = backend[backend.index('typedef struct { uintptr_t lo, hi, base;'):backend.index('static pool_ent *g_pools;')]
         jobs = hle[hle.index('enum { XJ_SUBMIT = 1,'):hle.index('#define XQ')]
         limits = hle[hle.index('enum { XPOOLS = '):hle.index('static struct { uintptr_t lo, hi; } g_xpool')]
         release = hle[hle.rindex('static void x_poolrel('):hle.index('static void x_pool_reuse(', hle.rindex('static void x_poolrel('))]
@@ -35,6 +38,8 @@ class VpoolRetirement(unittest.TestCase):
 #include <sys/mman.h>
 #include <vulkan/vulkan.h>
 #include "totk_vpool.h"
+#include "src/runtime/platform/linux_watch.h"
+#include "src/runtime/platform/linux_memory.h"
 #define die(...) do {fprintf(stderr,__VA_ARGS__);abort();}while(0)
 #define LOG(...) ((void)0)
 #define VLOG(...) ((void)0)
@@ -49,11 +54,18 @@ typedef int vkb_rw;
 static vkb_rw g_pool_mu;
 static void vkb_rw_write(vkb_rw *p,int k) {(void)p;(void)k;}
 static void vkb_rw_write_end(vkb_rw *p) {(void)p;}
-typedef struct {uintptr_t lo,hi;VkBuffer buf;VkDeviceMemory mem;const void *key;uint32_t sh,ch;} pool_ent;
-static pool_ent g_pools[4];
-static int g_npools, g_ok=1;
+PRODUCTION_POOL_TYPE
+static pool_ent *g_pools;
+static int g_npools,g_capools,g_ok=1;
 static uint64_t g_pool_bytes;
-static struct {int has_checkpoints,has_buffer_marker;VkDevice device;} vkc;
+static struct {int has_checkpoints,has_buffer_marker;VkDevice device;uintptr_t host_pointer_alignment;VkPhysicalDeviceProperties props;} vkc;
+static void backend_init(void) {}
+static int vkb_pool_copies(void) {return 0;}
+static int vkb_shadow_on(void) {return 0;}
+static int linux_host_readable(uintptr_t a,uint64_t n) {(void)a;(void)n;return 1;}
+static int pc_alloc(uintptr_t a,uintptr_t b,VkBuffer *v,uint8_t **p,uint32_t *h) {(void)a;(void)b;(void)v;(void)p;(void)h;abort();}
+#define GUEST_LO 0
+int plat_written_pages(uint64_t a,uint64_t n,uint64_t *p,int m,uint64_t *s) {(void)a;(void)n;(void)p;(void)m;(void)s;abort();}
 static uint64_t vkb_frame(void) {return 1;}
 static void vkb_shadow_free(uint32_t h) {(void)h;}
 static void vkb_poolmem_free(uint32_t h) {(void)h;}
@@ -63,6 +75,33 @@ static uint64_t expected_span;
 static int destroyed_buffers, freed_imports;
 static struct {void *mapping;int buffer_destroyed,memory_freed;} imports[16];
 static unsigned nimports;
+enum {IMPORT_OK,PROPERTY_FAIL,BUFFER_FAIL,NO_TYPE,ALLOC_FAIL,BIND_FAIL};
+static int import_failure;
+static void *import_address;
+static int vk_check(VkResult r,const char *where) {(void)where;return r==VK_SUCCESS;}
+static uint32_t memory_type(uint32_t types) {assert(types==1);return import_failure==NO_TYPE?UINT32_MAX:0;}
+static VkResult VKAPI_CALL host_properties(VkDevice d,VkExternalMemoryHandleTypeFlagBits t,const void *p,VkMemoryHostPointerPropertiesEXT *h) {
+    (void)d;assert(t==VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT);
+    assert(linux_memory_busy((uintptr_t)p,0x10000));import_address=(void *)p;h->memoryTypeBits=1;
+    return import_failure==PROPERTY_FAIL?VK_ERROR_UNKNOWN:VK_SUCCESS;
+}
+static VkResult VKAPI_CALL buffer_create(VkDevice d,const VkBufferCreateInfo *b,const VkAllocationCallbacks *a,VkBuffer *out) {
+    (void)d;(void)a;assert(b->size==0x10000 && linux_memory_busy((uintptr_t)import_address,b->size));
+    if(import_failure==BUFFER_FAIL)return VK_ERROR_UNKNOWN;
+    assert(++nimports<16);imports[nimports].mapping=import_address;*out=(VkBuffer)(uintptr_t)nimports;return VK_SUCCESS;
+}
+static void VKAPI_CALL requirements(VkDevice d,VkBuffer b,VkMemoryRequirements *r) {
+    (void)d;(void)b;*r=(VkMemoryRequirements){.size=0x10000,.alignment=4096,.memoryTypeBits=1};
+}
+static VkResult VKAPI_CALL memory_allocate(VkDevice d,const VkMemoryAllocateInfo *m,const VkAllocationCallbacks *a,VkDeviceMemory *out) {
+    (void)d;(void)a;assert(m->allocationSize==0x10000 && linux_memory_busy((uintptr_t)import_address,m->allocationSize));
+    if(import_failure==ALLOC_FAIL)return VK_ERROR_UNKNOWN;
+    *out=(VkDeviceMemory)(uintptr_t)nimports;return VK_SUCCESS;
+}
+static VkResult VKAPI_CALL memory_bind(VkDevice d,VkBuffer b,VkDeviceMemory m,VkDeviceSize off) {
+    (void)d;assert((uintptr_t)b==(uintptr_t)m && !off && linux_memory_busy((uintptr_t)import_address,0x10000));
+    return import_failure==BIND_FAIL?VK_ERROR_UNKNOWN:VK_SUCCESS;
+}
 static int mapped(void *p) {unsigned char vec;errno=0;return mincore(p,4096,&vec)==0;}
 static void VKAPI_CALL buffer_destroy(VkDevice d,VkBuffer b,const VkAllocationCallbacks *a) {
     (void)d;(void)a;unsigned i=(unsigned)(uintptr_t)b;assert(i && i<=nimports);
@@ -72,11 +111,15 @@ static void VKAPI_CALL buffer_destroy(VkDevice d,VkBuffer b,const VkAllocationCa
 static void VKAPI_CALL memory_free(VkDevice d,VkDeviceMemory m,const VkAllocationCallbacks *a) {
     (void)d;(void)a;unsigned i=(unsigned)(uintptr_t)m;assert(i && i<=nimports);
     assert(imports[i].buffer_destroyed && !imports[i].memory_freed && mapped(imports[i].mapping));
+    assert(linux_memory_busy((uintptr_t)imports[i].mapping,0x10000));
     imports[i].memory_freed=1;freed_imports++;
 }
 static struct {
     PFN_vkDestroyShaderEXT vkDestroyShaderEXT;PFN_vkDestroyImageView vkDestroyImageView;
     PFN_vkDestroyImage vkDestroyImage;PFN_vkDestroyBuffer vkDestroyBuffer;PFN_vkFreeMemory vkFreeMemory;
+    PFN_vkGetMemoryHostPointerPropertiesEXT vkGetMemoryHostPointerPropertiesEXT;
+    PFN_vkCreateBuffer vkCreateBuffer;PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements;
+    PFN_vkAllocateMemory vkAllocateMemory;PFN_vkBindBufferMemory vkBindBufferMemory;
 } vk;
 static void destroy_later(VkImageView,VkImage,VkDeviceMemory,VkBuffer);
 static void destroy_later_release(VkImageView,VkImage,VkDeviceMemory,VkBuffer,void (*)(void *),void *);
@@ -106,14 +149,15 @@ static void setup(pool_t *p,int flags,int imported) {
     assert(expected_mapping && expected_span==0x10000 && mapped(expected_mapping));
     p->magic=MAGIC('P','O','O','L');
     if(imported) {
-        assert(!g_npools);g_npools=1;g_pool_bytes=p->size;
-        assert(++nimports<16);imports[nimports].mapping=p->mem;
-        g_pools[0]=(pool_ent){.lo=(uintptr_t)p->mem,.hi=(uintptr_t)p->mem+p->size,
-            .buf=(VkBuffer)(uintptr_t)nimports,.mem=(VkDeviceMemory)(uintptr_t)nimports,.key=p->mem};
+        assert(!g_npools);mtl_pool_add(p->mem,p->size);
+        assert(g_npools==1 && g_pools[0].host_ref && g_pool_bytes==p->size);
     }
 }
 int main(void) {
     vk.vkDestroyBuffer=buffer_destroy;vk.vkFreeMemory=memory_free;
+    vk.vkGetMemoryHostPointerPropertiesEXT=host_properties;vk.vkCreateBuffer=buffer_create;
+    vk.vkGetBufferMemoryRequirements=requirements;vk.vkAllocateMemory=memory_allocate;vk.vkBindBufferMemory=memory_bind;
+    vkc.host_pointer_alignment=4096;
     pool_t p;uint64_t bytes,pools;
     setup(&p,NVN_MEMORY_POOL_FLAGS_PHYSICAL|NVN_MEMORY_POOL_FLAGS_CPU_NO_ACCESS,1);
     memset(p.host,0x35,p.span);h_nvnMemoryPoolFinalize((NVNmemoryPool *)&p);
@@ -122,9 +166,11 @@ int main(void) {
     totk_vpool_host_stats(&bytes,&pools);assert(bytes==expected_span && pools==1);
     memset(&p,0xa5,sizeof p); // guest object reuse cannot change captured ownership
     run_queued_delete();assert(mapped(expected_mapping) && !freed_imports);
+    assert(linux_memory_busy((uintptr_t)expected_mapping,expected_span));
     dead_reap(UINT64_MAX);assert(mapped(expected_mapping)); // not assigned to a submitted fence yet
     dead_tag(7);dead_reap(6);assert(mapped(expected_mapping) && !freed_imports);
     dead_reap(7);assert(!mapped(expected_mapping) && freed_imports==1 && destroyed_buffers==1);
+    assert(!linux_memory_busy((uintptr_t)expected_mapping,expected_span));
     totk_vpool_host_stats(&bytes,&pools);assert(!bytes && !pools);
     dead_reap(UINT64_MAX);assert(freed_imports==1);
     // Synchronous translation still defers the import and host allocation to GPU retirement.
@@ -160,18 +206,39 @@ int main(void) {
     void *guest=mmap(NULL,0x10000,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);assert(guest!=MAP_FAILED);
     p=(pool_t){.magic=MAGIC('P','O','O','L'),.mem=guest,.size=0x10000,.flags=NVN_MEMORY_POOL_FLAGS_GPU_NO_ACCESS};
     h_nvnMemoryPoolFinalize((NVNmemoryPool *)&p);assert(mapped(guest));assert(!munmap(guest,0x10000));
-    totk_vpool_host_stats(&bytes,&pools);assert(!bytes && !pools && !g_dead && !g_dead_new);
-    puts("Owned pool VM: translation ordering, GPU-fence retirement, import-before-host release, object reuse and CPU/null paths PASS");
+    // Guest-owned pages remain resident until the actual import has retired;
+    // the pool finalizer never unmaps them, then the guest can discard safely.
+    g_ok=1;guest=mmap(NULL,0x10000,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);assert(guest!=MAP_FAILED);
+    g_linux_guest_lo=(uintptr_t)guest;g_linux_guest_hi=(uintptr_t)guest+0x10000;
+    memset(guest,0x73,0x10000);mtl_pool_add(guest,0x10000);
+    p=(pool_t){.magic=MAGIC('P','O','O','L'),.mem=guest,.size=0x10000};
+    h_nvnMemoryPoolFinalize((NVNmemoryPool *)&p);
+    assert(mapped(guest) && plat_decommit_guest((uintptr_t)guest,0x10000,0)==1 && *(unsigned char *)guest==0x73);
+    dead_tag(12);dead_reap(11);assert(plat_decommit_guest((uintptr_t)guest,0x10000,0)==1);
+    dead_reap(12);assert(mapped(guest) && !g_linux_memory_refs);
+    assert(!plat_decommit_guest((uintptr_t)guest,0x10000,0));
+    unsigned char residency[16];assert(!mincore(guest,0x10000,residency));
+    for(unsigned i=0;i<16;i++)assert(!(residency[i]&1));
+    for(unsigned i=0;i<0x10000;i++)assert(!((unsigned char *)guest)[i]);
+    assert(!munmap(guest,0x10000));
+    // Every import failure releases its host reference after any Vulkan cleanup.
+    g_ok=1;guest=mmap(NULL,0x10000,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);assert(guest!=MAP_FAILED);
+    for(import_failure=PROPERTY_FAIL;import_failure<=BIND_FAIL;import_failure++) {
+        mtl_pool_add(guest,0x10000);assert(!g_npools && !g_pool_bytes && !g_linux_memory_refs);
+    }
+    assert(!munmap(guest,0x10000));free(g_pools);
+    totk_vpool_host_stats(&bytes,&pools);assert(!bytes && !pools && !g_dead && !g_dead_new && !g_linux_memory_refs);
+    puts("Owned pool VM: actual imports/failures, GPU-fence retirement, guest discard after retirement, object reuse and CPU/null paths PASS");
     return 0;
 }
 '''
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as folder:
             source, binary = Path(folder)/'retirement.c', Path(folder)/'retirement'
-            source.write_text(prefix+vm+deletion+retirement+jobs+limits+queue+release+finalizer+
+            source.write_text(prefix.replace('PRODUCTION_POOL_TYPE',pool_type)+vm+importing+registration+deletion+retirement+jobs+limits+queue+release+finalizer+
                               suffix.replace('REPLAY_POOL_RELEASE', replay))
             command = ['clang','-std=gnu17','-O1','-g','-pthread','-ffunction-sections','-fdata-sections',
                        '-fsanitize=address,undefined','-fno-sanitize-recover=all','-Wl,--gc-sections',
-                       '-I'+str(ROOT/'src/gfx/nvn'),'-I'+str(ROOT/'src/gfx/nvn/include'),
+                       '-I'+str(ROOT),'-I'+str(ROOT/'src/gfx/nvn'),'-I'+str(ROOT/'src/gfx/nvn/include'),
                        str(source),'-o',str(binary)]
             result = subprocess.run(command,capture_output=True,text=True,timeout=40)
             self.assertEqual(result.returncode,0,result.stderr)

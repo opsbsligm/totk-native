@@ -21,6 +21,15 @@ bool plat_reserve_guest(uint64_t lo, uint64_t hi);
 // Make sure [addr, addr+size) inside the guest window is backed (before the OS itself writes there, e.g.
 // file reads); a no-op where the whole window is backed from the start.
 void plat_commit(uint64_t addr, uint64_t size);
+#ifdef __linux__
+// Host references cover the full imported alignment range until GPU retirement.
+void *plat_memory_hold(uint64_t address, uint64_t size);
+void plat_memory_release(void *token);
+// 0: discarded, 1: host references still live, -1: invalid range / OS failure.
+// Optional restore_to copies an unmapped stack back before discarding, atomically
+// with respect to host references. Both ranges must be inside the guest window.
+int plat_decommit_guest(uint64_t address, uint64_t size, uint64_t restore_to);
+#endif
 // In-place reboot: every page of [lo, hi) back to zero (and unbacked), the window still claimed.
 bool plat_reset_guest(uint64_t lo, uint64_t hi);
 // Pages of [addr, addr+size) in the guest window the CPU wrote since the last call over them (write tracking: Windows
