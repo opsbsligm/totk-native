@@ -27,8 +27,9 @@ default:
 native-unit:
   needs: []
   tags: [native-games]
-  image: native-games/toolchain:c0a18e93d70c048d8fee
+  image: native-games/toolchain:b3b56b6aaa2a1a4f0c33
   script:
+    - python3 tools/check_toolchain.py --require-receipt
     - python3 tools/check_source.py
     - python3 .gitlab/check_dependency_coverage.py --input-only
     - mkdir -p out/public-tests
@@ -42,8 +43,9 @@ native-build:
     - job: secret_detection
       artifacts: false
   tags: [native-games]
-  image: native-games/toolchain:c0a18e93d70c048d8fee
+  image: native-games/toolchain:b3b56b6aaa2a1a4f0c33
   script:
+    - python3 tools/check_toolchain.py --require-receipt
     - mkdir -p out/home
     - export DOTNET_CLI_HOME="$CI_PROJECT_DIR/out/home"
     - export MAKEFLAGS="--output-sync=target"
@@ -108,7 +110,7 @@ dependency-coverage:
   needs:
     - job: dependency-scanning
       artifacts: true
-  image: native-games/toolchain:c0a18e93d70c048d8fee
+  image: native-games/toolchain:b3b56b6aaa2a1a4f0c33
   script:
     - python3 .gitlab/check_dependency_coverage.py
   artifacts:
