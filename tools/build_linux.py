@@ -17,7 +17,7 @@ import subprocess
 import sys
 import tempfile
 
-from linux_inputs import UPSTREAM, check_exefs, digest, verify_generated
+from linux_inputs import UPSTREAM, check_exefs, digest, verify_generated, verify_generated_inputs
 from source_tree import revision
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -118,9 +118,9 @@ def load_compile_overrides(path, generated, verified_sources):
 
 
 def write_game_build_record(target, generated, exefs, manifest_sha256,
-                            overrides_path, overrides_sha256):
+                            overrides_path, overrides_sha256, code_mods=None):
     """Publish provenance only after rechecking the actual successful build inputs."""
-    sources = verify_generated(generated, exefs)
+    sources, context = verify_generated_inputs(generated, exefs, code_mods)
     if digest(generated/'manifest-linux.json') != manifest_sha256:
         raise ValueError('Generated input changed during compilation; refusing build record')
     selected, actual_overrides = load_compile_overrides(overrides_path, generated, sources)
@@ -143,6 +143,9 @@ def write_game_build_record(target, generated, exefs, manifest_sha256,
                                                 for p in selected),
               'compile_overrides_experimental': any(r == ('-O0',) for r in selected.values()),
               'hardware_validated': False}
+    if context is not None:
+        from static_mods import record as mod_record
+        record['static_mods'] = mod_record(context)
     output = target.with_suffix('.build.json')
     temporary = None
     try:
@@ -165,6 +168,7 @@ def main():
     ap.add_argument('--generated', type=Path)
     ap.add_argument('--exefs', type=Path, help='Locally extracted 1.4.3 ExeFS')
     ap.add_argument('--compile-overrides', type=Path, help='SHA-bound generated-chunk recovery JSON')
+    ap.add_argument('--code-mods', type=Path, help='Read-only ExeFS mods used by the checked AOT inputs')
     ap.add_argument('--jobs', type=int, default=1)
     ap.add_argument('--generate-only', action='store_true')
     args = ap.parse_args()
@@ -174,6 +178,8 @@ def main():
         ap.error('--jobs must be between 1 and 4')
     if args.compile_overrides is not None and args.target != 'game':
         ap.error('--compile-overrides requires --target game')
+    if args.code_mods is not None and args.target != 'game':
+        ap.error('--code-mods requires --target game')
     sources = [(ROOT/p).resolve() for p in source_lists()]
     generated = []
     generated_stamp = None
@@ -181,7 +187,7 @@ def main():
         if not args.generated or not args.exefs:
             ap.error('game requires --generated and --exefs from checked local 1.4.3 input')
         try:
-            generated = verify_generated(args.generated, args.exefs)
+            generated = verify_generated(args.generated, args.exefs, args.code_mods)
             generated_stamp = digest(args.generated/'manifest-linux.json')
         except (OSError, ValueError) as e:
             ap.error(str(e))
@@ -278,7 +284,7 @@ def main():
         if code == 0 and args.target == 'game':
             try:
                 write_game_build_record(target, args.generated, args.exefs, generated_stamp,
-                                        args.compile_overrides, overrides_sha256)
+                                        args.compile_overrides, overrides_sha256, args.code_mods)
             except (OSError, ValueError) as error:
                 raise SystemExit(str(error))
         raise SystemExit(code)

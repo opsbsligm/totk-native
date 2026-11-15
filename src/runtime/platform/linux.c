@@ -20,6 +20,7 @@
 
 #include "../platform.h"
 #include "linux_watch.h"
+#include "linux_memory.h"
 
 #ifndef MAP_FIXED_NOREPLACE
 #define MAP_FIXED_NOREPLACE 0x100000
@@ -33,17 +34,24 @@ bool plat_reserve_guest(uint64_t lo, uint64_t hi) {
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED_NOREPLACE, -1, 0);
     if (p == MAP_FAILED) return false;
     if (p != (void *)(uintptr_t)lo) { munmap(p, hi - lo); return false; }  // (kernels before 4.17: just a hint)
+    g_linux_guest_lo = lo; g_linux_guest_hi = hi;
     linux_watch_init(lo, hi);
     return true;
 }
 
 // Fresh zero pages over the whole window (the old ones are released at once).
 bool plat_reset_guest(uint64_t lo, uint64_t hi) {
+    if (lo >= hi || !linux_guest_range(lo, hi - lo)) return false;
+    pthread_mutex_lock(&g_linux_memory_mu);
+    if (linux_memory_busy(lo, hi - lo)) { pthread_mutex_unlock(&g_linux_memory_mu); return false; }
     if (mmap((void *)(uintptr_t)lo, hi - lo, PROT_READ | PROT_WRITE,
-             MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED, -1, 0) != (void *)(uintptr_t)lo) return false;
+             MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED, -1, 0) != (void *)(uintptr_t)lo) {
+        pthread_mutex_unlock(&g_linux_memory_mu); return false;
+    }
     // The new mapping must be registered again. Failure is reported by the
     // next write-watch query; an active pool-copy run then fails explicitly.
-    if (g_linux_uffd >= 0 && !linux_watch_register(lo, hi)) linux_watch_close();
+    linux_watch_remapped(lo, hi);
+    pthread_mutex_unlock(&g_linux_memory_mu);
     return true;
 }
 

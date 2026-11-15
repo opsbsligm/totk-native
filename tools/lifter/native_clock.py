@@ -9,10 +9,8 @@ def require(condition, message='Native 60fps profile validation failed'):
         raise ValueError(message)
 
 
-def configure(m, PATCHES):
-    if m.name != 'main' or m.base != 0x800000000:
-        raise ValueError('60fps profile requires the verified 1.4.3 main module')
-    base = m.base
+def instruction_profile():
+    """Return fresh copies for AOT validation and static-mod conflict checks."""
     fps = {0x2db204:(0x6b08015f,0x7100055f),0x2db208:(0x1a89b10a,0x1a9fa52a),
            0x2db22c:(0xb940468a,0xd503201f),0x2db360:(0x6b0801bf,0x710005bf),
            0x2db36c:(0x1a88c1ac,0x1a9fc5ac),0x2db340:(0xb9400288,0x52800028),
@@ -21,6 +19,14 @@ def configure(m, PATCHES):
              0x2daa6c:0x5e21d800,0x2daa70:0x1e201820,0x2daa74:0x1e2c1001,0x2daa78:0x1e210800,
              0x246eac:0x1e200940,0x345904:0x1e210801,0x24944c:0x94015e7d,0x28bc98:0x9400546a}
     for off, (old, _) in fps.items(): guard[off] = old
+    return fps, guard
+
+
+def configure(m, PATCHES):
+    if m.name != 'main' or m.base != 0x800000000:
+        raise ValueError('60fps profile requires the verified 1.4.3 main module')
+    base = m.base
+    fps, guard = instruction_profile()
     for off, old in guard.items():
         require(m.word(base+off) == old, f'Unexpected v1.4.3 instruction at {off:#x}')
     

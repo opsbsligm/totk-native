@@ -134,7 +134,7 @@ void mtl_args_stats(uint64_t *enc, uint64_t *reuse);
 static uint64_t fence_now(int *token);
 static int fence_wait(uint64_t k, uint64_t timeout_ns);
 enum { XD_POOL, XD_READ_TEXELS, XD_WRITE_TEXELS, XD_PROGRAM, XD_FINISH, XD_SUSPEND, XD_GRAPHICS, XD_POOL_REUSE, XD_READ_TURN, XD_N };   // why the game thread waited
-static void x_poolrel(void *mem, uint64_t size);
+static void x_poolrel(void *mem, uint64_t size, void *storage);
 static void x_pool_reuse(const void *mem, uint64_t size);
 static void x_texwrite(const tex_t *o, unsigned level, unsigned layer0, const NVNcopyRegion *r, const uint8_t *src, size_t row, size_t img, size_t wb, uint32_t hb);
 static void x_read_texels(const tex_t *o, unsigned level, unsigned layer0, const NVNcopyRegion *r, uint8_t *dst, size_t row, size_t img);
@@ -338,14 +338,17 @@ NVN(nvnMemoryPoolInitialize, NVNboolean, NVNmemoryPool *p, const NVNmemoryPoolBu
 }
 NVN(nvnMemoryPoolFinalize, void, NVNmemoryPool *p) {
     pool_t *o = (pool_t *)p;
+    void *mem = o->mem;
+    void *storage = totk_vpool_take_storage(o);
     // TOTK translation thread: deleted in queue order (x_poolrel), after the submissions queued before - the game waited
     // for the GPU work that used the pool before finalizing it, so those do not touch it; before 2026-10-28 the game thread
     // waited here for the whole queue (~6 s in a 17-minute session).
-    if (o->mem && !(o->flags & NVN_MEMORY_POOL_FLAGS_GPU_NO_ACCESS)) {
-        if (async_replay()) x_poolrel(o->mem, o->size); else { nvn_dirty_remove_range(o->mem); mtl_pool_del(o->mem); }
-    }
+    if (mem && !(o->flags & NVN_MEMORY_POOL_FLAGS_GPU_NO_ACCESS)) {
+        if (async_replay()) x_poolrel(mem, o->size, storage);
+        else { nvn_dirty_remove_range(mem); mtl_pool_del_release(mem, storage ? totk_vpool_release_storage : NULL, storage); }
+    } else totk_vpool_release_storage(storage);
     va_release(o->va);
-    totk_vpool_fini(o); o->magic = 0;
+    o->magic = 0;
 }
 NVN(nvnMemoryPoolFlushMappedRange, void, const NVNmemoryPool *p, ptrdiff_t off, size_t n) {
     const pool_t *o = (const pool_t *)p;
@@ -2036,7 +2039,8 @@ _Atomic int dm_submit_busy;   // TOTK diagnostic: submissions being replayed (ru
 // TOTK_ASYNC_REPLAY=0 runs everything on the calling thread as before. [Windows port] On by default since 2026-10-24: with
 // the Vulkan replay on the game's thread the Great Sky Island ran at ~95 ms a frame, with this thread at ~58 ms.
 enum { XJ_SUBMIT = 1, XJ_PRESENT, XJ_TEXREL, XJ_SHREL, XJ_POOLREL, XJ_TEXWRITE };
-typedef struct { int kind, n; uint64_t *h; void *ucap; win_t *win; int idx; double period; int crop[4]; uint64_t frame, sub; tex_t tex; } xjob;   // tex: copy of a finalized texture (XJ_TEXREL) or of the written one (XJ_TEXWRITE); ucap: uniforms captured at the submit call, the shaders a program let go of (XJ_SHREL), the pool's memory (XJ_POOLREL) or the texels (XJ_TEXWRITE, xtexw)
+typedef struct { int kind, n; uint64_t *h; void *ucap; win_t *win; int idx; double period; int crop[4]; uint64_t frame, sub; tex_t tex; void *pool_storage; } xjob;   // tex: copy of a finalized texture (XJ_TEXREL) or of the written one (XJ_TEXWRITE); ucap: uniforms captured at the submit call, the shaders a program let go of (XJ_SHREL), the pool's memory (XJ_POOLREL) or the texels (XJ_TEXWRITE, xtexw)
+// pool_storage: detached ownership, never a pointer to the reusable guest pool object.
 #define XQ 64
 #define XF 4096
 static xjob g_xq[XQ];
@@ -2082,7 +2086,7 @@ static void *x_thread(void *unused) {
         if (j.kind == XJ_SUBMIT) { submit_exec(j.n, j.h, j.ucap); free(j.h); }
         else if (j.kind == XJ_TEXREL) { void live_del_x(const tex_t *o); live_del_x(&j.tex); mtl_tex_release(&j.tex); }
         else if (j.kind == XJ_SHREL) { void vkb_shader_release(void *rel); vkb_shader_release(j.ucap); }
-        else if (j.kind == XJ_POOLREL) { nvn_dirty_remove_range(j.ucap); mtl_pool_del(j.ucap); }
+        else if (j.kind == XJ_POOLREL) { nvn_dirty_remove_range(j.ucap); mtl_pool_del_release(j.ucap, j.pool_storage ? totk_vpool_release_storage : NULL, j.pool_storage); }
         else if (j.kind == XJ_TEXWRITE) { xtexw *w = j.ucap; mtl_write_texels_image(&j.tex, w->level, w->layer0, &w->r, w->data, 0, 0); free(w); }
         else {
             // Real-time like the game's render thread that used to replay (set at acquire): otherwise the game's ~50
@@ -2146,13 +2150,13 @@ static void x_drain(int why) {   // everything queued so far has run (no-op when
     atomic_fetch_add(&g_x_why_n[why], 1); atomic_fetch_add(&g_x_why_ns[why], dt);
 }
 void nvn_x_drain(void) { x_drain(XD_GRAPHICS); }   // for the graphics layer (pool invalidate write-back)
-static void x_poolrel(void *mem, uint64_t size) {
+static void x_poolrel(void *mem, uint64_t size, void *storage) {
     pthread_mutex_lock(&g_xq_mu);
     int full = g_nxpool == XPOOLS;
     if (!full) { g_xpool[g_nxpool].lo = (uintptr_t)mem; g_xpool[g_nxpool].hi = (uintptr_t)mem + size; g_nxpool++; }
     pthread_mutex_unlock(&g_xq_mu);
-    if (full) { x_drain(XD_POOL); nvn_dirty_remove_range(mem); mtl_pool_del(mem); return; }
-    xjob j = {.kind = XJ_POOLREL, .ucap = mem};
+    if (full) { x_drain(XD_POOL); nvn_dirty_remove_range(mem); mtl_pool_del_release(mem, storage ? totk_vpool_release_storage : NULL, storage); return; }
+    xjob j = {.kind = XJ_POOLREL, .ucap = mem, .pool_storage = storage};
     x_push(&j);
 }
 static void x_pool_reuse(const void *mem, uint64_t size) {   // a new pool: over the memory of one still to be deleted?

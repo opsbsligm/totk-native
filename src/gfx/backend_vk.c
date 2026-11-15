@@ -21,6 +21,7 @@
 #include "host/hle.h"
 #include "nvn/nvn_dirty.h"
 #include "nvn/nvn_obj.h"
+#include "nvn/nvn_mtl.h"
 #include "../vk/present.h"
 #include "vkb.h"
 #include "vkb_shader.h"
@@ -70,7 +71,7 @@ static VkResult tracked_queue_submit(uint32_t count, const VkSubmitInfo2 *submit
 // sh..defer_pass: the pool's copy in device memory (below, "copies of the pools in device memory")
 typedef struct { uintptr_t lo, hi, base; VkBuffer buf; VkDeviceMemory mem; const void *key; VkDeviceSize bytes;
                  VkBuffer sbuf; VkDeviceSize soff; uint32_t sh; uint8_t no_shadow, filled; uint64_t stamp, sync_sub, used_sub, defer_pass, wb_sub;
-                 uint8_t *cmap; uint32_t ch; uint8_t cfilled; uint64_t cstamp, pc_sub; } pool_ent;
+                 uint8_t *cmap; uint32_t ch; uint8_t cfilled; uint64_t cstamp, pc_sub; void *host_ref; } pool_ent;
 static pool_ent *g_pools;
 static int g_npools, g_capools;
 static vkb_rw g_pool_mu = VKB_RW_INITIALIZER;   // recording threads look pools up for every draw (read); changes write
@@ -323,7 +324,11 @@ static int import_host(uintptr_t a, uintptr_t b, VkBuffer *out_buf, VkDeviceMemo
         vk.vkDestroyBuffer(vkc.device, buf, NULL);
         return 0;
     }
-    vk.vkBindBufferMemory(vkc.device, buf, dm, 0);
+    if (!vk_check(vk.vkBindBufferMemory(vkc.device, buf, dm, 0), "pool bind")) {
+        vk.vkDestroyBuffer(vkc.device, buf, NULL);
+        vk.vkFreeMemory(vkc.device, dm, NULL);
+        return 0;
+    }
     *out_buf = buf; *out_mem = dm;
     return 1;
 }
@@ -592,7 +597,17 @@ void mtl_pool_add(const void *mem, uint64_t size) {
     VkDeviceMemory dm = VK_NULL_HANDLE;
     uint8_t *cmap = NULL;
     uint32_t ch = 0;
+    void *host_ref = NULL;
+#ifdef __linux__
+    /* Copy-backed pools also read/write the source on the CPU. Protect their
+       full source span and imports' alignment padding before touching it. */
+    host_ref = plat_memory_hold(a, b - a);
+    if (!host_ref) die("pool host reference allocation");
+#endif
     if (copy ? !pc_alloc(a, b, &buf, &cmap, &ch) : !import_host(a, b, &buf, &dm)) {
+#ifdef __linux__
+        plat_memory_release(host_ref);
+#endif
         if (copy) die("pool copy allocation failed");
         return;
     }
@@ -608,6 +623,7 @@ void mtl_pool_add(const void *mem, uint64_t size) {
     int i = g_npools;
     while (i > 0 && g_pools[i - 1].lo > lo) { g_pools[i] = g_pools[i - 1]; i--; }
     g_pools[i] = (pool_ent){lo, hi, a, buf, dm, mem, b - a};
+    g_pools[i].host_ref = host_ref;
     g_pools[i].cmap = cmap; g_pools[i].ch = ch;
     g_npools++;
     for (int j = i - 4; j <= i + 4; j++)   // overlapping pools: one copy each would diverge, so neither is copied
@@ -629,8 +645,22 @@ void mtl_pool_add(const void *mem, uint64_t size) {
 }
 
 static void destroy_later(VkImageView view, VkImage img, VkDeviceMemory mem, VkBuffer buf);
+static void destroy_later_release(VkImageView view, VkImage img, VkDeviceMemory mem, VkBuffer buf,
+                                  void (*release)(void *), void *arg);
+#ifdef __linux__
+typedef struct pool_release { void *host_ref; void (*release)(void *); void *arg; } pool_release;
+static void pool_release_backing(void *opaque) {
+    pool_release *r = opaque;
+    plat_memory_release(r->host_ref);
+    if (r->release) r->release(r->arg);
+    free(r);
+}
+#endif
 void mtl_pool_del(const void *mem) {
-    if (g_ok != 1) return;
+    mtl_pool_del_release(mem, NULL, NULL);
+}
+void mtl_pool_del_release(const void *mem, void (*release)(void *), void *arg) {
+    if (g_ok != 1) { if (release) release(arg); return; }
     pool_ent e = {0};
     vkb_rw_write(&g_pool_mu, LK_POOLS);
     for (int i = 0; i < g_npools; i++)
@@ -645,14 +675,22 @@ void mtl_pool_del(const void *mem) {
     if (e.ch) vkb_poolmem_free(e.ch);
     if (e.buf) wb_forget(e.buf);
     vkb_rw_write_end(&g_pool_mu);
-    if (!e.buf) return;
+    if (!e.buf) { if (release) release(arg); return; }
+#ifdef __linux__
+    if (e.host_ref) {
+        pool_release *r = malloc(sizeof *r);
+        if (!r) die("pool reference retirement allocation");
+        *r = (pool_release){e.host_ref, release, arg};
+        release = pool_release_backing; arg = r;
+    }
+#endif
     if (vkc.has_checkpoints || vkc.has_buffer_marker) VLOG("memory pool %p %#llx..%#llx deleted (present %llu)", mem, (unsigned long long)e.lo, (unsigned long long)e.hi, (unsigned long long)vkb_frame());
     // No wait for the GPU here (the translation thread deletes pools in queue order since 2026-10-28, hle_nvn.c
     // x_poolrel): the game waited for the GPU work that used the pool; its copy in device memory is reused after the
     // submission being recorded (vkb_shadow_free), the import goes after it too (below).
     // A submission of another game thread may be being recorded already and have copied from the pool (the copies of
     // recently used pools at its start, sync_gather): the import goes when that submission is done (destroy_later).
-    destroy_later(VK_NULL_HANDLE, VK_NULL_HANDLE, e.mem, e.buf);
+    destroy_later_release(VK_NULL_HANDLE, VK_NULL_HANDLE, e.mem, e.buf, release, arg);
 }
 
 void mtl_pool_invalidate(const pool_t *p, uint64_t off, uint64_t n) { (void)p; (void)off; (void)n; }   // zero-copy: nothing cached
@@ -1407,23 +1445,27 @@ static void checkpoint_report(void) {
 // the device was lost (TOTK's item-get screen, 2026-10-24). Now each waits for the first submission after it was given up.
 // Deleted memory pools' imports too (mtl_pool_del): another game thread's submission, recorded while the pool was being
 // deleted, brought the copies of recently used pools up to date from it (2026-10-27, L16).
-typedef struct dead { uint64_t fence; VkImageView view; VkImage img; VkDeviceMemory mem; VkBuffer buf; VkShaderEXT sh; struct dead *next; } dead;
+typedef struct dead { uint64_t fence; VkImageView view; VkImage img; VkDeviceMemory mem; VkBuffer buf; VkShaderEXT sh; void (*release)(void *); void *arg; struct dead *next; } dead;
 static dead *g_dead_new, *g_dead;   // given up since the last submission (no fence yet) / waiting for their fence
 static pthread_mutex_t g_dead_mu = PTHREAD_MUTEX_INITIALIZER;
-static void destroy_later(VkImageView view, VkImage img, VkDeviceMemory mem, VkBuffer buf) {
+static void destroy_later_release(VkImageView view, VkImage img, VkDeviceMemory mem, VkBuffer buf,
+                                  void (*release)(void *), void *arg) {
     dead *d = malloc(sizeof *d);
     if (!d) die("deferred destruction");
-    *d = (dead){0, view, img, mem, buf, VK_NULL_HANDLE, NULL};
+    *d = (dead){.view = view, .img = img, .mem = mem, .buf = buf, .release = release, .arg = arg};
     pthread_mutex_lock(&g_dead_mu);
     d->next = g_dead_new; g_dead_new = d;
     pthread_mutex_unlock(&g_dead_mu);
+}
+static void destroy_later(VkImageView view, VkImage img, VkDeviceMemory mem, VkBuffer buf) {
+    destroy_later_release(view, img, mem, buf, NULL, NULL);
 }
 void vkb_destroy_later(VkImageView view, VkImage img, VkDeviceMemory mem) { destroy_later(view, img, mem, VK_NULL_HANDLE); }
 // A shader object no program holds any more (vkb_shader.c): the submission being recorded may still bind it.
 void vkb_destroy_shader_later(VkShaderEXT sh) {
     dead *d = malloc(sizeof *d);
     if (!d) die("deferred destruction");
-    *d = (dead){0, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, sh, NULL};
+    *d = (dead){.sh = sh};
     pthread_mutex_lock(&g_dead_mu);
     d->next = g_dead_new; g_dead_new = d;
     pthread_mutex_unlock(&g_dead_mu);
@@ -1447,6 +1489,7 @@ static void dead_reap(uint64_t done) {   // the GPU finished up to `done`
         if (d->img) vk.vkDestroyImage(vkc.device, d->img, NULL);
         if (d->buf) vk.vkDestroyBuffer(vkc.device, d->buf, NULL);
         if (d->mem) vk.vkFreeMemory(vkc.device, d->mem, NULL);
+        if (d->release) d->release(d->arg);
         free(d);
     }
 }

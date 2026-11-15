@@ -2,9 +2,12 @@
 import ctypes as C
 from ctypes.util import find_library
 from dataclasses import dataclass
+import sys
 
 MAX_OUTPUT = 512 << 20
-lib = C.CDLL(find_library('zstd') or 'libzstd.so.1')
+# The supported Linux toolchain declares this ABI. Loading it directly avoids
+# find_library's compiler/linker probes during otherwise read-only diagnostics.
+lib = C.CDLL('libzstd.so.1' if sys.platform == 'linux' else (find_library('zstd') or 'libzstd.so.1'))
 
 
 def function(name, result, *args):

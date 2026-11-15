@@ -27,8 +27,9 @@ default:
 native-unit:
   needs: []
   tags: [native-games]
-  image: native-games/toolchain:c0a18e93d70c048d8fee
+  image: native-games/toolchain:b3b56b6aaa2a1a4f0c33
   script:
+    - python3 tools/check_toolchain.py --require-receipt
     - python3 tools/check_source.py
     - python3 .gitlab/check_dependency_coverage.py --input-only
     - mkdir -p out/public-tests
@@ -42,10 +43,11 @@ native-build:
     - job: secret_detection
       artifacts: false
   tags: [native-games]
-  image: native-games/toolchain:c0a18e93d70c048d8fee
+  image: native-games/toolchain:b3b56b6aaa2a1a4f0c33
   script:
+    - python3 tools/check_toolchain.py --require-receipt
     - mkdir -p out/home
-    - export HOME="$CI_PROJECT_DIR/out/home"
+    - export DOTNET_CLI_HOME="$CI_PROJECT_DIR/out/home"
     - export MAKEFLAGS="--output-sync=target"
     - export NATIVE_SOURCE_CHECK="/tmp/native-source-${CI_JOB_ID}"
     - mkdir -p "$NATIVE_SOURCE_CHECK/source"
@@ -85,6 +87,7 @@ container_scanning:
     - ruby .gitlab/run_container_scan.rb
   artifacts:
     when: always
+    expire_in: 7 days
     paths: [out/container-scan.log, gl-container-scanning-report.json, gl-sbom-report.cdx.json]
 
 dependency-scanning:
@@ -103,16 +106,19 @@ dependency-scanning:
         export CI_API_V4_URL="$NATIVE_SECURITY_API_URL"
       fi
   image: ${NATIVE_SECURITY_PREFIX}/dependency-scanning@sha256:dee4eff3ebca66a1112477142c902e62462ee53e0a8dc4292cdfa2ed459aae21
+  artifacts:
+    expire_in: 7 days
 
 dependency-coverage:
   needs:
     - job: dependency-scanning
       artifacts: true
-  image: native-games/toolchain:c0a18e93d70c048d8fee
+  image: native-games/toolchain:b3b56b6aaa2a1a4f0c33
   script:
     - python3 .gitlab/check_dependency_coverage.py
   artifacts:
     when: always
+    expire_in: 7 days
     paths: [out/dependency-coverage.json]
 
 semgrep-sast:
@@ -121,6 +127,8 @@ semgrep-sast:
       artifacts: false
   image: ${NATIVE_SECURITY_PREFIX}/semgrep@sha256:bde285a2219a3397142bdf2e93d513b179a98ec8762208cc52242f0929abe552
   allow_failure: false
+  artifacts:
+    expire_in: 7 days
 
 gitlab-advanced-sast:
   needs:
@@ -128,6 +136,8 @@ gitlab-advanced-sast:
       artifacts: false
   image: ${NATIVE_SECURITY_PREFIX}/gitlab-advanced-sast@sha256:a4f2e8941901de686a9214ad06a781f55202b5dcdc9f2fd3274c39ba4e4491a7
   allow_failure: false
+  artifacts:
+    expire_in: 7 days
 
 gitlab-advanced-sast-cpp:
   timeout: 90 minutes
@@ -142,6 +152,7 @@ gitlab-advanced-sast-cpp:
     - python3 .gitlab/run_cpp_scan.py
   artifacts:
     when: always
+    expire_in: 7 days
     paths: [out/cppscan/coverage-input.json, out/cppscan/coverage-result.json, out/cppscan/analysis.log, gl-sast-report.json]
   image: ${NATIVE_SECURITY_PREFIX}/clangsa@sha256:9aff93a28ad09aaffd1701747e350d643ce31e3f6f8a561541e6d95021fb32f3
   allow_failure: false
@@ -152,7 +163,11 @@ gitlab-advanced-sast-ext:
       artifacts: false
   image: ${NATIVE_SECURITY_PREFIX}/gitlab-advanced-sast-ext@sha256:046eb419b1e2acb992013c649cd8932ff05dfa14f8c35335a96201f1f7522f64
   allow_failure: false
+  artifacts:
+    expire_in: 7 days
 
 secret_detection:
   image: ${NATIVE_SECURITY_PREFIX}/secrets@sha256:05e8567c4e4bdfaec379c3c2f867204b32b0226636b5380642d8d4f87a66ad93
   allow_failure: false
+  artifacts:
+    expire_in: 7 days
