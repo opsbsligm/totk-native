@@ -91,8 +91,9 @@ def main():
     p.add_argument('--code-mods', type=Path)
     a = p.parse_args()
     a.work = a.work.resolve()
-    a.work.mkdir(parents=True, exist_ok=True)
-    (a.work / 'home').mkdir(exist_ok=True)
+    a.work.mkdir(parents=True, exist_ok=True, mode=0o700)
+    from build_environment import prepare
+    os.environ.update(prepare(a.work))
     from check_toolchain import main as check_toolchain
     check_toolchain()
     if a.command == 'runtime':
