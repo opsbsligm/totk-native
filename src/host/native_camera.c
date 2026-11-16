@@ -17,7 +17,9 @@ bool nd_totk_camera_available(void) {
 bool nd_totk_camera_configure(int value) {
     if (value < 70 || value > 150 || (value != 100 && !nd_totk_camera_available()))
         return false;
-    atomic_store_explicit(&percent, value, memory_order_relaxed);
+    int previous = atomic_exchange_explicit(&percent, value, memory_order_relaxed);
+    if (previous != value)
+        atomic_store_explicit(&applied_percent, 0, memory_order_relaxed);
     return true;
 }
 int nd_totk_camera_percent(void) {
@@ -33,7 +35,7 @@ void nd_totk_camera_apply(void *scalar) {
     float angle;
     memcpy(&angle, scalar, sizeof angle);
     float adjusted = angle * ((float)value / 100.0f);
-    if (!isfinite(angle) || angle <= 0.0f || !isfinite(adjusted)
+    if (!isfinite(angle) || angle <= 0.0f || angle >= 3.14159265f || !isfinite(adjusted)
             || adjusted <= 0.0f || adjusted >= 3.14159265f) return;
     memcpy(scalar, &adjusted, sizeof adjusted);
     atomic_store_explicit(&applied_percent, value, memory_order_relaxed);

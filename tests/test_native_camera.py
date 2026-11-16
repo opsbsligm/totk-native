@@ -6,6 +6,7 @@ import hashlib
 import importlib
 import io
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -66,6 +67,13 @@ int main(void) {
         float original=invalid[i];nd_totk_camera_apply(&invalid[i]);
         assert(!memcmp(&original,&invalid[i],4));
     }
+    assert(nd_totk_camera_configure(150));assert(nd_totk_camera_applied_percent()==150);
+    assert(nd_totk_camera_configure(100));assert(nd_totk_camera_applied_percent()==0);
+    assert(nd_totk_camera_configure(150));assert(nd_totk_camera_applied_percent()==0);
+    float live=.8f;nd_totk_camera_apply(&live);assert(nd_totk_camera_applied_percent()==150);
+    assert(nd_totk_camera_configure(70));assert(nd_totk_camera_applied_percent()==0);
+    float invalid_original=3.2f,original=invalid_original;nd_totk_camera_apply(&invalid_original);
+    assert(!memcmp(&original,&invalid_original,4));
     nd_totk_camera_apply(0);assert(nd_totk_camera_configure(100));return 0;
 }
 ''')
@@ -192,3 +200,27 @@ int main(void) {
             self.assertEqual(chunks.count('nd_totk_camera_apply(&c->v[0])'),2)
             with mock.patch.object(sys,'argv',argv+['--limit','1']), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit): gen.main()
+
+    def test_adding_camera_runtime_preserves_existing_generated_object_names(self):
+        sys.path.insert(0,str(ROOT/'tools'))
+        import build_linux
+        sources=build_linux.source_lists()
+        self.assertEqual(sources.count('src/host/native_camera.c'),1)
+        with tempfile.TemporaryDirectory(prefix='camera-cache-',dir=Path.cwd()) as directory:
+            root=Path(directory);generated=root/'generated';(generated/'main').mkdir(parents=True)
+            (generated/'manifest-linux.json').write_text('{}\n')
+            synthetic=generated/'main/main_000.c';synthetic.write_text('/* original test fixture */\n')
+            objects=[]
+            for mode,inputs in [('with-camera',sources),('previous', [s for s in sources if s!='src/host/native_camera.c'])]:
+                out=root/mode
+                argv=['build_linux.py','--target','game','--out',str(out),'--generated',str(generated),
+                      '--exefs',str(root/'exefs'),'--generate-only']
+                with mock.patch.object(build_linux,'source_lists',return_value=inputs), \
+                     mock.patch.object(build_linux,'verify_generated',return_value=[synthetic]), \
+                     mock.patch.object(sys,'argv',argv),contextlib.redirect_stdout(io.StringIO()):
+                    build_linux.main()
+                ninja=(out/'build.ninja').read_text()
+                names=re.findall(r'build [^\n]*?/obj/([^/:]+): cc_game ',ninja)
+                self.assertEqual(len(names),1)
+                objects.append(names[0])
+            self.assertEqual(objects[0],objects[1], 'A small host feature must not renumber cached guest objects')

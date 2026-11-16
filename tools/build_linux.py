@@ -233,7 +233,9 @@ def main():
         lines.extend(['rule cc_recovery',
                       '  command = '+shlex.quote(cc)+' '+shlex.join([arg for arg in common if arg != '-O1'])+' $recovery_clang_args -std=gnu17 -MD -MF $out.d -c $in -o $out',
                       '  depfile = $out.d', '  deps = gcc'])
-    ui_sources=[p for p in sources if 'third_party/imgui' in p.as_posix() or p.name in ('control_bar.cpp','native_cheats.c','menu_confirm.c','fsr.c','native_amiibo.c','native_atmosphere.c')]
+    # Keep the new settings feature after generated sources. Inserting it into
+    # ordinary sources would renumber every existing guest object in the cache.
+    ui_sources=[p for p in sources if 'third_party/imgui' in p.as_posix() or p.name in ('control_bar.cpp','native_cheats.c','menu_confirm.c','fsr.c','native_amiibo.c','native_atmosphere.c','native_camera.c')]
     ordinary=[p for p in sources if p not in ui_sources]
     ui_flags=['-DIMGUI_IMPL_VULKAN_NO_PROTOTYPES','-I'+str(ROOT/'third_party/imgui'),'-I'+str(ROOT/'third_party/imgui/backends')]
     lines.extend(['rule cxxui','  command = '+shlex.quote(cxx)+' '+shlex.join([*common,*ui_flags])+' -std=c++17 -fno-exceptions -fno-rtti -MD -MF $out.d -c $in -o $out',
