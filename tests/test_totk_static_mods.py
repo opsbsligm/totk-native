@@ -149,8 +149,8 @@ class TotkStaticMods(unittest.TestCase):
         self.assertEqual(subprocess.run([str(target)], timeout=5).returncode, 0)
         return target
 
-    def test_metadata_hle_native_clock_and_relocation_targets_are_protected(self):
-        for offset in [4, 8, 0x1000, 0x1080, 0x1100, 0x2000, 0x2100, 0x2180, 0x48, 0x50, 0x58]:
+    def test_metadata_hle_camera_clock_and_relocation_targets_are_protected(self):
+        for offset in [4, 8, 0x1000, 0x1080, 0x1100, 0x2000, 0x2100, 0x2180, 0x48, 0x50, 0x58, 0x68, 0x6c]:
             with self.subTest(offset=hex(offset)):
                 self.write_patch(offset=offset+0x100)
                 with self.assertRaisesRegex(ValueError, '保留'):
