@@ -12,3 +12,16 @@
 - 只分享源码时，使用 `python3 tools/export_source.py --output ../totk-native-source.tar.gz`；不要归档工作目录或个人游戏包。
 
 此处的构建命令是原生 Linux 路线。`docs/upstream/` 中保留的 Windows/macOS 用法和历史状态不作为本项目 Linux 交付的验证结论。
+
+## 装到掌机
+
+`pipeline.py build` 产出的 `package/` 由 `tools/deploy_package.py` 安装成掌机上的一次发布：
+
+    python3 tools/deploy_package.py --package /work/package --root ~/native-recomp/totk-native
+
+- 先把包内每个文件与 `bundle.json` 逐项比对（名称、长度、SHA-256），任一不符直接拒绝，不动已装内容，也不覆盖 `releases/` 里内容不同的同名发布。
+- 与被替换发布内容相同的资源（romfs、BC7 贴图、着色器包等）按硬链接复用，一次重建不会在 `/home` 上再放一份私有游戏树；真正落盘的只有可执行文件和清单。
+- 全部文件到位后一次替换 `current` 符号链接：玩家要么看到完整的新发布，要么完全看不到变化。
+- 被替换的发布保留在 `releases/` 并记入 `previous`；出问题用 `--rollback` 换回，再执行一次换回来。
+
+掌机布局语义不变：仍是 `releases/<id>` 加 `current`，launcher 不需要跟着改。
