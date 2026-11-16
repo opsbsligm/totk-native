@@ -84,6 +84,8 @@ class TotkStaticMods(unittest.TestCase):
             # Only this process gets a miniature protected-site profile.
             if name == 'native_clock':
                 return SimpleNamespace(instruction_profile=lambda: ({}, {0x50:MOVZ}))
+            if name == 'native_camera':
+                return SimpleNamespace(reserved_ranges=lambda: ((0x68, 0x70),))
             if name == 'patches':
                 return SimpleNamespace(PATCHES={linux_inputs.BASES['main'][0]+0x58:None})
             return real_module(name)
@@ -110,6 +112,11 @@ class TotkStaticMods(unittest.TestCase):
         finally:
             sys.path[:] = old_path
         def run(command, **kwargs):
+            # This original three-function fixture exercises code-mod AOT, not
+            # the real camera profile (covered by test_native_camera separately).
+            if command[command.index(str(ROOT/'tools/lifter/gen.py'))+1] == 'main':
+                self.assertIn('--native-camera', command)
+            command = [arg for arg in command if arg != '--native-camera']
             index = command.index(str(ROOT/'tools/lifter/gen.py'))
             if command[index+1] == fail_module:
                 raise subprocess.CalledProcessError(7, ['synthetic-lift-failure'])

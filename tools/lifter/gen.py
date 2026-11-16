@@ -356,13 +356,19 @@ def main():
     ap.add_argument('--simd', choices=('asm', 'c'),
                     default='asm' if platform.machine().lower() in ('arm64', 'aarch64') else 'c')
     ap.add_argument('--native-60fps', action='store_true')
+    ap.add_argument('--native-camera', action='store_true')
     args = ap.parse_args()
+    if args.native_camera and args.limit:
+        ap.error('Native camera requires a complete module')
 
     t0 = time.time()
     m = Module(args.name, args.nso, args.base, args.simd)
     if args.native_60fps:
         from native_clock import configure
         configure(m, PATCHES)
+    if args.native_camera:
+        import native_camera
+        camera_emitted = native_camera.configure(m, PATCHES)
     starts = m.boundaries()
     hle = {}
     if args.hle and os.path.exists(args.hle):
@@ -472,8 +478,12 @@ def main():
         if mm and int(mm.group(1)) >= nchunks:
             os.remove(os.path.join(args.outdir, fn))
     import io
+    if args.native_camera:
+        native_camera.require_emitted(camera_emitted)
     with io.StringIO() as f:
         f.write('#include "cpu.h"\n')
+        if args.native_camera:
+            f.write('const uint32_t nd_totk_camera_profile_v143 = 1;\n')
         for a in order:
             f.write(f'void {fname(a)}(Cpu *c);\n')
         f.write(f'const uint64_t {args.name}_fn_addrs[] = {{\n')

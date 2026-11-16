@@ -3,6 +3,7 @@
 // exclusively to the presentation thread. The panel never maps game buttons.
 #include "control_bar.h"
 #include "native_cheats.h"
+#include "native_camera.h"
 #include "native_touch.h"
 #include "native_ui_glyphs.h"
 #include "imgui.h"
@@ -302,9 +303,10 @@ static void preferences(bool save) {
     if(n<0 || (size_t)n>=sizeof path) return;
     if(!save) {
         int a,rate,enabled,up,sharp;
-        int perf=0,an=0;
-        if(nd_control_preferences_read_extended(path,&a,&rate,&enabled,&up,&sharp,&perf,&an)) {
+        int perf=0,an=0,fov=100;
+        if(nd_control_preferences_read_camera(path,&a,&rate,&enabled,&up,&sharp,&perf,&an,&fov)) {
             anchor=a; fps=rate; gyro=enabled!=0;nd_fsr_configure(up,sharp); perf_mode=perf; aniso_setting=an;
+            nd_totk_camera_configure(fov);
             runtime_hid_feedback_flag("gyro",gyro);
         }
         return;
@@ -313,7 +315,7 @@ static void preferences(bool save) {
     if(n<0 || (size_t)n>=sizeof temp) return;
     int fd=mkstemp(temp); if(fd<0) return;
     FILE *f=fdopen(fd,"w"); if(!f) {close(fd);unlink(temp);return;}
-    bool ok=fprintf(f,"anchor=%d\nfps=%d\ngyro=%d\nupscaler=%d\nsharpness=%d\nperf=%d\naniso=%d\n",anchor,fps.load(),gyro,nd_fsr_enabled(),nd_fsr_sharpness(),perf_mode.load(),aniso_setting.load())>0;
+    bool ok=fprintf(f,"anchor=%d\nfps=%d\ngyro=%d\nupscaler=%d\nsharpness=%d\nperf=%d\naniso=%d\nfov=%d\n",anchor,fps.load(),gyro,nd_fsr_enabled(),nd_fsr_sharpness(),perf_mode.load(),aniso_setting.load(),nd_totk_camera_percent())>0;
     if(fflush(f) || fsync(fd)) ok=false;
     if(fclose(f)) ok=false;
     if(!ok || rename(temp,path)) unlink(temp);
@@ -410,6 +412,21 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
                 static const char *aniso_names[]={label("Off (game default)","关闭（游戏默认）"),"2x","4x","8x","16x"};
                 int an=aniso_setting.load();
                 if(nd_ui_choice("##aniso",&an,aniso_names,5)) {aniso_setting=an;dirty=true;}
+            }
+            nd_ui_label(label("Field of view","视野范围"));
+            {
+                bool available=nd_totk_camera_available();
+                ImGui::BeginDisabled(!available);
+                int fov=nd_totk_camera_percent();
+                if(ImGui::SliderInt("##fov",&fov,70,150,"%d%%")) nd_totk_camera_configure(fov);
+                if(ImGui::IsItemDeactivatedAfterEdit()) dirty=true;
+                ImGui::EndDisabled();
+                if(!available) nd_ui_status(label("This build has no verified camera hooks","此构建未接入已核验的相机后端"),-1);
+                else if(fov!=100) nd_ui_status(nd_totk_camera_applied_percent()==fov?
+                    label("Applied by game camera","游戏相机已应用"):
+                    label("Waiting for game camera update","等待游戏相机更新"),
+                    nd_totk_camera_applied_percent()==fov?1:0);
+                ImGui::TextWrapped("%s",label("100% preserves the original camera. Bow and scope zoom scale with this value.","100% 保持原始视野；弓箭与瞄准镜的缩放也会随比例变化。"));
             }
             if(ImGui::TreeNode(label("Window size / capabilities","窗口尺寸与能力说明"))) {
                 nd_ui_label(label("Window size (windowed mode)","窗口尺寸（窗口模式）"));

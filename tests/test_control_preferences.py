@@ -39,7 +39,20 @@ int main(int argc,char **argv) {
  fixture(p,"anchor=4\nfps=60\ngyro=1\n");assert(nd_control_preferences_read_extended(p,&a,&f,&g,&u,&sharp,&perf,&an));assert(!u && sharp==50 && perf==0 && an==0);
  fixture(p,"anchor=4\nfps=60\ngyro=1\nupscaler=1\nsharpness=50\nperf=1\naniso=4\n");assert(nd_control_preferences_read_extended(p,&a,&f,&g,&u,&sharp,&perf,&an));assert(u==1 && sharp==50 && perf==1 && an==4);
  fixture(p,"anchor=4\nfps=60\ngyro=1\nupscaler=1\nsharpness=50\nperf=1\naniso=5\n");assert(!nd_control_preferences_read_extended(p,&a,&f,&g,&u,&sharp,&perf,&an));
- assert(!unlink(p));return 0;
+  int fov=-1;
+  fixture(p,"anchor=4\nfps=60\ngyro=1\nupscaler=1\nsharpness=50\nperf=1\naniso=4\n");
+  assert(nd_control_preferences_read_camera(p,&a,&f,&g,&u,&sharp,&perf,&an,&fov));assert(fov==100);
+  const int fovs[]={70,100,150};char settings[128];
+  for(unsigned i=0;i<sizeof fovs/sizeof *fovs;i++) {
+   snprintf(settings,sizeof settings,"anchor=4\nfps=60\ngyro=1\nupscaler=1\nsharpness=50\nperf=1\naniso=4\nfov=%d\n",fovs[i]);fixture(p,settings);
+   assert(nd_control_preferences_read_camera(p,&a,&f,&g,&u,&sharp,&perf,&an,&fov));assert(fov==fovs[i]);
+  }
+  const char *bad_fov[]={"69","151","-1","999999999999999999","70\nfov=100"};
+  for(unsigned i=0;i<sizeof bad_fov/sizeof *bad_fov;i++) {
+   snprintf(settings,sizeof settings,"anchor=4\nfps=60\ngyro=1\nupscaler=1\nsharpness=50\nperf=1\naniso=4\nfov=%s\n",bad_fov[i]);fixture(p,settings);
+   assert(!nd_control_preferences_read_camera(p,&a,&f,&g,&u,&sharp,&perf,&an,&fov));assert(fov==150 && a==4 && f==60 && an==4);
+  }
+  assert(!unlink(p));return 0;
 }
 ''')
    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-I',str(ROOT/'src/host'),str(c),'-o',str(exe)],check=True)

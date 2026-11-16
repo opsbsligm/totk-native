@@ -35,7 +35,7 @@ def source_lists():
     host = [p for p in found['TARGETS']['ultratears'] if p not in ('src/host/profiler.c', 'src/host/watch.c')]
     return runtime + ['src/runtime/platform/linux.c', 'src/runtime/platform/linux_io.c',
                       'src/host/deck_motion_decode.c', 'src/host/deck_motion_linux.c',
-                      'src/host/nd_totk_timing.c',
+                      'src/host/nd_totk_timing.c', 'src/host/native_camera.c',
                       'src/host/diagnostics_linux.c'] + host + found['GFX'] + ['src/vk/fsr.c', 'src/host/native_atmosphere.c', 'src/host/native_amiibo.c', 'src/host/native_cheats.c', 'src/host/control_bar.cpp',
         *['third_party/imgui/'+name for name in ('imgui.cpp','imgui_draw.cpp','imgui_tables.cpp','imgui_widgets.cpp','backends/imgui_impl_vulkan.cpp')]] + ['src/host/menu_confirm.c']
 

@@ -51,7 +51,7 @@ def main():
                     with (out / (module + '.log')).open('w') as log:
                         subprocess.run([sys.executable, '-X', 'faulthandler', str(ROOT/'tools/lifter/gen.py'),
                                         module, str((exefs/module).resolve()), hex(base), str(directory),
-                                        '--simd', 'c', *(['--native-60fps'] if module == 'main' else [])], stdout=log, stderr=subprocess.STDOUT, check=True)
+                                        '--simd', 'c', *(['--native-60fps', '--native-camera'] if module == 'main' else [])], stdout=log, stderr=subprocess.STDOUT, check=True)
                     print('Lifted ' + module, flush=True)
             if context is not None:
                 publish_context(context, out)
