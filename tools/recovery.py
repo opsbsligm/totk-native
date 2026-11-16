@@ -17,6 +17,7 @@ import stat
 import subprocess
 import tarfile
 import tempfile
+import threading
 
 CHUNK = 512 * 1024 * 1024
 BLOCK = 1024 * 1024
@@ -66,6 +67,104 @@ def age_tool():
     return age
 
 
+def stop_process(proc):
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+
+
+def age_pipe(command, produce, consume):
+    """Bounded pipes, with producer errors and age exit checked before return."""
+    proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    errors = []
+
+    def feed():
+        try:
+            with proc.stdin:
+                produce(proc.stdin)
+        except BaseException as error:
+            errors.append(error)
+            stop_process(proc)
+
+    worker = threading.Thread(target=feed, name='recovery-age-input')
+    worker.start()
+    try:
+        result = consume(proc.stdout)
+        # A tar reader may stop at its end markers before age exits. Always
+        # consume the entire output and check its authentication result.
+        while proc.stdout.read(BLOCK):
+            pass
+        worker.join()
+        status = proc.wait()
+        if errors and not (status and isinstance(errors[0], BrokenPipeError)):
+            raise errors[0]
+        if status:
+            raise ValueError('age failed; nothing was installed')
+        return result
+    except BaseException as error:
+        stop_process(proc)
+        worker.join()
+        # A changed input can terminate age before an archive header arrives.
+        # Report that checked input failure rather than a secondary tar error.
+        if errors and isinstance(errors[0], ValueError):
+            raise errors[0] from error
+        raise
+    finally:
+        stop_process(proc)
+        worker.join()
+        proc.stdout.close()
+
+
+def split_ciphertext(stream, stage):
+    parts = []
+    while True:
+        raw = stream.read(min(BLOCK, CHUNK))
+        if not raw:
+            return parts
+        name = f'payload-{len(parts):05d}.age.part'
+        sha = hashlib.sha256()
+        size = 0
+        with (stage/name).open('xb') as output:
+            os.chmod(stage/name, 0o600)
+            while raw:
+                output.write(raw)
+                sha.update(raw)
+                size += len(raw)
+                if size == CHUNK:
+                    break
+                raw = stream.read(min(BLOCK, CHUNK-size))
+            output.flush()
+            os.fsync(output.fileno())
+        parts.append(dict(name=name, bytes=size, sha256=sha.hexdigest()))
+
+
+def feed_parts(bundle, parts, output):
+    """Recheck bytes on each pass; never trust an earlier path hash alone."""
+    for item in parts:
+        flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
+        with os.fdopen(os.open(bundle/item['name'], flags), 'rb') as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_size != item['bytes']:
+                raise ValueError('Encrypted part changed')
+            sha = hashlib.sha256()
+            size = 0
+            while raw := stream.read(BLOCK):
+                size += len(raw)
+                if size > item['bytes']:
+                    raise ValueError('Encrypted part grew')
+                sha.update(raw)
+                output.write(raw)
+            after = os.fstat(stream.fileno())
+            if (size != item['bytes'] or sha.hexdigest() != item['sha256']
+                    or (before.st_ino, before.st_dev, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+                    != (after.st_ino, after.st_dev, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+                raise ValueError('Encrypted part changed')
+
+
 def seal(args):
     destination = Path(args.destination).absolute()
     if destination.exists() or destination.is_symlink():
@@ -100,19 +199,21 @@ def seal(args):
                 safe_name(archive)
                 files.append((archive, path, st))
                 total += st.st_size
-    # Ciphertext + split parts may briefly coexist; do not exhaust the volume.
-    if shutil.disk_usage(destination.parent).free < total*2 + 1024**3:
-        raise ValueError('Need twice the input size plus 1 GiB free on output volume')
+    low_peak = getattr(args, 'low_peak', False)
+    # Direct splitting removes the full ciphertext intermediate. The extra
+    # GiB covers gzip/tar overhead and the manifest; no reserve is reduced.
+    peak = total*(1 if low_peak else 2) + 1024**3
+    if shutil.disk_usage(destination.parent).free < peak:
+        raise ValueError('Insufficient free space for recovery seal peak')
     print(json.dumps(dict(phase='seal', files=len(files), input_bytes=total,
-                          estimated_peak_extra_bytes=total*2+1024**3)), flush=True)
+                          low_peak=low_peak, estimated_peak_extra_bytes=peak)), flush=True)
     stage = Path(tempfile.mkdtemp(prefix='.recovery-seal-', dir=destination.parent))
     try:
         ciphertext = stage/'payload.age'
         manifest = dict(schema=PAYLOAD_SCHEMA, kind=PAYLOAD_KIND, label=args.label, files=[], missing=args.missing,
                         completeness='partial' if args.missing else 'provided-inputs')
-        proc = subprocess.Popen([age_tool(), '-R', args.recipients, '-o', str(ciphertext)], stdin=subprocess.PIPE)
-        try:
-            with gzip.GzipFile(fileobj=proc.stdin, mode='wb', compresslevel=1) as compressed, tarfile.open(fileobj=compressed, mode='w|') as archive:
+        def write_archive(output):
+            with gzip.GzipFile(fileobj=output, mode='wb', compresslevel=1) as compressed, tarfile.open(fileobj=compressed, mode='w|') as archive:
                 for i, (name, path, before) in enumerate(files):
                     flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
                     with os.fdopen(os.open(path, flags), 'rb') as stream:
@@ -136,21 +237,23 @@ def seal(args):
                 raw = json.dumps(manifest, ensure_ascii=False).encode()
                 info = tarfile.TarInfo('manifest.json'); info.size = len(raw); info.mode = 0o600
                 archive.addfile(info, io.BytesIO(raw))
-            proc.stdin.close()
-            if proc.wait() != 0:
-                raise ValueError('age encryption failed')
-        finally:
-            if proc.poll() is None:
-                proc.terminate(); proc.wait()
-        parts = []
-        with ciphertext.open('rb') as stream:
-            index = 0
-            while raw := stream.read(CHUNK):
-                name = f'payload-{index:05d}.age.part'
-                path = stage/name; path.write_bytes(raw); path.chmod(0o600)
-                parts.append(dict(name=name, bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest()))
-                index += 1
-        ciphertext.unlink()
+        if low_peak:
+            parts = age_pipe([age_tool(), '-R', args.recipients], write_archive,
+                             lambda stream: split_ciphertext(stream, stage))
+        else:
+            proc = subprocess.Popen([age_tool(), '-R', args.recipients, '-o', str(ciphertext)], stdin=subprocess.PIPE)
+            try:
+                write_archive(proc.stdin)
+                proc.stdin.close()
+                if proc.wait() != 0:
+                    raise ValueError('age encryption failed')
+            finally:
+                stop_process(proc)
+            with ciphertext.open('rb') as stream:
+                parts = split_ciphertext(stream, stage)
+            ciphertext.unlink()
+        if not parts:
+            raise ValueError('Empty ciphertext')
         index = dict(schema=PAYLOAD_SCHEMA, kind=PAYLOAD_KIND, label=args.label, cipher='age', archive='tar.gz', parts=parts,
                      input_bytes=total, files=len(files), missing=args.missing,
                      completeness=manifest['completeness'])
@@ -184,46 +287,66 @@ def restore(args):
     if destination.exists() or destination.is_symlink():
         raise ValueError('Restore destination must be new; existing games/saves are never overwritten')
     private_directory(destination.parent)
-    if shutil.disk_usage(destination.parent).free < index['input_bytes']*2 + 1024**3:
-        raise ValueError('Need twice the input size plus 1 GiB free for authenticated restore')
+    low_peak = getattr(args, 'low_peak', False)
+    total = index['input_bytes']
+    if type(total) is not int or total < 0:
+        raise ValueError('Invalid input byte budget')
+    peak = total*(1 if low_peak else 2) + 1024**3
+    if shutil.disk_usage(destination.parent).free < peak:
+        raise ValueError('Insufficient free space for authenticated restore peak')
+    command = [age_tool(), '-d', '-i', args.identity]
+    produce = lambda output: feed_parts(bundle, parts, output)
+    if low_peak:
+        # First pass must authenticate the COMPLETE ciphertext before even
+        # creating an extraction stage. Its plaintext is discarded immediately.
+        age_pipe(command, produce, lambda stream: None)
+        print(json.dumps(dict(phase='authenticated', low_peak=True,
+                              estimated_peak_extra_bytes=peak)), flush=True)
     stage = Path(tempfile.mkdtemp(prefix='.recovery-restore-', dir=destination.parent))
     try:
         payload = stage/'authenticated.tar.gz'
-        with payload.open('xb') as output:
-            proc = subprocess.Popen([age_tool(), '-d', '-i', args.identity], stdin=subprocess.PIPE, stdout=output)
-            try:
-                for item in parts:
-                    with (bundle/item['name']).open('rb') as stream:
-                        shutil.copyfileobj(stream, proc.stdin, BLOCK)
-                proc.stdin.close()
-                if proc.wait() != 0:
-                    raise ValueError('age authentication failed; nothing was installed')
-            finally:
-                if proc.poll() is None:
-                    proc.terminate(); proc.wait()
+        if not low_peak:
+            with payload.open('xb') as output:
+                age_pipe(command, produce, lambda stream: shutil.copyfileobj(stream, output, BLOCK))
         root = stage/'restored'; root.mkdir(mode=0o700)
-        seen = set(); expanded = 0; manifest = None
-        with tarfile.open(payload, 'r|gz') as archive:
-            for item in archive:
-                safe_name(item.name)
-                if item.name.casefold() == 'recovery-receipt.json':
-                    raise ValueError('Reserved recovery receipt member')
-                if not item.isfile() or item.name in seen or item.size < 0:
-                    raise ValueError('Duplicate or nonregular archive member')
-                seen.add(item.name); expanded += item.size
-                if expanded > args.max_bytes:
-                    raise ValueError('Archive exceeds configured expansion limit')
-                stream = archive.extractfile(item)
-                if item.name == 'manifest.json':
-                    if item.size > 256*1024*1024:
-                        raise ValueError('Oversized manifest')
-                    manifest = json.load(stream)
-                    continue
-                path = root/item.name
-                path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-                with path.open('xb') as output:
-                    shutil.copyfileobj(stream, output, BLOCK)
-                path.chmod(0o600)
+
+        def extract(stream):
+            seen = set(); expanded = 0; data_bytes = 0; manifest = None
+            with tarfile.open(fileobj=stream, mode='r|gz') as archive:
+                for item in archive:
+                    safe_name(item.name)
+                    if item.name.casefold() == 'recovery-receipt.json':
+                        raise ValueError('Reserved recovery receipt member')
+                    if not item.isfile() or item.name in seen or item.size < 0:
+                        raise ValueError('Duplicate or nonregular archive member')
+                    seen.add(item.name); expanded += item.size
+                    if expanded > args.max_bytes:
+                        raise ValueError('Archive exceeds configured expansion limit')
+                    member = archive.extractfile(item)
+                    if item.name == 'manifest.json':
+                        if item.size > 256*1024*1024:
+                            raise ValueError('Oversized manifest')
+                        manifest = json.load(member)
+                        continue
+                    data_bytes += item.size
+                    if low_peak and data_bytes > total:
+                        raise ValueError('Archive exceeds declared input byte budget')
+                    path = root/item.name
+                    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+                    with path.open('xb') as output:
+                        shutil.copyfileobj(member, output, BLOCK)
+                    path.chmod(0o600)
+            if low_peak and data_bytes != total:
+                raise ValueError('Archive differs from declared input byte budget')
+            return seen, manifest
+
+        if low_peak:
+            # Every part is rehashed as it feeds the second pass. No file is
+            # published unless this pass also exits with successful age auth.
+            seen, manifest = age_pipe(command, produce, extract)
+        else:
+            with payload.open('rb') as stream:
+                seen, manifest = extract(stream)
         if not manifest:
             raise ValueError('Encrypted manifest missing')
         if payload_schema(manifest) != version:
@@ -263,16 +386,18 @@ def main():
     p.add_argument('--missing', action='append', default=[])
     p.add_argument('--recipients', required=True, help='age public recipients file, never an identity')
     p.add_argument('--destination', required=True)
+    p.add_argument('--low-peak', action='store_true', help='Stream parts; restore authenticates once before a second extraction pass')
     p = commands.add_parser('restore')
     p.add_argument('--bundle', required=True)
     p.add_argument('--identity', required=True)
     p.add_argument('--destination', required=True)
+    p.add_argument('--low-peak', action='store_true', help='Stream parts; restore authenticates once before a second extraction pass')
     p.add_argument('--max-bytes', type=int, default=128*1024**3)
     args = parser.parse_args()
     os.umask(0o077)
     try:
         (seal if args.command == 'seal' else restore)(args)
-    except (OSError, ValueError, KeyError, BrokenPipeError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, KeyError, EOFError, tarfile.TarError, subprocess.CalledProcessError) as error:
         parser.exit(1, str(error)+'\n')
 
 

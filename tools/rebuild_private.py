@@ -14,13 +14,14 @@ PROJECT=20
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--url',default='https://gitlab.example.com:8445')
+    p.add_argument('--url',required=True,help='Explicitly authorized GitLab URL for this recovery')
     p.add_argument('--version',required=True)
     p.add_argument('--token-file',required=True,type=Path)
     p.add_argument('--identity',required=True,type=Path)
     p.add_argument('--work',required=True,type=Path)
     p.add_argument('--encrypted-work',type=Path,
                    help='New directory on a separate disk for ciphertext only; plaintext stays in --work')
+    p.add_argument('--low-peak', action='store_true', help='Authenticate twice and stream restore without a plaintext archive copy')
     p.add_argument('--jobs',type=int,choices=(1,2,3,4),default=2)
     a=p.parse_args()
     if '..' in a.work.parts:p.error('Parent traversal in work output refused')
@@ -45,6 +46,7 @@ def main():
     def run(*args):subprocess.run([sys.executable,*map(str,args)],check=True)
     run(ROOT/'tools/recovery_gitlab.py','fetch','--url',a.url,'--project',PROJECT,'--version',a.version,
         '--token-file',a.token_file,'--bundle',encrypted_work/'encrypted')
+    restore_options = ['--low-peak'] if a.low_peak else []
     index=json.loads((encrypted_work/'encrypted/index.json').read_text())
     if index.get('schema')==2:
         restored={}
@@ -54,7 +56,7 @@ def main():
                 '--token-file',a.token_file,'--bundle',bundle)
             if hashlib.sha256((bundle/'index.json').read_bytes()).hexdigest()!=item['index_sha256']:
                 raise SystemExit('Recovery component index differs from the selected immutable set')
-            run(ROOT/'tools/recovery.py','restore','--bundle',bundle,'--identity',a.identity,'--destination',target)
+            run(ROOT/'tools/recovery.py','restore','--bundle',bundle,'--identity',a.identity,'--destination',target,*restore_options)
             restored[role]=target
         base=restored['base'];receipt=json.loads((base/'recovery-receipt.json').read_text())
         missing=set(receipt['missing'])
@@ -69,7 +71,7 @@ def main():
         os.rename(base,work/'restored')
         if missing:raise SystemExit('Recovery is still missing: '+', '.join(sorted(missing)))
     else:
-        run(ROOT/'tools/recovery.py','restore','--bundle',encrypted_work/'encrypted','--identity',a.identity,'--destination',work/'restored')
+        run(ROOT/'tools/recovery.py','restore','--bundle',encrypted_work/'encrypted','--identity',a.identity,'--destination',work/'restored',*restore_options)
         receipt=json.loads((work/'restored/recovery-receipt.json').read_text())
         if receipt['missing']:
             raise SystemExit('Recovery authenticated and restored; build blocked by recorded missing inputs: '+', '.join(receipt['missing']))

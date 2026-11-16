@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class RestoredRuntimeEntrypoints(unittest.TestCase):
     def exercise(self, root, entries=(), missing=(), verify_exit=0, executable=True,
                  separate_encrypted=False, encrypted_path=None, recovery_set=False,
-                 encrypted_free=200*1024**3, work_path=None):
+                 encrypted_free=200*1024**3, work_path=None, low_peak=False):
         spec = importlib.util.spec_from_file_location('private_rebuild_entry', ROOT/'tools/rebuild_private.py')
         tool = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(tool)
@@ -75,10 +75,12 @@ class RestoredRuntimeEntrypoints(unittest.TestCase):
                 return real_run(args, **kwargs)
             return SimpleNamespace(returncode=0)
 
-        argv = ['rebuild_private.py', '--version', 'fixture-v3', '--token-file', str(root/'token'),
+        argv = ['rebuild_private.py', '--url', 'https://fixture.invalid', '--version', 'fixture-v3', '--token-file', str(root/'token'),
                 '--identity', str(root/'identity'), '--work', str(work), '--jobs', '1']
         if encrypted is not None:
             argv += ['--encrypted-work', str(encrypted)]
+        if low_peak:
+            argv += ['--low-peak']
         def disk_usage(path):
             free = encrypted_free if Path(path) == root/'external-volume' else 200*1024**3
             return SimpleNamespace(free=free)
@@ -174,6 +176,19 @@ class RestoredRuntimeEntrypoints(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, '2'):
                     self.exercise(root, encrypted_path=root/relative, work_path=root/work_relative)
                 self.assertFalse((root/work_relative).exists())
+
+    def test_low_peak_forwarded_to_single_bundle_and_all_set_components(self):
+        for recovery_set in (False, True):
+            with self.subTest(recovery_set=recovery_set), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                missing = ('system-shared-fonts-6','healthy-complete-romfs') if recovery_set else ()
+                work, calls = self.exercise(root, ('dump/run.sh',), recovery_set=recovery_set,
+                                           missing=missing, separate_encrypted=True, low_peak=True)
+                restores = [a for a in calls if len(a)>2 and a[1].endswith('/recovery.py')]
+                self.assertEqual(len(restores), 3 if recovery_set else 1)
+                self.assertTrue(all(a.count('--low-peak')==1 for a in restores))
+                self.assertTrue(all('--low-peak' not in a for a in calls if a not in restores))
+                self.assertEqual((work/'restored/dump/verified.txt').read_text(), '--verify\n')
 
     def test_external_ciphertext_rejects_existing_or_symlink_parent(self):
         with tempfile.TemporaryDirectory() as tmp:
