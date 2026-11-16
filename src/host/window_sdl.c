@@ -197,24 +197,58 @@ static void title_update(void) {
     t0 = now; game0 = game; shown0 = shown;
 }
 
+// Opt-in evidence before control capture; a consumed pointer must still be observable.
+// Text events are deliberately excluded. The shared budget also bounds motion floods.
+static void input_audit_event(const SDL_Event *event) {
+    static int enabled = -1, limit_reported;
+    static unsigned count;
+    if (enabled < 0) {
+        enabled = getenv("TOTK_INPUT_AUDIT") != NULL;
+        if (enabled) dprintf(STDERR_FILENO, "[totk-input-sdl] audit enabled; event budget=512; text excluded\n");
+    }
+    if (!enabled) return;
+    bool key = event->type == SDL_EVENT_KEY_DOWN || event->type == SDL_EVENT_KEY_UP;
+    bool focus = event->type == SDL_EVENT_WINDOW_FOCUS_LOST || event->type == SDL_EVENT_WINDOW_FOCUS_GAINED;
+    bool finger = event->type == SDL_EVENT_FINGER_DOWN || event->type == SDL_EVENT_FINGER_MOTION ||
+                  event->type == SDL_EVENT_FINGER_UP || event->type == SDL_EVENT_FINGER_CANCELED;
+    bool motion = event->type == SDL_EVENT_MOUSE_MOTION;
+    bool button = event->type == SDL_EVENT_MOUSE_BUTTON_DOWN || event->type == SDL_EVENT_MOUSE_BUTTON_UP;
+    if (!key && !focus && !finger && !motion && !button) return;
+    if (count >= 512) {
+        if (!limit_reported) dprintf(STDERR_FILENO, "[totk-input-sdl] audit budget exhausted; further events unlogged\n");
+        limit_reported = 1;
+        return;
+    }
+    count++;
+    if (key) {
+        dprintf(STDERR_FILENO, "[totk-input-sdl] type=%u scancode=%u repeat=%d\n",
+                event->type, event->key.scancode, event->key.repeat);
+    } else if (focus) {
+        dprintf(STDERR_FILENO, "[totk-input-sdl] focus event=%u\n", event->type);
+    } else if (finger) {
+        const char *phase = event->type == SDL_EVENT_FINGER_DOWN ? "FINGER_DOWN" :
+                            event->type == SDL_EVENT_FINGER_MOTION ? "FINGER_MOTION" :
+                            event->type == SDL_EVENT_FINGER_UP ? "FINGER_UP" : "FINGER_CANCELED";
+        dprintf(STDERR_FILENO, "[totk-input-sdl] pointer=%s window=%u touch=%llu finger=%llu x=%.5f y=%.5f pressure=%.5f\n",
+                phase, event->tfinger.windowID, (unsigned long long)event->tfinger.touchID,
+                (unsigned long long)event->tfinger.fingerID, event->tfinger.x, event->tfinger.y, event->tfinger.pressure);
+    } else if (motion) {
+        dprintf(STDERR_FILENO, "[totk-input-sdl] pointer=MOUSE_MOTION window=%u which=%llu x=%.3f y=%.3f\n",
+                event->motion.windowID, (unsigned long long)event->motion.which, event->motion.x, event->motion.y);
+    } else {
+        dprintf(STDERR_FILENO, "[totk-input-sdl] pointer=%s window=%u which=%llu button=%u x=%.3f y=%.3f\n",
+                event->type == SDL_EVENT_MOUSE_BUTTON_DOWN ? "MOUSE_BUTTON_DOWN" : "MOUSE_BUTTON_UP",
+                event->button.windowID, (unsigned long long)event->button.which, (unsigned)event->button.button,
+                event->button.x, event->button.y);
+    }
+}
+
 _Noreturn void window_loop(void) {
     for (;;) {
         SDL_Event e;
         if (SDL_WaitEventTimeout(&e, 100)) {
             do {
-                static int audit = -1;
-                static unsigned audit_count;
-                if (audit < 0) audit = getenv("TOTK_INPUT_AUDIT") != NULL;
-                if (audit && audit_count < 512) {
-                    if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) {
-                        audit_count++;
-                        dprintf(STDERR_FILENO, "[totk-input-sdl] type=%u scancode=%u repeat=%d\n",
-                                e.type, e.key.scancode, e.key.repeat);
-                    } else if (e.type == SDL_EVENT_WINDOW_FOCUS_LOST || e.type == SDL_EVENT_WINDOW_FOCUS_GAINED) {
-                        audit_count++;
-                        dprintf(STDERR_FILENO, "[totk-input-sdl] focus event=%u\n", e.type);
-                    }
-                }
+                input_audit_event(&e);
                 if (nd_control_event(&e,window)) {
                     // Pointer capture also changes the published gamepad state.
                     pad_update();
