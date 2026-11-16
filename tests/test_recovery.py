@@ -176,7 +176,7 @@ class RebuildPrivatePortableRuntime(unittest.TestCase):
             fake_subprocess = types.SimpleNamespace(run=fake_run)
             fake_shutil = types.SimpleNamespace(disk_usage=lambda p: types.SimpleNamespace(free=200*1024**3))
             with patch.object(rp, 'subprocess', fake_subprocess), patch.object(rp, 'shutil', fake_shutil), \
-                 patch.object(rp.sys, 'argv', ['rebuild_private.py', '--version', 'v',
+                 patch.object(rp.sys, 'argv', ['rebuild_private.py', '--url', 'https://fixture.invalid', '--version', 'v',
                                                 '--token-file', str(tmp/'tok'),
                                                 '--identity', str(tmp/'ident'),
                                                 '--work', str(work), '--jobs', '1']):

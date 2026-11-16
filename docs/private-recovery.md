@@ -1,53 +1,48 @@
 # 个人恢复
 
-源码与私有加密恢复包分别保存。源码可以分享；恢复包保存在本项目私有 Generic Packages 的 `private-recovery` 中，包含自己提供的游戏转储和 key，不进入 Git 历史或公共 CI。
+源码与私有加密恢复包分别保存。源码可以分享；自己提供的游戏转储、密钥、个人运行包与存档保存在已授权的私有存储中，不进入 Git、公共 CI 或默认发布流程。以下本地恢复命令可直接读取已挂载私有存储上的密文，无须先复制全部分片到执行盘。
 
-重置 Deck 前，保留 Mac/NAS 上的 age identity 文件；解密密钥不能只保存在将被重置的 Deck，也不上传到 GitLab。`age` 1.2.1 及以上是恢复工具的前置依赖。密钥路径由使用者传入，不写进仓库。GitLab 下载令牌用仅当前账户可读的文件。
+重置 Deck 前，保留另一台设备上的 age identity 文件；解密密钥不能只保存在将被重置的 Deck。`age` 1.2.1 及以上是前置依赖，identity 与接收者文件路径由使用者传入，不写进仓库。
 
-在有 Docker 和 160 GiB 以上可用空间的 x86_64 Linux 主机执行：
-
-```sh
-python3 tools/rebuild_private.py --version YOUR_PACKAGE_VERSION \
-  --token-file /private/gitlab-token --identity /private/age-identity.txt \
-  --work /mnt/native-restore
-```
-
-该命令下载校验全部加密分片、完成 age 认证后解包、逐文件核对加密清单，再检查和构建。完整运行包会识别恢复目录中的 `run.sh`、`dump/run.sh` 或 `runtime/run.sh`，直接原地校验并输出入口，不再重新构建；多个入口或入口不可执行时会停止。只有不含上述入口的构建输入包（`dump/`）才走 doctor/build 路径。输出目录必须是新目录，避免覆盖已有安装或存档。工作目录需要容纳加密分片、解密暂存、恢复文件和构建产物；大文件直接使用数据盘/NAS，不能放 Mac 的 tmp。
-
-密文分片可放在另一块磁盘、USB盘或已挂载的 NAS，共享盘不需要保存 Unix 可执行权限。使用新目录指定 `--encrypted-work`；认证后的临时归档、还原文件、运行入口和构建输出仍留在 `--work` 所在的 Linux 文件系统：
+已有完整运行包时，在 Linux 执行盘选择一个全新的恢复目录：
 
 ```sh
-python3 tools/rebuild_private.py --version YOUR_PACKAGE_VERSION \
-  --token-file /private/gitlab-token --identity /private/age-identity.txt \
-  --work /mnt/linux-work/native-restore \
-  --encrypted-work /mnt/encrypted-disk/native-cipher
+python3 tools/recovery.py restore --bundle /mnt/private-storage/my-runtime-bundle \
+  --identity /private/age-identity.txt --destination /mnt/linux-work/restored-runtime \
+  --low-peak
+/mnt/linux-work/restored-runtime/runtime/run.sh --verify
 ```
 
-两处目录均须是新目录，不能相互包含、放入源码目录、经过符号链接或包含 `..` 路径段。schema 2 集合的全部密文组件也使用独立目录。令牌和 age identity 仍由原私有路径读取，不复制到共享盘；解密认证、摘要和入口权限检查保持一致。只有位于不同文件系统时才会分摊实际空间峰值，同盘不同目录不会增加可用空间。下载前仍核对分片总量及空间，还原工作盘的既有容量门禁保留；命令结束后目录供用户检查与使用，不自动删除。
+上述入口适用于以 `runtime=` 封装的完整个人包。实际还原路径以加密清单中的组件名为准；`run.sh --verify` 会完整核对包内容，不启动游戏。只有入口及全部数据核验通过后，才将入口添加到 Steam。完整运行包无需 Docker 或重新编译；原始构建输入包仍需经过对应的完整构建流程。
 
-备份创建示例：
+便携包创建示例：
 
 ```sh
-python3 tools/recovery.py seal --label MY_GAME_VERSION \
-  --include dump=/mnt/my-dump --include keys=/private/my-keys \
-  --recipients /private/age-recipients.txt --destination /mnt/sealed-bundle
-python3 tools/recovery_gitlab.py publish --url https://gitlab.example.com:8445 \
-  --project 20 --version MY_PACKAGE_VERSION --token-file /private/gitlab-token \
-  --bundle /mnt/sealed-bundle
+python3 tools/recovery.py seal --label MY_RUNTIME_VERSION \
+  --include runtime=/mnt/personal-package \
+  --recipients /private/age-recipients.txt --destination /mnt/private-storage/sealed-runtime \
+  --low-peak
 ```
 
-`seal` 只读取输入。输入变化、符号链接或非普通文件会被拒绝；加密清单包含逐文件摘要。发布会回读每个分片，下载会再次核对摘要，恢复最后核对加密清单。部分备份必须通过 `--missing` 明示缺项；一键重建遇到缺项会停止，不能把不完整资源当成可玩包。
+`seal` 只读取输入。输入变化、符号链接或非普通文件会被拒绝。每次备份前先对照已验证的受控明文清单：相同内容复用现有密文，不因新的源码提交或随机密文重复封装整套游戏。新运行物的密封与保留须另外核验；`--low-peak` 本身不提供增量或去重功能。
 
-新建单包使用 schema 3，执行权限与内容摘要一起写入 age 认证的加密清单。入口和程序只恢复为属主可执行的 `0700`，普通文件为 `0600`；组、其他用户及特殊权限均不保留。恢复先完成全部认证和内容校验，再设置权限并原子安装。非法权限、内外格式不一致或未知格式会拒绝安装。schema 2 继续表示由 base/fonts/romfs 组成的恢复集合。
+低峰值封装将 age 输出直接拆为有界分片，不生成整份 `payload.age`；还原先完整解密认证一遍并丢弃明文，第二遍才在私有暂存目录流式解包。每遍重新核对分片摘要，第二遍 age 成功且全部清单和权限校验通过后才原子安装。任一遍认证、输入变化、输出或清单失败都会拒绝安装并清理本次暂存。此模式与默认模式的 schema 3 格式互相兼容；默认路径仍可使用。
 
-根目录的 `recovery-receipt.json` 为恢复工具保留，归档不能占用该路径，避免生成回执时覆盖已认证成员。
+此模式用多一次完整解密读取换取空间。封装或还原阶段新增占用预算各为输入大小加 1 GiB，省去同时存在的完整密文或明文归档；现有输入、已下载分片、后续构建、并发任务及执行盘保留线仍须另计。同盘换目录不会增加可用空间。大文件生成、下载、解包、校验都在容量已核验的执行盘完成，不放日用 Mac 的临时目录。
 
-旧 schema 1 可以继续还原文件，文件权限保持 `0600`。旧包没有记录可执行属性，不能把摘要校验通过当成运行入口已经恢复。便携运行包应使用新版工具重新封装；恢复完成后可直接验证入口：
+新建单包使用 schema 3，将执行权限与内容摘要一起写入 age 认证的加密清单。入口和程序恢复为属主可执行的 `0700`，普通文件为 `0600`；组、其他用户与特殊权限不保留。先完成全部认证和内容校验，再设置权限并原子安装。非法权限、内外格式不一致或未知格式会拒绝安装。schema 2 继续表示由 base/fonts/romfs 组成的恢复集合。
+
+根目录的 `recovery-receipt.json` 为恢复工具保留，归档不能占用该路径。旧 schema 1 仍可还原文件，但没有认证过的可执行属性，文件保持 `0600`；摘要通过不能代替入口权限验收。部分备份必须通过 `--missing` 明示缺项，缺项不能算可玩包。
+
+已有专门授权的旧 GitLab 传输流程可继续使用 `rebuild_private.py`。它会识别 `run.sh`、`dump/run.sh` 或 `runtime/run.sh`，直接原地校验完整运行包；多个入口、缺项或入口不可执行都会停止。只有不含这些入口的 `dump/` 构建输入才进入 doctor/build。该兼容工具不代表默认允许发布私有输入、密钥或运行数据。
 
 ```sh
-python3 tools/recovery.py restore --bundle /mnt/my-runtime-bundle \
-  --identity /private/age-identity.txt --destination /mnt/restored-runtime
-/mnt/restored-runtime/runtime/run.sh --verify
+python3 tools/rebuild_private.py --url https://gitlab.example.invalid \
+  --version YOUR_PACKAGE_VERSION --token-file /private/gitlab-token \
+  --identity /private/age-identity.txt --work /mnt/linux-work/native-restore \
+  --encrypted-work /mnt/encrypted-disk/native-cipher --low-peak
 ```
 
-完整构建输入版本名为 `20261105-totk143-complete`。恢复工具会核对所有组件和缺项；版本只有在发布完成且全部回读验证通过后才能用于重建。存档、Steam入口和图片单独保存为个人配置快照，恢复构建不会覆盖现有存档。
+`rebuild_private.py` 必须显式传入此次获准访问的 `--url`，不内置个人服务地址。它仍要求 Linux 工作盘至少 160 GiB 可用；仅从转储重新构建时需要 x86_64 与 Docker，已有完整运行包路径不重编译。`--low-peak` 会传给单包及集合的每个还原组件。密文目录与还原工作目录均须是新目录，不能互相包含、放入源码目录、经过符号链接或包含 `..`。schema 2 的组件也使用独立密文目录；令牌和 identity 不复制到共享盘。
+
+存档、Steam 入口与图片保存在单独的个人配置快照中。本工具不会覆盖已有安装或存档；成功输出仍需使用者按实际设备完成入口、输入、陀螺仪和运行性能验收。
