@@ -39,8 +39,9 @@ def configure(module, patches):
     emitted = set()
     def emit(generator, address):
         emitted.add(address)
-        return (prepared[address] + ' { extern void nd_totk_camera_apply(void *); '
-                'nd_totk_camera_apply(&c->v[0]); }')
+        return (prepared[address] + ' { extern uint32_t nd_totk_camera_adjust_bits(uint32_t); '
+                'c->v[0] = (c->v[0] & ~(__uint128_t)0xffffffffu) | '
+                'nd_totk_camera_adjust_bits((uint32_t)c->v[0]); }')
     patches.update({address:emit for address in prepared})
     return emitted
 

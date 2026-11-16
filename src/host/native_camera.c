@@ -3,7 +3,8 @@
 #include <math.h>
 #include <stdatomic.h>
 #include <stdint.h>
-#include <string.h>
+
+_Static_assert(sizeof(float) == sizeof(uint32_t), "Camera scalar must be 32 bits");
 
 /* Defined by the generated main table only after both guarded hooks emit.
  * A runtime archive alone must never advertise a working game capability. */
@@ -28,15 +29,17 @@ int nd_totk_camera_percent(void) {
 int nd_totk_camera_applied_percent(void) {
     return atomic_load_explicit(&applied_percent, memory_order_relaxed);
 }
-void nd_totk_camera_apply(void *scalar) {
+uint32_t nd_totk_camera_adjust_bits(uint32_t original) {
     int value = nd_totk_camera_percent();
     /* Inherit the original float bits, including NaN/zero, without arithmetic. */
-    if (!scalar || value == 100) return;
-    float angle;
-    memcpy(&angle, scalar, sizeof angle);
+    if (value == 100) return original;
+    /* C union representation access avoids pointer aliasing or buffer copies. */
+    union { uint32_t bits; float angle; } scalar = {.bits = original};
+    float angle = scalar.angle;
     float adjusted = angle * ((float)value / 100.0f);
     if (!isfinite(angle) || angle <= 0.0f || angle >= 3.14159265f || !isfinite(adjusted)
-            || adjusted <= 0.0f || adjusted >= 3.14159265f) return;
-    memcpy(scalar, &adjusted, sizeof adjusted);
+            || adjusted <= 0.0f || adjusted >= 3.14159265f) return original;
+    scalar.angle = adjusted;
     atomic_store_explicit(&applied_percent, value, memory_order_relaxed);
+    return scalar.bits;
 }

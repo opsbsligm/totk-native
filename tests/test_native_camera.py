@@ -37,7 +37,7 @@ class NativeCamera(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             subprocess.run([str(executable)], check=True, timeout=10)
 
-    def test_runtime_default_is_bit_exact_and_unsafe_angles_preserve_all_bytes(self):
+    def test_runtime_default_is_bit_exact_and_unsafe_angles_preserve_original_bits(self):
         self.compile_run(r'''
 #include "native_camera.h"
 #include <assert.h>
@@ -49,7 +49,7 @@ int main(void) {
     assert(nd_totk_camera_available() && nd_totk_camera_percent()==100);
     for(unsigned i=0;i<sizeof bits/sizeof *bits;i++) {
         uint32_t reg[4]={bits[i],0x12345678,0x98765432,0xffffffff}, original[4];
-        memcpy(original,reg,sizeof reg);nd_totk_camera_apply(reg);
+        memcpy(original,reg,sizeof reg);reg[0]=nd_totk_camera_adjust_bits(reg[0]);
         assert(!memcmp(reg,original,sizeof reg));
     }
     assert(!nd_totk_camera_configure(69) && !nd_totk_camera_configure(151));
@@ -57,24 +57,24 @@ int main(void) {
     for(int value=70;value<=150;value+=80) {
         assert(nd_totk_camera_configure(value));
         uint32_t reg[4]={0,0x12345678,0x98765432,0xffffffff};float angle=0.8f;
-        memcpy(reg,&angle,4);nd_totk_camera_apply(reg);float actual;memcpy(&actual,reg,4);
+        memcpy(reg,&angle,4);reg[0]=nd_totk_camera_adjust_bits(reg[0]);float actual;memcpy(&actual,reg,4);
         assert(fabsf(actual-(0.8f*value/100.f))<0.000001f);
         assert(reg[1]==0x12345678 && reg[2]==0x98765432 && reg[3]==0xffffffff);
         assert(nd_totk_camera_applied_percent()==value);
     }
     float invalid[]={-1.f,0.f,INFINITY,NAN,3.2f};
     for(unsigned i=0;i<sizeof invalid/sizeof *invalid;i++) {
-        float original=invalid[i];nd_totk_camera_apply(&invalid[i]);
-        assert(!memcmp(&original,&invalid[i],4));
+        uint32_t original;memcpy(&original,&invalid[i],4);
+        assert(nd_totk_camera_adjust_bits(original)==original);
     }
     assert(nd_totk_camera_configure(150));assert(nd_totk_camera_applied_percent()==150);
     assert(nd_totk_camera_configure(100));assert(nd_totk_camera_applied_percent()==0);
     assert(nd_totk_camera_configure(150));assert(nd_totk_camera_applied_percent()==0);
-    float live=.8f;nd_totk_camera_apply(&live);assert(nd_totk_camera_applied_percent()==150);
+    uint32_t live=0x3f4ccccd;nd_totk_camera_adjust_bits(live);assert(nd_totk_camera_applied_percent()==150);
     assert(nd_totk_camera_configure(70));assert(nd_totk_camera_applied_percent()==0);
-    float invalid_original=3.2f,original=invalid_original;nd_totk_camera_apply(&invalid_original);
-    assert(!memcmp(&original,&invalid_original,4));
-    nd_totk_camera_apply(0);assert(nd_totk_camera_configure(100));return 0;
+    uint32_t invalid_original=0x404ccccd;
+    assert(nd_totk_camera_adjust_bits(invalid_original)==invalid_original);
+    assert(nd_totk_camera_configure(100));return 0;
 }
 ''')
 
@@ -102,8 +102,9 @@ static void *write_settings(void *unused) {
 int main(void) {
     pthread_t writer;assert(!pthread_create(&writer,0,write_settings,0));
     for(int i=0;i<50000;i++) {
-        float angle=1.f;nd_totk_camera_apply(&angle);
-        assert(angle==1.f || fabsf(angle-0.7f)<0.000001f || angle==1.5f);
+        union {uint32_t bits;float angle;} value={.bits=0x3f800000};
+        value.bits=nd_totk_camera_adjust_bits(value.bits);
+        assert(value.angle==1.f || fabsf(value.angle-0.7f)<0.000001f || value.angle==1.5f);
     }
     assert(!pthread_join(writer,0));return 0;
 }
@@ -197,7 +198,7 @@ int main(void) {
                 gen.main()
             self.assertEqual((out/'main_table.c').read_text().count('nd_totk_camera_profile_v143 = 1;'),1)
             chunks=''.join(p.read_text()for p in out.glob('main_[0-9]*.c'))
-            self.assertEqual(chunks.count('nd_totk_camera_apply(&c->v[0])'),2)
+            self.assertEqual(chunks.count('nd_totk_camera_adjust_bits((uint32_t)c->v[0])'),2)
             with mock.patch.object(sys,'argv',argv+['--limit','1']), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit): gen.main()
 
