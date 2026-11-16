@@ -175,6 +175,8 @@ def reserved_ranges(raw, name, symbols):
         _, guards = lifter_module('native_clock').instruction_profile()
         for offset in guards:
             add(offset, 4)
+        for start, end in lifter_module('native_camera').reserved_ranges():
+            add(start, end-start)
         from linux_inputs import BASES
         for address in lifter_module('patches').PATCHES:
             add(address-BASES['main'][0], 4)
