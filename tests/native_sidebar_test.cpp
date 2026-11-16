@@ -20,11 +20,18 @@ static int anchor=4,full_frames;
 static NdPointer pointer;
 static void frame() {
     boxes.clear();items.clear();ImGui::NewFrame();bool toggle=false;ImVec2 lo,hi;
-    if(nd_sidebar_begin(sidebar,opened,anchor,"Native Deck",false,&toggle)) {full_frames++;ImGui::TextUnformatted("Actual setting content");}
+    bool began=nd_sidebar_begin(sidebar,opened,anchor,"Native Deck",false,&toggle);
+    if(began) {full_frames++;
+        nd_ui_label("Frame cap");ImGui::TextUnformatted("Actual setting content");
+        nd_ui_label("Anti-aliasing");ImGui::TextUnformatted("Second section content");}
     assert(ImGui::GetStyle().Colors[ImGuiCol_WindowBg].w==1);
     assert(ImGui::GetStyle().Colors[ImGuiCol_PopupBg].w==1);
+    bool content_this_frame=began;
     nd_sidebar_end(sidebar,opened,&anchor,false,&lo,&hi);
     if(toggle) opened=!opened;
+    // Every rendered section must have flushed a card pair, and the child layer must be merged again.
+    if(content_this_frame) {assert(sidebar.sections.flushed>=1);assert(sidebar.sections.cards>=2);}
+    assert(sidebar.sections.child==nullptr);
     ImGui::Render();
     auto size=ImGui::GetIO().DisplaySize;
     assert(lo.x>=0 && lo.y>=0 && hi.x<=size.x+.01f && hi.y<=size.y+.01f);
