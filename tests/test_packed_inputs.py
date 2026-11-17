@@ -32,6 +32,33 @@ class PackedInputs(unittest.TestCase):
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     inputs.rows_for(root)
 
+    def test_import_keeps_in_place_bytes_instead_of_copying_onto_itself(self):
+        """A work area seeded by hardlink from a release must not fail or duplicate."""
+        import os
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            source = Path(tmp) / 'romfs'
+            source.mkdir()
+            data = b'abc' + b'\0' * 13 + b'de'   # row offsets are 16-byte aligned
+            (source / 'romfs.bin').write_bytes(data)
+            (source / 'index.json').write_text(json.dumps(dict(files=[
+                dict(path='a', offset=0, size=3), dict(path='b', offset=16, size=2)])))
+            expected = dict(ROMFS_FILES=2, ROMFS_BYTES=5,
+                ROMFS_CONTENT=hashlib.sha256(
+                    hashlib.sha256(b'abc').digest()
+                    + hashlib.sha256(b'de').digest()).hexdigest())
+            output = Path(tmp) / 'work' / 'romfs'
+            output.mkdir(parents=True)
+            for name in ('romfs.bin', 'index.json'):
+                os.link(source / name, output / name)
+            inputs.import_packed(source, output, expected)
+            self.assertTrue(os.path.samefile(source / 'romfs.bin', output / 'romfs.bin'))
+            self.assertEqual((output / 'romfs.bin').read_bytes(), data)
+            # A plain directory still gets a real copy rather than a skipped write.
+            fresh = Path(tmp) / 'fresh' / 'romfs'
+            inputs.import_packed(source, fresh, expected)
+            self.assertFalse(os.path.samefile(source / 'romfs.bin', fresh / 'romfs.bin'))
+            self.assertEqual((fresh / 'romfs.bin').read_bytes(), data)
+
     def test_duplicate_and_overlapping_ranges_are_rejected(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
             root = Path(tmp)
