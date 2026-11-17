@@ -128,6 +128,9 @@ static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char
     if(!open) s.layer=1;
     int layer=open?s.layer:0;
     s.pan_active=false;
+    // Below the full layer the list is not submitted, so a press that began on it cannot continue here:
+    // dropping the drag now keeps its stale press point from jumping the list the next time it opens.
+    if(layer!=2) s.panning=false;
     ImVec2 size=layer==2?ImVec2(std::min(456*k,io.DisplaySize.x-2*margin),io.DisplaySize.y-2*margin):
         layer==1?ImVec2(std::min(344*k,io.DisplaySize.x-2*margin),std::min(448*k,io.DisplaySize.y-2*margin)):ImVec2(std::max(48.f,56*k),std::max(48.f,56*k));
     ImVec2 a=nd_docks[anchor];

@@ -118,6 +118,18 @@ static void scenario(float width,float height) {
     assert(sidebar.last_scroll<=0.5f);
     io2.AddMouseButtonEvent(0,false);frame();frame();
     puts("Pulling past the top holds the list at the top PASS");
+    // Leaving the full layer mid-press drops the drag: pressing again after returning uses the new press
+    // point, so the list cannot jump by the distance measured from the abandoned gesture.
+    io2.AddMousePosEvent(list.x,list.y);io2.AddMouseButtonEvent(0,true);frame();
+    sidebar.layer=1;frame();
+    io2.AddMouseButtonEvent(0,false);frame();frame();
+    assert(sidebar.panning==false);
+    sidebar.layer=2;frame();
+    io2.AddMousePosEvent(list.x,list.y);io2.AddMouseButtonEvent(0,true);frame();
+    for(int i=1;i<=4;i++) {io2.AddMousePosEvent(list.x,list.y-24.f*i);frame();}
+    assert(sidebar.last_scroll>0.f);
+    io2.AddMouseButtonEvent(0,false);frame();frame();
+    puts("A press abandoned on another layer does not carry over PASS");
     tap("Hide");assert(!opened);
     // Cancel queued DOWN without losing another input source's release.
     io.AddKeyEvent(ImGuiKey_F24,true);frame();assert(ImGui::IsKeyDown(ImGuiKey_F24));
