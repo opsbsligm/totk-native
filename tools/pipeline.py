@@ -89,8 +89,14 @@ def main():
     p.add_argument('--jobs', type=int, choices=(1, 2, 3, 4), default=2)
     p.add_argument('--stage', choices=('code', 'assets', 'package', 'all'), default='all')
     p.add_argument('--code-mods', type=Path)
+    p.add_argument('--dump', type=Path, default=Path('/input'),
+                   help='Checked 1.4.3 inputs (exefs, fonts, romfs); a release data/ directory qualifies')
     a = p.parse_args()
     a.work = a.work.resolve()
+    if a.command == 'build':
+        a.dump = a.dump.resolve()
+        if not a.dump.is_dir():
+            raise SystemExit('Input directory is not a directory: ' + str(a.dump))
     a.work.mkdir(parents=True, exist_ok=True, mode=0o700)
     from build_environment import prepare
     os.environ.update(prepare(a.work))
@@ -104,7 +110,7 @@ def main():
     lock = (a.work / 'build.lock').open('a')
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     before = source_stamp()
-    dump = Path('/input')
+    dump = a.dump
     if a.stage in ('assets', 'package', 'all'):
         from font_inputs import validate_shared_fonts
         validate_shared_fonts(dump / 'fonts')
