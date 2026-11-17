@@ -1,5 +1,8 @@
 """Private archive transformer bounds, preservation and unknown-version refusal."""
 from pathlib import Path
+import os
+import shutil
+import tempfile
 import struct
 import sys
 import unittest
@@ -64,3 +67,67 @@ class FontArchiveTests(unittest.TestCase):
         for blob in (b'', b'12345678', b'123456789012'):
             with self.assertRaises(ValueError):
                 m.font_body(blob)
+
+
+class OutputPublicationTests(unittest.TestCase):
+    """A work area may keep the previous set hardlinked into an installed release."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root)
+        self.out = self.root / 'data' / 'deck-ui'
+        self.out.mkdir(parents=True)
+        self.release = self.root / 'release' / 'data' / 'deck-ui'
+        self.release.mkdir(parents=True)
+        self.links = {}
+        for name in m.GENERATED:
+            shared = self.release / name
+            shared.write_bytes(b'installed ' + name.encode())
+            os.link(shared, self.out / name)
+            self.links[name] = shared
+
+    def published(self):
+        return {name: (self.out / name).read_bytes() for name in m.GENERATED}
+
+    def generate(self, marker=b'new'):
+        staging = m.stage_output(self.out)
+        for name in m.GENERATED:
+            (staging / name).write_bytes(marker + b' ' + name.encode())
+        return staging
+
+    def test_existing_hardlinked_set_is_replaced_without_touching_the_release(self):
+        m.publish(self.generate(), self.out)
+        self.assertEqual({name: b'new ' + name.encode() for name in m.GENERATED}, self.published())
+        for name, shared in self.links.items():
+            self.assertEqual(b'installed ' + name.encode(), shared.read_bytes())
+            self.assertEqual(1, shared.stat().st_nlink)
+        self.assertEqual(sorted(m.GENERATED), sorted(p.name for p in self.out.iterdir()))
+
+    def test_publishing_twice_is_idempotent(self):
+        m.publish(self.generate(b'first'), self.out)
+        m.publish(self.generate(b'second'), self.out)
+        self.assertEqual({name: b'second ' + name.encode() for name in m.GENERATED}, self.published())
+        self.assertEqual(0, len([p for p in self.out.parent.iterdir() if p.name.startswith('deck-ui.new.')]))
+
+    def test_a_failure_leaves_the_previous_set_complete_and_no_staging(self):
+        staging = self.generate()
+        (staging / 'fonts.bin').unlink()
+        with self.assertRaisesRegex(ValueError, 'incomplete'):
+            m.publish(staging, self.out)
+        self.assertEqual({name: b'installed ' + name.encode() for name in m.GENERATED}, self.published())
+        shutil.rmtree(staging)
+        self.assertEqual(0, len([p for p in self.out.parent.iterdir() if p.name.startswith('deck-ui.new.')]))
+
+    def test_unexpected_or_non_directory_output_is_refused(self):
+        (self.out / 'foreign.txt').write_text('not ours')
+        with self.assertRaisesRegex(ValueError, 'Unexpected content'):
+            m.stage_output(self.out)
+        shutil.rmtree(self.out)
+        (self.out.parent / 'deck-ui.new.stray').mkdir()
+        self.out.mkdir()
+        (self.out / 'file').write_text('x')
+        with self.assertRaisesRegex(ValueError, 'not a plain directory'):
+            m.stage_output(self.out / 'file')
+        (self.out / 'file').unlink()
+        m.stage_output(self.out).rmdir()
+        self.assertEqual({'deck-ui', 'deck-ui.new.stray'}, {p.name for p in self.out.parent.iterdir()})
