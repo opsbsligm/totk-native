@@ -59,10 +59,55 @@ static float downscaled_contrast(unsigned code, int menu, int size) {
     return plate / np - letter / nl;
 }
 
+/* A push that fails has to stay failed without touching memory. The glyph builders below only
+ * check the running count at the end of a chain, so a push that indexed a failed count would write
+ * one element before the array — out[-1] when the chain already carries -1. The 32 guard bytes end
+ * on a 4-byte boundary, which is all the stroke array asks for, so guard[16..31] is exactly where
+ * st[-1] would land and a stray write in that region cannot miss the check. */
+static void assert_clean(const unsigned char *guard, size_t n) {
+    for (size_t i = 0; i < n; i++) assert(guard[i] == 0x5a);
+}
+
+static void push_stays_failed_without_writing(void) {
+    struct { unsigned char guard[32]; NdGlyphStroke st[2]; } box;
+    memset(&box, 0x5a, sizeof box);
+    int n = nd_glyph_push(box.st, 2, 0, 0.f, 0.f, 1.f, 1.f); assert(n == 1);
+    n = nd_glyph_push(box.st, 2, n, 0.f, 0.f, 1.f, 1.f); assert(n == 2);
+    n = nd_glyph_push(box.st, 2, n, 0.f, 0.f, 1.f, 1.f); assert(n == -1);   // first overflow
+    n = nd_glyph_push(box.st, 2, n, 0.f, 0.f, 1.f, 1.f); assert(n == -1);   // chained on -1
+    n = nd_glyph_push(box.st, 2, n, 0.f, 0.f, 1.f, 1.f); assert(n == -1);
+    assert_clean(box.guard, sizeof box.guard);
+    /* The chain shape used by nd_glyph_strokes: a call that passes -1 straight through. */
+    assert(nd_glyph_push(box.st, 2, -1, 0.f, 0.f, 1.f, 1.f) == -1);
+    assert_clean(box.guard, sizeof box.guard);
+}
+
+/* Every character the prompts draw, and the buffer the callers actually allocate: too small fails
+ * outright, and the real size fits with room for a future glyph. */
+static void glyph_buffers_fail_closed_and_have_headroom(void) {
+    static const char letters[] = "ABXYL12";
+    for (const char *p = letters; *p; p++) {
+        NdGlyphStroke full[ND_GLYPH_STROKES_MAX];
+        const int n = nd_glyph_strokes(*p, full, ND_GLYPH_STROKES_MAX);
+        assert(n > 0 && n <= ND_GLYPH_STROKES_MAX);   // the callers' array fits with headroom
+        /* Every buffer smaller than the glyph's own count has to fail, and the chain past the
+         * failed push must not write at index -1 or past the end either. */
+        for (int max = 1; max < n; max++) {
+            struct { unsigned char guard[32]; NdGlyphStroke st[ND_GLYPH_STROKES_MAX]; } box;
+            memset(&box, 0x5a, sizeof box);
+            assert(nd_glyph_strokes(*p, box.st, max) == -1);
+            assert_clean(box.guard, sizeof box.guard);
+        }
+    }
+}
+
 int main(void) {
     const char *world = "BAYX", *menu = "ABYX";
     for (unsigned c = 0; c < 4; c++) { assert(nd_deck_face_label(c, 0) == world[c]);
                                       assert(nd_deck_face_label(c, 1) == menu[c]); }
+
+    push_stays_failed_without_writing();
+    glyph_buffers_fail_closed_and_have_headroom();
 
     /* Buffer handling: a rejected call leaves the caller's bytes alone, an accepted one fills exactly. */
     memset(a, 0x6d, sizeof a);

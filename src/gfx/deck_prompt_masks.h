@@ -41,7 +41,9 @@ static inline float nd_glyph_segment(float x, float y, float ax, float ay, float
 
 static inline int nd_glyph_push(NdGlyphStroke *out, int max, int n,
                                 float ax, float ay, float bx, float by) {
-    if (n >= max) return -1;
+    // A failed push stays failed: the chains in nd_glyph_strokes only check at the end, so an
+    // already-negative n must never reach the write or it lands at out[-1].
+    if (n < 0 || n >= max) return -1;
     out[n].ax = ax; out[n].ay = ay; out[n].bx = bx; out[n].by = by;
     return n + 1;
 }
