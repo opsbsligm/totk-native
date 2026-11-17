@@ -104,8 +104,10 @@ int main(void) {
         assert(nd_deck_glyph_mask(code, 0, b, sizeof b, W));
         int minx = W, maxx = -1, miny = W, maxy = -1;
         for (unsigned y = 0; y < W; y++) for (unsigned x = 0; x < W; x++) if (b[(size_t)y * W + x]) {
-            if ((int)x < minx) minx = (int)x; if ((int)x > maxx) maxx = (int)x;
-            if ((int)y < miny) miny = (int)y; if ((int)y > maxy) maxy = (int)y;
+            if ((int)x < minx) { minx = (int)x; }
+            if ((int)x > maxx) { maxx = (int)x; }
+            if ((int)y < miny) { miny = (int)y; }
+            if ((int)y > maxy) { maxy = (int)y; }
         }
         assert(maxx - minx > (maxy - miny) * 3 / 2);
     }
