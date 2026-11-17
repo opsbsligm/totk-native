@@ -16,7 +16,15 @@ static const char *glyph_name(unsigned code, int menu) {
 
 static int save(const char *dir, unsigned code, int menu, const unsigned char *px, unsigned w) {
     char path[256];
-    snprintf(path, sizeof path, "%s/%s_%s.pgm", dir, menu ? "menu" : "world", glyph_name(code, menu));
+    int length = snprintf(path, sizeof path, "%s/%s_%s.pgm", dir, menu ? "menu" : "world",
+                          glyph_name(code, menu));
+    // A truncated path silently writes one mask over another and the sheet still composes: the
+    // review image would then show the wrong letter while every pixel came from a real mask.
+    if (length < 0 || (size_t)length >= sizeof path) {
+        fprintf(stderr, "output path too long for %s (need %d bytes, have %zu)\n",
+                glyph_name(code, menu), length, sizeof path);
+        return 0;
+    }
     FILE *f = fopen(path, "wb");
     if (!f) { perror(path); return 0; }
     fprintf(f, "P5\n%u %u\n255\n", w, w);
