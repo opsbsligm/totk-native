@@ -2,6 +2,7 @@
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import os
 import shutil
 
 
@@ -64,4 +65,11 @@ def import_packed(root, output, expected):
     validate(root, expected)
     output.mkdir(parents=True, exist_ok=True)
     for name in ('romfs.bin', 'index.json'):
-        shutil.copy2(Path(root) / name, output / name)
+        source, destination = Path(root) / name, output / name
+        # A work area seeded with hardlinks from an installed release (see
+        # tools/deploy_package.py) presents the verified bytes in place, so a
+        # copy would either fail as SameFile or strand a second 17 GiB image.
+        # validate() already authenticated the content, so it is safe to keep.
+        if destination.exists() and os.path.samefile(source, destination):
+            continue
+        shutil.copy2(source, destination)

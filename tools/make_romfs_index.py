@@ -5,6 +5,7 @@ Layout: 8-byte magic, u64 file count, u64 strings offset, then per file (sorted 
 {u64 offset in romfs.bin, u64 size, u32 name offset, u32 name length including the NUL}, then the NUL-terminated paths.
 """
 import json
+import os
 import pathlib
 import struct
 import sys
@@ -24,7 +25,12 @@ def main():
         strings += name
     header = b'TOTKRFS1' + struct.pack('<QQ', len(files), 24 + len(entries))
     out = romfs / 'runtime-index.bin'
-    out.write_bytes(header + entries + strings)
+    # A work area may share this inode with an installed release, so write a new
+    # file and rename it in; truncating in place would expose a half-written
+    # index through the link to the game reading it right now.
+    temporary = out.with_name(out.name + '.new')
+    temporary.write_bytes(header + entries + strings)
+    os.replace(temporary, out)
     print(f'{len(files)} files, {out.stat().st_size} bytes -> {out}')
 
 
