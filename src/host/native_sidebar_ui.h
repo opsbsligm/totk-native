@@ -41,7 +41,9 @@ static inline void nd_sidebar_style(float scale) {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,12*scale);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(12*scale,10*scale));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(12*scale,11*scale));
-    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize,18*scale);
+    // The list is dragged with a finger and reported by the pill at its edge, so the classic bar is off:
+    // its grab is far too small a target to aim at, and two indicators would only compete.
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize,0);
     ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize,24*scale);
     ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.043f,.071f,.094f,1));
     ImGui::PushStyleColor(ImGuiCol_PopupBg,ImVec4(.055f,.090f,.120f,1));
@@ -87,7 +89,25 @@ struct NdSidebar {
     NdSidebarSections sections;
     ImVec2 position,start;
     float scale=1;
+    // The finger-driven list. The surface behind the content records where a press began, and the list
+    // moves with the finger from there, so a settings page scrolls like the rest of the system. The pill
+    // at the content edge fades in while the list can move and fades out again once the finger is off it.
+    bool pan_active=false,panning=false;
+    float content_top=0,content_height=0,pan_press_y=0,pan_scroll=0,scroll_hint=0,quick_top=0;
+    // Where the list stood last frame, and the part of it a finger can actually reach: published so the
+    // input regression can aim inside the list without reaching into ImGui's private window list.
+    float last_scroll=0,last_scroll_max=0,visible_left=0,visible_top=0,visible_bottom=0;
 };
+// The universal adjust glyph: three tracks, each with its own knob. It reads as "settings" on every
+// platform and needs no font, which the game's own font cannot guarantee for CJK in any case.
+static inline void nd_glyph_adjust(ImDrawList *draw,ImVec2 c,float k,ImU32 ink) {
+    for(int i=0;i<3;i++) {
+        float y=c.y+(i-1)*8.f*k,x0=c.x-11.f*k,x1=c.x+11.f*k;
+        draw->AddLine(ImVec2(x0,y),ImVec2(x1,y),ink,2.6f*k);
+        float knob=i==0?c.x+5.f*k:i==1?c.x-5.f*k:c.x+1.f*k;
+        draw->AddCircleFilled(ImVec2(knob,y),3.6f*k,ink);
+    }
+}
 // The captured/open state is distinct from the visible layer: badge -> quick -> full.
 // Only the full layer opens a content child; always pair begin with end.
 static inline void nd_sidebar_drag(NdSidebar &s,float k) {
@@ -107,6 +127,7 @@ static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char
     float k=s.scale,margin=14*k;anchor=std::clamp(anchor,0,7);s.content_active=false;
     if(!open) s.layer=1;
     int layer=open?s.layer:0;
+    s.pan_active=false;
     ImVec2 size=layer==2?ImVec2(std::min(456*k,io.DisplaySize.x-2*margin),io.DisplaySize.y-2*margin):
         layer==1?ImVec2(std::min(344*k,io.DisplaySize.x-2*margin),std::min(448*k,io.DisplaySize.y-2*margin)):ImVec2(std::max(48.f,56*k),std::max(48.f,56*k));
     ImVec2 a=nd_docks[anchor];
@@ -133,22 +154,22 @@ static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char
         if(clicked && !s.dragged) *toggle=true;
         ImDrawList *draw=ImGui::GetWindowDrawList();ImVec2 c=ImGui::GetWindowPos();c.x+=size.x*.5f;c.y+=size.y*.5f;
         bool hot=ImGui::IsItemHovered();
-        draw->AddRectFilled(ImVec2(c.x-22*k,c.y-22*k),ImVec2(c.x+22*k,c.y+22*k),
-            hot?IM_COL32(24,48,56,235):IM_COL32(12,26,33,215),12*k);
-        draw->AddRect(ImVec2(c.x-22*k,c.y-22*k),ImVec2(c.x+22*k,c.y+22*k),
-            hot?IM_COL32(120,220,190,255):IM_COL32(90,180,155,200),12*k,0,1.4f*k);
-        ImU32 ink=hot?IM_COL32(159,240,216,255):IM_COL32(214,232,228,255);
-        draw->AddRect(ImVec2(c.x-26*k,c.y-26*k),ImVec2(c.x+26*k,c.y+26*k),
-            hot?IM_COL32(80,180,150,70):IM_COL32(60,150,125,45),16*k);
-        for(int i=0;i<8;i++) {
-            if(i%2) continue;
-            float a=i*3.14159265f*.25f;ImVec2 x(c.x+std::cos(a)*13*k,c.y+std::sin(a)*13*k),y(c.x+std::cos(a)*17*k,c.y+std::sin(a)*17*k);
-            draw->AddLine(x,y,ink,3.4f*k);
-        }
-        draw->AddCircle(c,10*k,ink,24,2.6f*k);draw->AddCircleFilled(c,3.4f*k,ink,16);
+        // A soft shadow underneath keeps the badge readable over snow or sky, which an outline alone
+        // cannot: the Deck's own homescreen badges do the same for the same reason.
+        float half=24*k;
+        draw->AddRectFilled(ImVec2(c.x-half,4.f*k+c.y-half),ImVec2(c.x+half,4.f*k+c.y+half),IM_COL32(0,0,0,90),14*k);
+        draw->AddRectFilled(ImVec2(c.x-half,c.y-half),ImVec2(c.x+half,c.y+half),
+            hot?IM_COL32(31,62,70,246):IM_COL32(14,31,39,232),14*k);
+        draw->AddRect(ImVec2(c.x-half,c.y-half),ImVec2(c.x+half,c.y+half),
+            hot?IM_COL32(120,220,190,255):IM_COL32(82,164,142,190),14*k,0,1.4f*k);
+        // A thumb is never precisely on target, so the accent marks the docked edge rather than the hover point.
+        draw->AddRectFilled(ImVec2(c.x-half,c.y-half),ImVec2(c.x+half,c.y-half+4*k),
+            IM_COL32(120,220,190,hot?220:120),14*k,ImDrawFlags_RoundCornersTop);
+        nd_glyph_adjust(draw,c,k,hot?IM_COL32(159,240,216,255):IM_COL32(206,228,222,235));
         return false;
     }
     const ImGuiStyle &style=ImGui::GetStyle();
+    s.quick_top=ImGui::GetCursorPosY();
     const char *hide=zh?"收起":"Hide",*back=zh?"返回":"Back";
     float hide_width=std::max(56*k,ImGui::CalcTextSize(hide).x+2*style.FramePadding.x);
     if(layer==2) {
@@ -209,21 +230,70 @@ static inline bool nd_sidebar_begin(NdSidebar &s,bool open,int anchor,const char
         s.sections.child=content;s.sections.left=cp.x-pad;s.sections.right=cp.x+cw+pad;
         s.sections.radius=12*k;s.sections.scale=k;s.sections.count=0;s.sections.cards=0;
         nd_sections=&s.sections;
+        s.content_top=ImGui::GetCursorPosY();
+        s.visible_left=cp.x+pad;s.visible_top=cp.y+pad;s.visible_bottom=cp.y+ImGui::GetWindowSize().y-pad;
     if(s.scroll) {ImGui::SetScrollY(ImGui::GetScrollY()+s.scroll*240*k);s.scroll=0;}
     return true;
 }
 static inline bool nd_sidebar_end(NdSidebar &s,bool /*open*/,int *anchor,bool zh,ImVec2 *lower,ImVec2 *upper) {
     bool changed=false;
     if(s.content_active) {
+        // Submit the tap surface after the page so a control that claimed the press keeps it: a press on a
+        // label or a card scrolls the list, a press on a control does not.
         float scroll=ImGui::GetScrollY(),max=ImGui::GetScrollMaxY();
+        s.last_scroll=scroll;s.last_scroll_max=max;
+        {
+            float bottom=ImGui::GetCursorPosY(),visible=ImGui::GetWindowSize().y-2*ImGui::GetStyle().WindowPadding.y;
+            s.content_height=std::max(bottom-s.content_top,0.f);
+            ImGui::SetCursorPosY(s.content_top);
+            ImGui::InvisibleButton("##content-pan",ImVec2(ImGui::GetContentRegionAvail().x,
+                std::max(std::max(s.content_height,visible),44.f)));
+            s.pan_active=ImGui::IsItemActive();
+        }
+        // Drag to pan: the list follows the finger from where the press began, capped by the range, so a
+        // page that does not scroll does not move either.
+        if(s.pan_active) {
+            ImVec2 at=ImGui::GetMousePos();
+            if(std::isfinite(at.y)) {
+                if(!s.panning) {s.panning=true;s.pan_press_y=at.y;s.pan_scroll=scroll;}
+                else if(std::abs(at.y-s.pan_press_y)>2.f)
+                    ImGui::SetScrollY(std::clamp(s.pan_scroll-(at.y-s.pan_press_y),0.f,std::max(max,0.f)));
+            }
+        } else s.panning=false;
+        // A slim pill stands in for a scroll bar: too thin to aim at by finger, clear enough to say where
+        // the list is. It brightens while panning and dims to a reminder when the finger leaves.
+        {
+            bool movable=max>1.f;
+            float wanted=!movable?0.f:s.pan_active?1.f:scroll<=0?0.f:.4f;
+            s.scroll_hint+=(wanted-s.scroll_hint)*std::clamp(ImGui::GetIO().DeltaTime*4.f,0.f,1.f);
+            if(s.scroll_hint>.02f) {
+                const ImGuiStyle &style=ImGui::GetStyle();
+                ImDrawList *list=ImGui::GetWindowDrawList();ImVec2 wp=ImGui::GetWindowPos(),ws=ImGui::GetWindowSize();
+                float track=ws.y-2*style.WindowPadding.y,x=wp.x+ws.x-style.WindowPadding.x-6.f*s.scale;
+                float ratio=std::clamp(ws.y/(ws.y+std::max(max,0.f)),.08f,1.f),height=std::max(30.f*s.scale,track*ratio);
+                float travel=std::max(track-height,0.f),top=wp.y+style.WindowPadding.y+
+                    travel*(movable?std::clamp(scroll/max,0.f,1.f):0.f);
+                list->ChannelsSetCurrent(1);
+                list->AddRectFilled(ImVec2(x-3.f*s.scale,top),ImVec2(x+3.f*s.scale,top+height),
+                    IM_COL32(120,220,190,(unsigned char)(s.scroll_hint*170.f)),3.f*s.scale);
+            }
+        }
         s.sections.flush();s.sections.child->ChannelsMerge();s.sections.child=nullptr;nd_sections=nullptr;
         ImGui::EndChild();
-        ImGui::Separator();
-        ImGui::BeginDisabled(scroll<=0);if(ImGui::Button(zh?"向上":"Up",ImVec2(96*s.scale,std::max(44.f,46*s.scale)))) s.scroll=-1;ImGui::EndDisabled();
-        ImGui::SameLine();ImGui::BeginDisabled(scroll>=max);if(ImGui::Button(zh?"向下":"Down",ImVec2(96*s.scale,std::max(44.f,46*s.scale)))) s.scroll=1;ImGui::EndDisabled();
-        ImGui::SameLine();ImGui::TextDisabled("%s",zh?"触屏操作":"TOUCH");
+        // No scroll buttons: the finger drags the list itself, and the space is better spent on settings.
+        ImGui::TextDisabled("%s",zh?"页面可上下拖动":"DRAG TO SCROLL");
     }
     ImVec2 pos=ImGui::GetWindowPos(),size=ImGui::GetWindowSize();
+    if(!s.content_active && s.previous_open && s.layer==1) {
+        // The quick panel is a way into the full menu, not a place to stay: a tap on its background opens
+        // it. Submitted last, so the tabs, the drag bar and the two buttons all keep their press.
+        float bottom=std::max(ImGui::GetCursorPosY(),s.quick_top);
+        ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().WindowPadding.x,s.quick_top));
+        ImVec2 pad=ImGui::GetStyle().WindowPadding;
+        ImGui::InvisibleButton("##quick-expand",ImVec2(size.x-2*pad.x,size.y-2*pad.y));
+        if(ImGui::IsItemClicked(0)) {s.layer=2;s.scroll=0;}
+        ImGui::SetCursorPosY(bottom);
+    }
     *lower=pos;*upper=ImVec2(pos.x+size.x,pos.y+size.y);
     if(s.dragging && !ImGui::IsMouseDown(0)) {
         s.dragging=false;
