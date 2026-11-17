@@ -34,6 +34,7 @@
 #include "vkb_spv.h"
 #include "vkb_shpack.h"
 #include "vkb_shbin.h"
+#include "shader_warmup.h"
 
 #define VLOG(...) LOG("[vk] " __VA_ARGS__)
 
@@ -677,35 +678,43 @@ static int stage_of(const char *json) {   // "stage": "vs" / "ps" / "cs" -> NVN 
 static void ahead_pack(void) {
     uint64_t t0 = runtime_now_ns();
     size_t n = vkb_shpack_count();
+    nd_shader_warm_begin(n);
     for (size_t i = 0; i < n; i++) {
+        if (nd_shader_warm_cancel_requested()) break;   // the rest is compiled when the game asks, or on the next boot
         char key[65];
         uint32_t content;
         vkb_shpack_key(i, key, &content);
         atomic_fetch_add(&g_ahead_total, 1);
         vkb_shbin_variant v0 = {{0}, stamp_packed(content)};
         vkb_shbin_mark(key, v0.stamp);
-        if (vkb_shbin_has(key, &v0)) { atomic_fetch_add(&g_ahead_done, 1); continue; }
-        char *j;
-        uint32_t *raw;
-        size_t nraw;
-        int stage = vkb_shpack_get(key, &j, &raw, &nraw, &content) ? stage_of(j) : -1;
-        if (stage >= 0) { free(j); free(raw); }
-        if (stage < 0) continue;
-        vkb_shader tmp;
-        memset(&tmp, 0, sizeof tmp);
-        uint32_t *spv;
-        size_t bytes;
-        VkShaderEXT obj;
-        if (load_module(&tmp, key, stage, &spv, &bytes)) {
-            if (!vkb_shbin_has(key, &v0) && make_object(key, &v0, tmp.vk_stage, spv, bytes, &obj) == VK_SUCCESS) {
-                vk.vkDestroyShaderEXT(vkc.device, obj, NULL);   // only its binary was wanted; no command ever saw it
-                atomic_fetch_sub(&g_obj_live, 1);
-                atomic_fetch_add(&g_ahead_made, 1);
+        // Every shader the pass counted is one step, whether it compiled, was already cached, or had no translation.
+        if (vkb_shbin_has(key, &v0)) atomic_fetch_add(&g_ahead_done, 1);
+        else {
+            char *j;
+            uint32_t *raw;
+            size_t nraw;
+            int stage = vkb_shpack_get(key, &j, &raw, &nraw, &content) ? stage_of(j) : -1;
+            if (stage >= 0) { free(j); free(raw); }
+            if (stage >= 0) {
+                vkb_shader tmp;
+                memset(&tmp, 0, sizeof tmp);
+                uint32_t *spv;
+                size_t bytes;
+                VkShaderEXT obj;
+                if (load_module(&tmp, key, stage, &spv, &bytes)) {
+                    if (!vkb_shbin_has(key, &v0) && make_object(key, &v0, tmp.vk_stage, spv, bytes, &obj) == VK_SUCCESS) {
+                        vk.vkDestroyShaderEXT(vkc.device, obj, NULL);   // only its binary was wanted; no command ever saw it
+                        atomic_fetch_sub(&g_obj_live, 1);
+                        atomic_fetch_add(&g_ahead_made, 1);
+                    }
+                    free(spv);
+                }
+                atomic_fetch_add(&g_ahead_done, 1);
             }
-            free(spv);
         }
-        atomic_fetch_add(&g_ahead_done, 1);
+        nd_shader_warm_step();
     }
+    nd_shader_warm_finish();
     VLOG("shaders compiled ahead: %llu new of %llu, %.0f s", (unsigned long long)g_ahead_made, (unsigned long long)g_ahead_total,
          (runtime_now_ns() - t0) / 1e9);
     vkb_shbin_compact();
@@ -723,8 +732,18 @@ static void *ahead_thread(void *unused) {
     DIR *directory = opendir(cache_dir());
     if (!directory) return NULL;
     uint64_t t0 = runtime_now_ns();
+    nd_shader_warm_begin(0);   // a folder's count is only known once it has been listed: the share stays unknown until then
+    {
+        struct dirent *probe;
+        unsigned long long count = 0;
+        while ((probe = readdir(directory)))
+            if (strlen(probe->d_name) == 73 && !strcmp(probe->d_name + 64, ".res.json")) count++;
+        rewinddir(directory);
+        nd_shader_warm_count(count);
+    }
     struct dirent *entry;
     while ((entry = readdir(directory))) {
+        if (nd_shader_warm_cancel_requested()) break;
         const char *filename = entry->d_name;
         if (strlen(filename) != 73 || strcmp(filename + 64, ".res.json")) continue;
 #else
@@ -734,8 +753,20 @@ static void *ahead_thread(void *unused) {
     HANDLE h = FindFirstFileA(pattern, &fd);
     if (h == INVALID_HANDLE_VALUE) return NULL;
     uint64_t t0 = runtime_now_ns();
+    nd_shader_warm_begin(0);   // as on Linux: the count comes from listing the folder first
+    {
+        WIN32_FIND_DATAA probe;
+        HANDLE ph = FindFirstFileA(pattern, &probe);
+        unsigned long long count = 0;
+        if (ph != INVALID_HANDLE_VALUE) {
+            do { if (strlen(probe.cFileName) == 64 + 9) count++; } while (FindNextFileA(ph, &probe));
+            FindClose(ph);
+        }
+        nd_shader_warm_count(count);
+    }
     do {
         if (strlen(fd.cFileName) != 64 + 9) continue;
+        if (nd_shader_warm_cancel_requested()) break;
         const char *filename = fd.cFileName;
 #endif
         char key[65];
@@ -744,7 +775,7 @@ static void *ahead_thread(void *unused) {
         atomic_fetch_add(&g_ahead_total, 1);
 #ifdef __linux__
         struct stat st;
-        if (fstatat(dirfd(directory), filename, &st, 0) || !S_ISREG(st.st_mode)) continue;
+        if (fstatat(dirfd(directory), filename, &st, 0) || !S_ISREG(st.st_mode)) { nd_shader_warm_step(); continue; }
         vkb_shbin_variant v0 = {{0}, stamp_of((uint64_t)st.st_mtime, (uint64_t)st.st_size)};
 #else
         uint64_t ft = (uint64_t)fd.ftLastWriteTime.dwHighDateTime << 32 | fd.ftLastWriteTime.dwLowDateTime;
@@ -752,13 +783,13 @@ static void *ahead_thread(void *unused) {
         vkb_shbin_variant v0 = {{0}, stamp_of(mtime, (uint64_t)fd.nFileSizeHigh << 32 | fd.nFileSizeLow)};
 #endif
         vkb_shbin_mark(key, v0.stamp);   // the binaries of other stamps are old (vkb_shbin_compact)
-        if (vkb_shbin_has(key, &v0)) { atomic_fetch_add(&g_ahead_done, 1); continue; }
+        if (vkb_shbin_has(key, &v0)) { atomic_fetch_add(&g_ahead_done, 1); nd_shader_warm_step(); continue; }
         char path[1024];
         snprintf(path, sizeof path, "%s/%s", cache_dir(), filename);
         char *j = read_file(path, NULL);
         int stage = j ? stage_of(j) : -1;
         free(j);
-        if (stage < 0) continue;
+        if (stage < 0) { nd_shader_warm_step(); continue; }
         vkb_shader tmp;
         memset(&tmp, 0, sizeof tmp);
         uint32_t *spv;
@@ -774,6 +805,7 @@ static void *ahead_thread(void *unused) {
             free(spv);
         }
         atomic_fetch_add(&g_ahead_done, 1);
+        nd_shader_warm_step();
 #ifdef __linux__
     }
     closedir(directory);
@@ -781,6 +813,7 @@ static void *ahead_thread(void *unused) {
     } while (FindNextFileA(h, &fd));
     FindClose(h);
 #endif
+    nd_shader_warm_finish();
     VLOG("shaders compiled ahead: %llu new of %llu, %.0f s", (unsigned long long)g_ahead_made, (unsigned long long)g_ahead_total,
          (runtime_now_ns() - t0) / 1e9);
     vkb_shbin_compact();
