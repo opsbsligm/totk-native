@@ -14,6 +14,7 @@
 #include "native_amiibo_ui.h"
 #include "native_atmosphere_ui.h"
 #include "../vk/fsr.h"
+#include "../gfx/shader_warmup.h"
 #include "imgui_impl_vulkan.h"
 #include <SDL3/SDL_vulkan.h>
 #include <atomic>
@@ -383,6 +384,26 @@ void nd_control_draw(VkCommandBuffer command,VkImageView target,VkFormat format,
         if(sidebar.page==0) {
             nd_ui_status(label("Live presentation settings","即时画面设置"));
             ImGui::Text(label("Current output: %u x %u","当前输出：%u × %u"),width,height);
+            {   // the background shader pass (vkb_shader.c's ahead thread): the stutter of a place never walked
+                // before is this pass running late, so it gets a line, a bar, and a way to stop it
+                int state=nd_shader_warm_state(),share=nd_shader_warm_share();
+                if(state!=ND_SHADER_WARM_IDLE) {
+                    nd_ui_label(label("Background shader compilation","背景着色器编译"));
+                    const char *text=state==ND_SHADER_WARM_SCANNING?label("Counting the game's shaders...","正在统计游戏着色器…"):
+                        state==ND_SHADER_WARM_COMPILING?label("Compiling shaders in the background...","正在后台编译着色器…"):
+                        state==ND_SHADER_WARM_CANCELLED?label("Stopped; what is done is kept","已停止；已完成的部分已保留"):
+                        label("Complete","已完成");
+                    nd_ui_status(text,state==ND_SHADER_WARM_DONE?1:state==ND_SHADER_WARM_CANCELLED?0:0);
+                    if(share>=0) {
+                        float fraction=(float)share/1000.f;
+                        ImGui::ProgressBar(fraction,ImVec2(-1,0),nullptr);
+                    }
+                    if(state==ND_SHADER_WARM_SCANNING||state==ND_SHADER_WARM_COMPILING)
+                        if(ImGui::Button(label("Stop","停止"),ImVec2(-1,44))) nd_shader_warm_cancel();
+                    ImGui::TextWrapped("%s",label("Shaders compile once per driver and are kept. Stopping only pauses this pass; the rest compiles when the game needs it.",
+                        "着色器按驱动编译一次并保留。停止只结束本轮，其余在需要时编译。"));
+                }
+            }
             nd_ui_label(label("Frame cap","帧率上限"));
             static const char *rates[]={"30","40","45","60","90","120",label("144 (experimental)","144（实验）")};
             static const int values[]={30,40,45,60,90,120,144};int selected=3;
