@@ -349,7 +349,9 @@ int svc_thread(int num, uint64_t *regs) {
         pthread_attr_setdetachstate(&a, PTHREAD_CREATE_DETACHED);   // 退出即回收宿主资源（客体经句柄等待，不 join） | Host resources are reclaimed on exit (the guest waits through the handle, no join)
         if (pthread_create(&t->pt, &a, thread_main, t)) die("pthread_create");
         pthread_attr_destroy(&a);
-        LOG("CreateThread h=%#x entry=%#llx sp=%#llx", t->handle,t->entry,t->stack_top);
+        // (uint64_t is `unsigned long` on Linux: the cast is what makes %#llx correct there, as line 156 already does)
+        LOG("CreateThread h=%#x entry=%#llx sp=%#llx", t->handle,
+            (unsigned long long)t->entry, (unsigned long long)t->stack_top);
         regs[0] = 0; regs[1] = t->handle; return 1;
     }
     case 0x09: {  // StartThread(w0)
