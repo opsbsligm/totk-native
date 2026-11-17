@@ -35,7 +35,9 @@ static float clearance(unsigned code, int menu) {
 
 /* Legibility at the size that matters: the game scales a prompt to about 40 pixels on a 1280x800
  * Deck screen, where an earlier redraw lost its letters entirely. Box-filter the mask the way that
- * scaling does, then require the cut-out to stay clearly darker than the plate around it. */
+ * scaling does, then require the cut-out to stay clearly darker than the plate around it. Bucket
+ * bounds follow the source (x * W / size), so every source pixel lands in exactly one bucket; a
+ * fixed integer step would drop the trailing 26 per cent at 40 px and score a clipped disc. */
 static float downscaled_contrast(unsigned code, int menu, int size) {
     const NdGlyphShape s = nd_deck_shape(code);
     static unsigned char hi[48 * 48];
@@ -44,7 +46,8 @@ static float downscaled_contrast(unsigned code, int menu, int size) {
         unsigned acc = 0, n = 0;
         for (int sy = y * W / size; sy < (y + 1) * W / size; sy++)
             for (int sx = x * W / size; sx < (x + 1) * W / size; sx++, n++) acc += b[(size_t)sy * W + sx];
-        hi[(size_t)y * size + x] = (unsigned char)(n ? acc / n : 0);
+        assert(n);   // W >= 2 * size, so every bucket holds at least one source pixel
+        hi[(size_t)y * size + x] = (unsigned char)(acc / n);
     }
     float plate = 0, letter = 0; int np = 0, nl = 0;
     for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) {

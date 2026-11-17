@@ -17,12 +17,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = 108
-CODES = (("b", 0), ("a", 1), ("y", 2), ("x", 3), ("l1", 4), ("l2", 5))
+CODES = (0, 1, 2, 3, 4, 5)
+# The preview names each file after the letter it actually drew, so the names have to be derived the
+# same way here. A fixed name per code silently pairs every menu prompt with the wrong mask: the
+# sheet then shows confirm and cancel in their world positions and looks perfectly plausible.
+LABELS = {"world": "bayx", "menu": "abyx"}
 # The layout supplies the colour; these are the four face plates and the neutral shoulder plate.
 PLATES = {"a": (214, 58, 58), "b": (60, 120, 232), "y": (58, 178, 96), "x": (228, 168, 44),
           "l1": (92, 92, 98), "l2": (92, 92, 98)}
 BACKDROP = (30, 32, 38)
 GUTTER = 10
+
+
+def prompt_name(code, context):
+    return LABELS[context][code] if code < 4 else f"l{code - 3}"
 
 
 def build_preview(cc, workdir):
@@ -60,16 +68,29 @@ def read_pgm(path):
 def load_masks(exe, source):
     with tempfile.TemporaryDirectory() as work:
         subprocess.run([str(exe), work, str(source)], check=True, cwd=ROOT)
-        return {(context, code): read_pgm(Path(work) / f"{context}_{name}.pgm")
-                for name, code in CODES for context in ("world", "menu")}
+        return {(context, code): read_pgm(Path(work) / f"{context}_{prompt_name(code, context)}.pgm")
+                for code in CODES for context in ("world", "menu")}
 
 
 def downscale(mask, size, source):
-    """Box filter, close enough to the game's own minification to judge legibility."""
-    step = source // size
-    return bytes(sum(mask[row * source + column] for row in range(y * step, (y + 1) * step)
-                     for column in range(x * step, (x + 1) * step)) // (step * step)
-                 for y in range(size) for x in range(size))
+    """Area average over the whole source, so nothing silently leaves the frame.
+
+    A fixed integer step looks equivalent but only reads the first (source // size) * size rows and
+    columns — at 108 to 40 that drops 26 per cent of the disc and clips the very edges a reviewer is
+    there to judge. Bucket bounds follow the source, exactly like the box filter in the C test.
+    """
+    bounds = [column * source // size for column in range(size + 1)]
+    pixels = bytearray()
+    for y in range(size):
+        for x in range(size):
+            total = count = 0
+            for row in range(bounds[y], bounds[y + 1]):
+                offset = row * source
+                for column in range(bounds[x], bounds[x + 1]):
+                    total += mask[offset + column]
+                    count += 1
+            pixels.append(total // count if count else 0)
+    return bytes(pixels)
 
 
 def compose(context, found, source, cell, upscale):
@@ -77,7 +98,8 @@ def compose(context, found, source, cell, upscale):
     width = len(CODES) * (cell * upscale + GUTTER) + GUTTER
     height = cell * upscale + 2 * GUTTER
     rgb = bytearray(bytes(BACKDROP) * (width * height))
-    for column, (name, code) in enumerate(CODES):
+    for column, code in enumerate(CODES):
+        name = prompt_name(code, context)
         small = downscale(found[(context, code)], cell, source)
         plate = PLATES[name]
         for y in range(cell):
