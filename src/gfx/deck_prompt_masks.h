@@ -17,11 +17,14 @@
 // letters are elliptical arcs sampled finely enough that the faceting stays under a source pixel.
 //
 // Layout contracts, pinned by tests/deck_prompt_masks_test.c:
-//   * face codes: disc with the letter cut out; shoulder codes: rounded plate with both characters
-//     inside it, legible when the game scales them down;
+//   * face codes: rounded square with the letter cut out, the shape of the physical Deck faces, so
+//     an on-screen prompt and the button under a thumb read as the same control; shoulder codes: a
+//     wider rounded plate with both characters inside it. Both stay legible where the game scales
+//     a prompt down to about 40 pixels;
 //   * no cut-out pixel comes closer than NdGlyphShape.clear to its own body edge, so a redraw that
 //     lets a letter touch or cross the plate fails the test instead of shipping a clipped prompt;
-//   * menu and world differ only in the letter (A confirm, B cancel), never in the body.
+//   * menu and world differ only in the letter (A confirm, B cancel), never in the body, so one
+//     redrawn plate cannot change what a prompt looks like between contexts.
 
 typedef struct { float ax, ay, bx, by; } NdGlyphStroke;
 enum { ND_GLYPH_STROKES_MAX = 34 };
@@ -67,50 +70,65 @@ static inline int nd_glyph_arc(NdGlyphStroke *out, int max, int n,
 // Centred stroke skeleton of one character in a 1x1 em box (cap height +-0.215, y downwards). Only
 // the characters the prompts use: A B X Y for the faces, L 1 2 for the shoulder plates. Returns the
 // stroke count, or -1 when the buffer is too small; an unknown letter yields 0 and draws nothing.
+//
+// The letterforms are drawn for the size that matters: at 40 pixels a prompt is about 14 pixels of
+// cap height, so the counters (the holes in A and B) have to survive the box filter. Each letter
+// therefore keeps its openings clear of the stem that bounds them, and no stroke crosses another
+// except where the letter itself calls for it (X, and the A crossbar meeting its legs).
 static inline int nd_glyph_strokes(char letter, NdGlyphStroke *out, int max) {
     const float top = -.215f, bot = .215f, mid = 0.f, hy = .1075f;   // cap edges and half of it
     int n = 0;
     switch (letter) {
     case 'A':
-        n = nd_glyph_push(out, max, n, -.300f, bot, 0.f, top);
-        n = nd_glyph_push(out, max, n, 0.f, top, .300f, bot);
-        n = nd_glyph_push(out, max, n, -.030f, top, .030f, top);   // flat apex: two strokes alone leave a notch
+        /* Legs splayed wider than the crossbar and a flat apex keep the counter triangular at
+         * 40 px; a narrower A closes to a dot once the game scales the mask down. */
+        n = nd_glyph_push(out, max, n, -.295f, bot, -.020f, top);
+        n = nd_glyph_push(out, max, n,  .295f, bot,  .020f, top);
+        n = nd_glyph_push(out, max, n, -.035f, top,  .035f, top);   // flat apex: two strokes alone leave a notch
         if (n < 0) return -1;
-        return nd_glyph_push(out, max, n, -.152f, .066f, .152f, .066f);
+        return nd_glyph_push(out, max, n, -.150f, .075f, .150f, .075f);
     case 'B':
-        n = nd_glyph_push(out, max, n, -.235f, top, -.235f, bot);              // stem
-        n = nd_glyph_push(out, max, n, -.235f, top, -.010f, top);              // bowl feeds
+        /* Stem pulled left and both bowls pulled right: the three feeds plus the arcs leave two
+         * open counters. The earlier bowls met the stem head-on, so downscaled they filled in and
+         * B read as a filled block with two scratches. */
+        n = nd_glyph_push(out, max, n, -.215f, top, -.215f, bot);              // stem
+        n = nd_glyph_push(out, max, n, -.215f, top, -.020f, top);              // bowl feeds
         if (n < 0) return -1;
-        n = nd_glyph_push(out, max, n, -.235f, mid, 0.f, mid);
-        n = nd_glyph_push(out, max, n, -.235f, bot, 0.f, bot);
+        n = nd_glyph_push(out, max, n, -.215f, mid, -.020f, mid);
+        n = nd_glyph_push(out, max, n, -.215f, bot, -.020f, bot);
         if (n < 0) return -1;
-        n = nd_glyph_arc(out, max, n, -.010f, -hy, .250f, hy, -1.5707963f, 1.5707963f);   // upper bowl
+        n = nd_glyph_arc(out, max, n, -.020f, -hy, .215f, hy, -1.5707963f, 1.5707963f);   // upper bowl
         if (n < 0) return -1;
-        return nd_glyph_arc(out, max, n, 0.f, hy, .270f, hy, -1.5707963f, 1.5707963f);    // lower bowl
+        return nd_glyph_arc(out, max, n, -.020f, hy, .230f, hy, -1.5707963f, 1.5707963f); // lower bowl
     case 'X':
-        n = nd_glyph_push(out, max, n, -.275f, top, .275f, bot);
+        /* Arms pulled in a touch so the diagonals clear the plate rim once the face turns square. */
+        n = nd_glyph_push(out, max, n, -.270f, top, .270f, bot);
         if (n < 0) return -1;
-        return nd_glyph_push(out, max, n, .275f, top, -.275f, bot);
+        return nd_glyph_push(out, max, n, .270f, top, -.270f, bot);
     case 'Y':
-        n = nd_glyph_push(out, max, n, -.290f, top, 0.f, -.005f);
-        n = nd_glyph_push(out, max, n, .290f, top, 0.f, -.005f);
+        /* Fork meeting above the middle leaves a full-length stem; a shallow V that stops at the
+         * centre reads as a cross at prompt size. */
+        n = nd_glyph_push(out, max, n, -.280f, top, -.015f, -.030f);
+        n = nd_glyph_push(out, max, n,  .280f, top,  .015f, -.030f);
         if (n < 0) return -1;
-        return nd_glyph_push(out, max, n, 0.f, -.005f, 0.f, bot);
+        return nd_glyph_push(out, max, n, 0.f, -.030f, 0.f, bot);
     case 'L':
-        n = nd_glyph_push(out, max, n, -.180f, top, -.180f, bot);
+        n = nd_glyph_push(out, max, n, -.170f, top, -.170f, bot);
         if (n < 0) return -1;
-        return nd_glyph_push(out, max, n, -.180f, bot, .180f, bot);
+        return nd_glyph_push(out, max, n, -.170f, bot, .175f, bot);
     case '1':
         n = nd_glyph_push(out, max, n, -.150f, -.060f, 0.f, top);
         n = nd_glyph_push(out, max, n, 0.f, top, 0.f, bot);
         if (n < 0) return -1;
-        return nd_glyph_push(out, max, n, -.200f, bot, .200f, bot);
+        return nd_glyph_push(out, max, n, -.190f, bot, .190f, bot);
     case '2':
-        n = nd_glyph_arc(out, max, n, 0.f, -.100f, .190f, .115f, 3.1415927f, 6.2831853f);   // hook
+        /* Hook opened and base widened: the earlier tighter hook merged with the diagonal and the
+         * digit lost its 2-ness on a shoulder plate, which is already the smaller of the two. */
+        n = nd_glyph_arc(out, max, n, 0.f, -.095f, .185f, .120f, 3.1415927f, 6.2831853f);   // hook
         if (n < 0) return -1;
-        n = nd_glyph_push(out, max, n, .190f, -.100f, -.200f, bot);                          // diagonal
+        n = nd_glyph_push(out, max, n, .185f, -.095f, -.190f, bot);                          // diagonal
         if (n < 0) return -1;
-        return nd_glyph_push(out, max, n, -.200f, bot, .200f, bot);                          // base
+        return nd_glyph_push(out, max, n, -.190f, bot, .190f, bot);                          // base
     }
     return 0;
 }
@@ -137,14 +155,22 @@ static inline float nd_glyph_rrect(float x, float y, float hw, float hh, float r
 // One code's geometry in the mask's own -0.5..0.5 space. `clear` is the smallest gap the test
 // requires between the cut-out and the body edge, so a redraw has to state its margins.
 typedef struct { int plate; float body_r, body_hw, body_hh, body_rad, em, stem, dx, clear; } NdGlyphShape;
+
+// One silhouette for every code: the rounded rectangle, which is the physical Deck face as well as
+// the shoulder plate, so no code needs its own body primitive and no plate can drift out of square.
+static inline float nd_deck_body(const NdGlyphShape *s, float x, float y) {
+    return nd_glyph_rrect(x, y, s->body_hw, s->body_hh, s->body_rad);
+}
+
 static inline NdGlyphShape nd_deck_shape(unsigned code) {
     NdGlyphShape s;
-    // The face letters are knocked out of a disc that the layout colours, so the cap height stays
-    // inside the rim; the shoulder pair shares one plate and keeps a visible gutter between itself.
-    if (code < 4) { s.plate = 0; s.body_r = .42f; s.body_hw = s.body_hh = s.body_rad = 0;
-                    s.em = .78f; s.stem = .068f; s.dx = 0; }
+    // The face letters are knocked out of a rounded square the layout colours: same corner radius
+    // family as the shoulder plate, so the six prompts read as one family and match the buttons.
+    // `plate` now only says whether a code carries one character or a pair; the body is shared.
+    if (code < 4) { s.plate = 0; s.body_r = 0; s.body_hw = s.body_hh = .40f; s.body_rad = .16f;
+                    s.em = .72f; s.stem = .062f; s.dx = 0; }
     else          { s.plate = 1; s.body_r = 0; s.body_hw = .40f; s.body_hh = .23f; s.body_rad = .10f;
-                    s.em = .48f; s.stem = .075f; s.dx = .185f; }
+                    s.em = .46f; s.stem = .070f; s.dx = .180f; }
     s.clear = .030f;   // under a third of the ramp's own width, so the edge stays antialiased
     return s;
 }
@@ -164,8 +190,7 @@ static inline int nd_deck_glyph_mask(unsigned code, int menu, uint8_t *out, size
     if (n1 <= 0 || (s.plate && n2 <= 0)) return 0;
     for (unsigned y = 0; y < w; y++) for (unsigned x = 0; x < w; x++) {
         float X = (x + .5f) / w - .5f, Y = (y + .5f) / w - .5f;
-        float body = s.plate ? nd_glyph_rrect(X, Y, s.body_hw, s.body_hh, s.body_rad)
-                             : hypotf(X, Y) - s.body_r;
+        float body = nd_deck_body(&s, X, Y);
         float ink = s.plate
             ? fminf(nd_glyph_ink(st, n1, X, Y, -s.dx, 0, s.em, s.stem),
                     nd_glyph_ink(st2, n2, X, Y, s.dx, 0, s.em, s.stem))

@@ -14,7 +14,7 @@ static void body_and_ink(unsigned code, int menu, float X, float Y, float *body,
                      : nd_glyph_strokes(nd_deck_face_label(code, menu), st, ND_GLYPH_STROKES_MAX);
     int n2 = s.plate ? nd_glyph_strokes(code == 4 ? '1' : '2', st2, ND_GLYPH_STROKES_MAX) : 0;
     assert(n1 > 0 && (!s.plate || n2 > 0));
-    *body = s.plate ? nd_glyph_rrect(X, Y, s.body_hw, s.body_hh, s.body_rad) : hypotf(X, Y) - s.body_r;
+    *body = nd_deck_body(&s, X, Y);
     *ink = s.plate
         ? fminf(nd_glyph_ink(st, n1, X, Y, -s.dx, 0, s.em, s.stem),
                 nd_glyph_ink(st2, n2, X, Y, s.dx, 0, s.em, s.stem))
@@ -52,8 +52,7 @@ static float downscaled_contrast(unsigned code, int menu, int size) {
     float plate = 0, letter = 0; int np = 0, nl = 0;
     for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) {
         float X = (x + .5f) / size - .5f, Y = (y + .5f) / size - .5f;
-        if (s.plate ? nd_glyph_rrect(X, Y, s.body_hw, s.body_hh, s.body_rad) >= 0
-                    : hypotf(X, Y) - s.body_r >= 0) continue;      // outside the plate
+        if (nd_deck_body(&s, X, Y) >= 0) continue;                 // outside the plate
         float v = hi[(size_t)y * size + x] / 255.f;
         if (v > .8f) { plate += v; np++; }
         else if (v < .2f) { letter += v; nl++; }                    // still knocked out after scaling
@@ -121,7 +120,7 @@ int main(void) {
     assert(nd_deck_glyph_mask(0, 0, a + 1, sizeof a - 2, W));
     assert(a[0] == 0x6d && a[sizeof a - 1] == 0x6d);
 
-    /* Context swaps the letter only: same disc, different cut-out. */
+    /* Context swaps the letter only: same plate, different cut-out. */
     assert(nd_deck_glyph_mask(1, 1, b, sizeof b, W)); assert(!memcmp(a + 1, b, sizeof b));
     assert(nd_deck_glyph_mask(0, 1, b, sizeof b, W)); assert(memcmp(a + 1, b, sizeof b));
 
