@@ -167,9 +167,9 @@ static inline NdGlyphShape nd_deck_shape(unsigned code) {
     // The face letters are knocked out of a rounded square the layout colours: same corner radius
     // family as the shoulder plate, so the six prompts read as one family and match the buttons.
     // `plate` now only says whether a code carries one character or a pair; the body is shared.
-    if (code < 4) { s.plate = 0; s.body_r = 0; s.body_hw = s.body_hh = .40f; s.body_rad = .16f;
-                    s.em = .72f; s.stem = .062f; s.dx = 0; }
-    else          { s.plate = 1; s.body_r = 0; s.body_hw = .40f; s.body_hh = .23f; s.body_rad = .10f;
+    if (code < 4) { s.plate = 0; s.body_r = 0; s.body_hw = s.body_hh = .40f; s.body_rad = .225f;
+                    s.em = .66f; s.stem = .064f; s.dx = 0; }
+    else          { s.plate = 1; s.body_r = 0; s.body_hw = .40f; s.body_hh = .23f; s.body_rad = .115f;
                     s.em = .46f; s.stem = .070f; s.dx = .180f; }
     s.clear = .030f;   // under a third of the ramp's own width, so the edge stays antialiased
     return s;
