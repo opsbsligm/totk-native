@@ -1,52 +1,24 @@
 #!/usr/bin/env bash
-# Restore the Steam Deck grid art + shortcut icon for the TOTK native shortcut.
-# Fresh-Deck rebuild step. Copy this directory to the Deck and run it there so
-# the art files resolve next to the script:
+# 复原本作在 Steam 库里的存在：非 Steam 快捷方式本身、九宫格图与快捷方式图标。
+# 全新 Deck 的重建步骤。把本目录整个拷到掌机上、就地运行，图片才按脚本所在目录解析：
 #   scp -r docs/deck-grid deck@DECK:/tmp/deck-grid-totk
 #   ssh deck@DECK /tmp/deck-grid-totk/deploy-deck-art.sh
 #
-# shortcuts.vdf on SteamOS is a binary format (field names NUL-terminated,
-# values length-prefixed), so the appid is resolved by parsing it, with
-# 4131851805 as the verified fallback. Override with TOTK_APPID. A stale
-# <appid>_logo.png makes Steam draw the old wordmark over the grid art, so it
-# is backed up and moved aside before the new art is installed.
+# 实际工作交给 deck-shortcut.py：它找出本机已有快捷方式的 Steam 账号，沿用 Steam 已经
+# 分配给本启动器的 appid（重建后仍落在同一条目上），重写 shortcuts.vdf 且不惊动其他快捷
+# 方式，并把残留的 <appid>_logo.png 挪走——否则 Steam 会用旧字标盖住新的九宫格图。
+# 多账号 Deck 传 STEAM_ID 指定账号。
 set -euo pipefail
-APPID="${TOTK_APPID:-4131851805}"
-VDF="$HOME/.local/share/Steam/userdata/404491794/config/shortcuts.vdf"
-RESOLVED="$(python3 - "$VDF" totk-steam.sh <<'PY'
-import re, sys
-data = open(sys.argv[1], "rb").read()
-for m in re.finditer(rb"appid\x00", data):
-    appid = int.from_bytes(data[m.end():m.end()+4], "little")
-    end = data.find(b"appid\x00", m.end())
-    seg = data[m.end():end if end > 0 else len(data)]
-    if sys.argv[2].encode() in seg:
-        print(appid); break
-PY
-)"
-if [ -n "$RESOLVED" ] && [ "$RESOLVED" != "$APPID" ]; then
-  echo "shortcuts.vdf appid $RESOLVED differs from $APPID; using $RESOLVED"
-  APPID="$RESOLVED"
-fi
-GRID="${GRID_DIR:-$HOME/.local/share/Steam/userdata/404491794/config/grid}"
-ASSETS="${ASSETS_DIR:-/home/deck/native-recomp/evidence/library-unlock-20261103/assets}"
-SRC_DIR="${ART_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+GAME="${GAME:-totk}"
+NAME="${GAME_NAME:-塞尔达传说：王国之泪（原生）}"
+SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
+LAUNCHER="${LAUNCHER:-$HOME/native-recomp/launchers/$GAME-steam.sh}"
+STEAM="${STEAM_ROOT:-$HOME/.local/share/Steam}"
+[ -f "$LAUNCHER" ] || { echo "launcher not installed: $LAUNCHER (run deploy-deck-launcher.sh first)"; exit 1; }
+[ -d "$STEAM/userdata" ] || { echo "no Steam userdata under $STEAM"; exit 1; }
 
-mkdir -p "$GRID" "$ASSETS"
-TS="$(date +%Y%m%d%H%M%S)"
-BAK="$GRID/.bak-${TS}"; mkdir -p "$BAK"
-[ -f "$GRID/${APPID}.png" ]   && cp -p "$GRID/${APPID}.png"   "$BAK/" || true
-[ -f "$GRID/${APPID}p.png" ]  && cp -p "$GRID/${APPID}p.png"  "$BAK/" || true
-[ -f "$GRID/${APPID}_logo.png" ] && cp -p "$GRID/${APPID}_logo.png" "$BAK/" || true
-[ -f "$GRID/${APPID}_logo.png" ] && mv -v "$GRID/${APPID}_logo.png" "$BAK/${APPID}_logo.removed" || true
-[ -f "$ASSETS/totk-icon.png" ] && cp -p "$ASSETS/totk-icon.png" "$ASSETS/.bak-${TS}-totk-icon.png" || true
+ARGS=(--launcher "$LAUNCHER" --name "$NAME" --art-dir "$SRC_DIR" --art-prefix "$GAME"
+      --icon-dir "$STEAM/appicons")
+[ -n "${STEAM_ID:-}" ] && ARGS+=(--steam-id "$STEAM_ID")
 
-install -m 755 "$SRC_DIR/totk-grid.png"          "$GRID/${APPID}.png"
-install -m 755 "$SRC_DIR/totk-hero.png"          "$GRID/${APPID}_hero.png"
-install -m 755 "$SRC_DIR/totk-grid-p.png"        "$GRID/${APPID}p.png"
-install -m 644 "$SRC_DIR/totk-shortcut-icon.png" "$ASSETS/totk-icon.png"
-
-echo "grid dir: $GRID"
-echo "appid: $APPID"
-md5sum "$GRID/${APPID}.png" "$GRID/${APPID}_hero.png" "$GRID/${APPID}p.png" "$ASSETS/totk-icon.png"
-echo "backup: $BAK and $ASSETS/.bak-${TS}-totk-icon.png"
+python3 "$SRC_DIR/deck-shortcut.py" "${ARGS[@]}"
