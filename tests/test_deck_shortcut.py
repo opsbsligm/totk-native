@@ -77,17 +77,18 @@ class DeckShortcut(unittest.TestCase):
 
     def test_round_trip_is_byte_identical(self):
         data = self._write_vdf()
-        name, entries, trailing = self.m.load(self.config / 'shortcuts.vdf')
+        name, top, trailing = self.m.load(self.config / 'shortcuts.vdf')
         self.assertEqual(name, b'shortcuts')
-        self.assertEqual(len(entries), 2)
+        self.assertEqual(len(self.m.entries(top)), 2)
         out = self.root / 'out.vdf'
-        self.assertEqual(self.m.save(out, name, entries, trailing), data)
+        self.assertEqual(self.m.save(out, name, top, trailing), data)
 
     def test_unrelated_shortcuts_survive(self):
         self._write_vdf()
         r = self._run('--name', '塞尔达传说：王国之泪（原生）')
         self.assertEqual(r.returncode, 0, r.stderr)
-        _, entries, _ = self.m.load(self.config / 'shortcuts.vdf')
+        _, top, _ = self.m.load(self.config / 'shortcuts.vdf')
+        entries = self.m.entries(top)
         ids = [self.m._int(e, b'appid') for e in entries]
         self.assertEqual(ids[:2], [3427961829, 3291722138])
         self.assertEqual(self.m._text(entries[0], b'AppName'), 'Parsec')
@@ -99,7 +100,8 @@ class DeckShortcut(unittest.TestCase):
         self._write_vdf(_entry(2245023905, b'old name', str(self.launcher).encode()))
         r = self._run('--name', '塞尔达传说：王国之泪（原生）')
         self.assertEqual(r.returncode, 0, r.stderr)
-        _, entries, _ = self.m.load(self.config / 'shortcuts.vdf')
+        _, top, _ = self.m.load(self.config / 'shortcuts.vdf')
+        entries = self.m.entries(top)
         self.assertEqual(len(entries), 3)
         mine = [e for e in entries if self.m._int(e, b'appid') == 2245023905]
         self.assertEqual(len(mine), 1)
@@ -115,8 +117,8 @@ class DeckShortcut(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertIn('unchanged', second.stdout)
         self.assertEqual((self.config / 'shortcuts.vdf').read_bytes(), bytes_after_first)
-        _, entries, _ = self.m.load(self.config / 'shortcuts.vdf')
-        self.assertEqual(len(entries), 3)
+        _, top, _ = self.m.load(self.config / 'shortcuts.vdf')
+        self.assertEqual(len(self.m.entries(top)), 3)
 
     def test_check_does_not_write(self):
         data = self._write_vdf()
@@ -163,6 +165,47 @@ class DeckShortcut(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertFalse(stale.exists())
         self.assertTrue(any(p.name.endswith('_logo.png') for p in grid.glob('.bak-*')))
+
+    def test_unknown_top_level_field_survives(self):
+        # Steam owns this file and may add its own fields beside the shortcuts; a rebuild
+        # must not quietly drop them.
+        data = self._write_vdf()
+        data = data[:-1] + _s(b"Version", b"1") + b"\x08"
+        (self.config / "shortcuts.vdf").write_bytes(data)
+        r = self._run("--name", "TOTK")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(b"Version", (self.config / "shortcuts.vdf").read_bytes())
+
+    def test_non_utf8_icon_path_survives(self):
+        # Valve writes these fields as bytes. A path Steam stored as non-UTF-8 has to be
+        # written back exactly, not replaced with U+FFFD on the way through.
+        icon = b"/home/deck/\u56fe\u7247/\xff.png"
+        self._write_vdf(_entry(2245023905, b"old", str(self.launcher).encode(), icon))
+        r = self._run("--name", "TOTK")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        _, top, _ = self.m.load(self.config / "shortcuts.vdf")
+        mine = [e for e in self.m.entries(top) if self.m._int(e, b"appid") == 2245023905]
+        self.assertEqual(self.m._raw(mine[0], b"icon"), icon)
+
+    def test_stale_duplicate_does_not_win(self):
+        # A second shortcut runs the same launcher file name from another directory. The
+        # entry that runs the path we install is the one to update; the appid the user
+        # last played wins over one that only matches by name.
+        stale = _entry(111, b"stale", b"/opt/old/totk-steam.sh")
+        fresh = _entry(222, b"fresh", str(self.launcher).encode())
+        self._write_vdf(stale)
+        (self.config / "shortcuts.vdf").write_bytes(
+            _vdf([_entry(3427961829, b"Parsec", b"/usr/bin/flatpak"), stale, fresh]))
+        r = self._run("--name", "TOTK")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("222", r.stdout)
+        _, top, _ = self.m.load(self.config / "shortcuts.vdf")
+        mine = [e for e in self.m.entries(top) if self.m._int(e, b"appid") == 222]
+        self.assertEqual(len(mine), 1)
+        self.assertEqual(self.m._text(mine[0], b"AppName"), "TOTK")
+        # The stale one keeps its own appid and art, and is not renamed.
+        others = [e for e in self.m.entries(top) if self.m._int(e, b"appid") == 111]
+        self.assertEqual(self.m._text(others[0], b"AppName"), "stale")
 
 
 if __name__ == '__main__':

@@ -70,7 +70,12 @@ def _emit(members):
 
 
 def load(path):
-    """Return (header, [entry], trailing) where an entry is (key, members)."""
+    """Return (header, members, trailing) for the file's shortcuts section.
+
+    `members` is the section's own member list, so anything Steam stores there besides
+    the shortcut sections is carried through to `save` untouched. Shortcut entries are
+    read out of it with `entries()`.
+    """
     buf = path.read_bytes()
     if not buf or buf[0] != 0x00:
         raise SystemExit("shortcuts.vdf: expected a binary shortcuts section")
@@ -79,19 +84,28 @@ def load(path):
     if buf[end] != 0x08:
         raise SystemExit("shortcuts.vdf: shortcuts section unclosed")
     # `end` stays on the section's own terminator so it is written back verbatim.
-    entries = [(key, body) for kind, key, body in members if kind is SEC]
-    return name, entries, buf[end:]
+    return name, members, buf[end:]
 
 
-def save(path, name, entries, trailing):
-    body = _emit([(SEC, key, members) for key, members in entries])
-    data = b"\x00" + name + b"\x00" + body + trailing
+def entries(members):
+    """The shortcut entries within a parsed file, in file order."""
+    return [(key, body) for kind, key, body in members if kind is SEC]
+
+
+def save(path, name, members, trailing):
+    data = b"\x00" + name + b"\x00" + _emit(members) + trailing
     if len(data) > 1 << 20:
         raise SystemExit("shortcuts.vdf grew past a sane size; refusing to write")
     tmp = path.with_name(path.name + ".nd-tmp")
     tmp.write_bytes(data)
     os.replace(tmp, path)
     return data
+
+
+def next_key(top):
+    """A section key for a new shortcut: one past the highest numeric one in use."""
+    used = [int(k) for kind, k, _ in top if kind is SEC and k.isdigit()]
+    return str(max(used, default=-1) + 1).encode()
 
 
 def app_id(launcher):
@@ -117,12 +131,22 @@ def _fields(entry):
     return {key: (kind, value) for kind, key, value in entry[1]}
 
 
-def _text(entry, key):
-    """Decoded value of a string field, or '' when the entry has no such field."""
+def _raw(entry, key):
+    """Bytes of a string field, or b'' when the entry has no such field.
+
+    Steam writes these fields as bytes, not text, so anything we compare or re-write has
+    to come from here; decoding with a replacement character would corrupt a path that
+    is not valid UTF-8.
+    """
     kind_value = _fields(entry).get(key)
     if kind_value is None or kind_value[0] is not STR:
-        return ""
-    return kind_value[1].decode("utf-8", "replace")
+        return b""
+    return kind_value[1]
+
+
+def _text(entry, key):
+    """Decoded value of a string field, for reporting only."""
+    return _raw(entry, key).decode("utf-8", "replace")
 
 
 def _int(entry, key, default=None):
@@ -143,10 +167,27 @@ def _unquoted(value):
 
 def _matches_launcher(entry, launcher):
     """True when this shortcut already runs our launcher (by path, then by name)."""
-    exe = _unquoted(_text(entry, b"Exe"))
+    exe = _unquoted(_raw(entry, b"Exe").decode("utf-8", "replace"))
     if not exe:
         return False
     return exe == str(launcher) or os.path.basename(exe) == launcher.name
+
+
+def pick_entry(candidates, launcher, as_written=None):
+    """Which matching shortcut to update.
+
+    A Deck can hold a stale duplicate that points at the same launcher name from another
+    directory, so the entry running the path we install wins over one that only matches by
+    name; among equals, the most recently played one is the entry the user actually opens.
+    `as_written` also accepts the path the user typed, since Steam stores that verbatim and
+    it can differ from the resolved one through a symlink.
+    """
+    wanted = {_quoted(launcher)}
+    if as_written is not None:
+        wanted.add(_quoted(as_written))
+    exact = [e for e in candidates if _raw(e, b"Exe") in wanted]
+    pool = exact or candidates
+    return max(pool, key=lambda e: _int(e, b"LastPlayTime") or 0)
 
 
 def _set(members, kind, key, value):
@@ -161,13 +202,17 @@ def _set(members, kind, key, value):
 
 
 def template(appid, launcher, name, icon):
-    """A new entry in the field order Steam itself writes."""
+    """A new entry in the field order Steam itself writes.
+
+    `name` and `icon` are already bytes: the icon path is whatever Steam would store, and
+    re-encoding a decoded guess would corrupt a path that is not valid UTF-8.
+    """
     return [
         (INT, b"appid", appid),
         (STR, b"AppName", name.encode()),
         (STR, b"Exe", _quoted(launcher)),
         (STR, b"StartDir", _quoted(launcher.parent)),
-        (STR, b"icon", str(icon).encode()),
+        (STR, b"icon", icon),
         (STR, b"ShortcutPath", b""),
         (STR, b"LaunchOptions", b""),
         (INT, b"IsHidden", 0),
@@ -198,7 +243,8 @@ def main():
     p.add_argument("--check", action="store_true", help="report the current state and change nothing")
     a = p.parse_args()
 
-    launcher = a.launcher.expanduser().resolve()
+    launcher_typed = a.launcher.expanduser()
+    launcher = launcher_typed.resolve()
     if not launcher.is_file():
         raise SystemExit("launcher not found: %s" % launcher)
     os.umask(0o077)
@@ -223,17 +269,19 @@ def main():
         icon_path = str((a.icon_dir / ("%s-shortcut-icon.png" % a.art_prefix)).resolve(strict=False))
 
     if vdf.is_file():
-        name, entries, trailing = load(vdf)
+        name, top, trailing = load(vdf)
     else:
-        name, entries, trailing = b"shortcuts", [], b"\x08"
+        name, top, trailing = b"shortcuts", [], b"\x08"
 
-    existing = next((e for e in entries if _matches_launcher(e, launcher)), None)
+    matches = [e for e in entries(top) if _matches_launcher(e, launcher)]
+    existing = pick_entry(matches, launcher, launcher_typed) if matches else None
     target = a.appid or (_int(existing, b"appid") if existing else None) or app_id(launcher)
 
-    icon = icon_path if icon_src is not None else (_text(existing, b"icon") if existing else "")
+    # Bytes, not text: an icon path Steam wrote as non-UTF-8 has to survive a rebuild.
+    icon = icon_path.encode() if icon_src is not None else (_raw(existing, b"icon") if existing else b"")
     updates = [(INT, b"appid", target), (STR, b"AppName", a.name.encode()),
                (STR, b"Exe", _quoted(launcher)), (STR, b"StartDir", _quoted(launcher.parent)),
-               (STR, b"icon", icon.encode())]
+               (STR, b"icon", icon)]
 
     def plan():
         """Whether the entry already carries every field we intend to write."""
@@ -273,7 +321,7 @@ def main():
     members = existing[1] if existing is not None else None
     if members is None:
         members = template(target, launcher, a.name, icon)
-        entries.append((str(len(entries)).encode(), members))
+        top.append((SEC, next_key(top), members))
         for kind, fld, value in updates:
             _set(members, kind, fld, value)
         changed = True
@@ -289,8 +337,8 @@ def main():
             backup.write_bytes(vdf.read_bytes())
             print("backup: %s" % backup)
         vdf.parent.mkdir(parents=True, exist_ok=True)
-        data = save(vdf, name, entries, trailing)
-        print("wrote %s (%d bytes, %d shortcuts)" % (vdf, len(data), len(entries)))
+        data = save(vdf, name, top, trailing)
+        print("wrote %s (%d bytes, %d shortcuts)" % (vdf, len(data), len(entries(top))))
     else:
         print("unchanged: %s" % vdf)
 
