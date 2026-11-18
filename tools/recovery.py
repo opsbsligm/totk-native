@@ -57,9 +57,18 @@ def private_directory(path):
 
 
 def age_tool():
-    age = shutil.which('age')
+    # A Deck that has just been reset usually has age in a project-owned folder rather than on
+    # PATH, and the recovery run is exactly the moment when editing the shell profile is the last
+    # thing a player wants. NATIVE_AGE names the binary (a path, or a bare program name) and is
+    # checked the same way as the PATH lookup; nothing about the format or the checks loosens.
+    override = (os.environ.get('NATIVE_AGE') or '').strip()
+    if override:
+        age = override if os.sep in override else shutil.which(override)
+    else:
+        age = shutil.which('age')
     if not age:
-        raise ValueError('Install age >= 1.2.1 first (apt install age / brew install age)')
+        raise ValueError('Install age >= 1.2.1 first (apt install age / brew install age), '
+                         'or point NATIVE_AGE at an existing age binary')
     version = subprocess.check_output([age, '--version'], text=True).strip()
     match = re.fullmatch(r'v?(\d+)\.(\d+)\.(\d+)', version)
     if not match or tuple(map(int, match.groups())) < (1, 2, 1):
