@@ -152,6 +152,23 @@ class Recovery(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'sequence'):
                 recovery.restore(SimpleNamespace(bundle=str(root),identity='unused',destination=str(root/'out'),max_bytes=1024))
 
+    def test_age_binary_can_be_named_without_editing_path(self):
+        # A reset Deck keeps age in a project folder rather than on PATH, and editing the shell
+        # profile mid-recovery is the wrong order. The override still has to pass the same version
+        # gate, and a bare name must resolve through PATH rather than the current directory.
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);empty=root/'empty'
+            age=root/'bin'/'age';age.parent.mkdir();age.write_text('#!/bin/sh\necho v1.3.2\n');age.chmod(0o755)
+            with patch.dict(os.environ,{'NATIVE_AGE':str(age),'PATH':str(empty)}):
+                self.assertEqual(recovery.age_tool(),str(age))
+            with patch.dict(os.environ,{'NATIVE_AGE':'','PATH':str(empty)}):
+                self.assertRaisesRegex(ValueError,'NATIVE_AGE',recovery.age_tool)
+            old=root/'old'/'age';old.parent.mkdir();old.write_text('#!/bin/sh\necho v1.1.0\n');old.chmod(0o755)
+            with patch.dict(os.environ,{'NATIVE_AGE':str(old)}):
+                self.assertRaisesRegex(ValueError,'Unsupported age version',recovery.age_tool)
+            with patch.dict(os.environ,{'NATIVE_AGE':'age','PATH':str(root/'bin')}):
+                self.assertEqual(recovery.age_tool(),str(age))
+
 
 class RebuildPrivatePortableRuntime(unittest.TestCase):
     def test_portable_runtime_package_verifies_in_place_without_rebuild(self):
