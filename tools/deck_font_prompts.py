@@ -9,7 +9,10 @@ see licenses/MacNativeGames.txt and NOTICE.md.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
+import tempfile
 import struct
 
 from deck_font_glyphs import patch_external
@@ -22,6 +25,7 @@ FONT_PATHS = tuple('Font/' + name + '.bfarc.zs' for name in (
     'Font_KRko.Nin_NX_NVN', 'Font_TWzh.Nin_NX_NVN'))
 PATHS = FONT_PATHS + (world.COMMON, world.RESTBL)
 MAX_ARCHIVE = 32 << 20
+GENERATED = tuple(str(index) + '.zs' for index in range(len(PATHS))) + ('fonts.bin', 'recipe.json')
 
 
 def members(data):
@@ -81,6 +85,37 @@ def patch_archive(archive):
     return world.sarc_pack(files)
 
 
+def stage_output(output):
+    """Create a private staging directory beside the published set.
+
+    A work area may hold the previous outputs as hardlinks into an installed
+    release, so the new files are published one rename at a time rather than
+    written in place. Anything already there is a previous generated set.
+    """
+    if output.is_symlink() or (output.exists() and not output.is_dir()):
+        raise ValueError('Deck font output path is not a plain directory')
+    prefix = output.name + '.new.'
+    if output.is_dir():
+        unexpected = sorted(entry.name for entry in output.iterdir()
+                            if entry.name not in GENERATED)
+        if unexpected:
+            raise ValueError('Unexpected content in Deck font output directory: '
+                             + ', '.join(unexpected[:4]))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix=prefix, dir=str(output.parent)))
+
+
+def publish(staging, output):
+    """Move the complete set into place, newest manifest last."""
+    missing = [name for name in GENERATED if not (staging / name).is_file()]
+    if missing:
+        raise ValueError('Generated Deck font set is incomplete: ' + ', '.join(missing))
+    output.mkdir(parents=True, exist_ok=True)
+    for name in GENERATED:
+        os.replace(staging / name, output / name)
+    staging.rmdir()
+
+
 def build(root, output):
     if not __debug__:
         raise RuntimeError('Do not disable resource validation with Python -O')
@@ -92,9 +127,7 @@ def build(root, output):
         if dictionary.dict_id in dictionaries:
             raise ValueError('Duplicate Zstandard dictionary identity')
         dictionaries[dictionary.dict_id] = dictionary
-    if output.exists():
-        raise ValueError('Refusing to overwrite existing Deck font outputs')
-    output.mkdir(parents=True)
+    staging = stage_output(output)
     records, manifest, growth = bytearray(b'NDUIF002'), [], {}
     for index, path in enumerate(PATHS):
         original = rom.read(path)
@@ -119,17 +152,24 @@ def build(root, output):
             raise ValueError('Patched font archive exceeds runtime limit')
         old_hash, new_hash = hashlib.sha256(original).digest(), hashlib.sha256(encoded).digest()
         records.extend(struct.pack('<QQ', len(original), len(encoded)) + old_hash + new_hash)
-        (output / (str(index) + '.zs')).write_bytes(encoded)
+        (staging / (str(index) + '.zs')).write_bytes(encoded)
         manifest.append(dict(path=path, original_sha256=old_hash.hex(), patched_sha256=new_hash.hex(),
                              original_size=len(original), patched_size=len(encoded), archive_size=len(archive),
                              patched_archive_size=len(patched)))
-    (output / 'fonts.bin').write_bytes(records)
-    (output / 'recipe.json').write_text(json.dumps(dict(schema=2, recipe='deck-world-menu-controls-v4', files=manifest,
-        allocation_growth=growth,
-        converter_sha256={name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
-                          for name in ('deck_font_glyphs.py', 'deck_font_shoulders.py', 'deck_font_prompts.py', 'deck_font_world.py', 'zstd_codec.py',
-                                       'deck_layout/resource_layout.py', 'deck_layout/anchor_contract.py',
-                                       'deck_layout/build_controller_patch.py')}), indent=2) + '\n')
+    (staging / 'fonts.bin').write_bytes(records)
+    recipe = dict(schema=2, recipe='deck-world-menu-controls-v4', files=manifest,
+                  allocation_growth=growth,
+                  converter_sha256={name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
+                                    for name in ('deck_font_glyphs.py', 'deck_font_shoulders.py',
+                                                 'deck_font_prompts.py', 'deck_font_world.py', 'zstd_codec.py',
+                                                 'deck_layout/resource_layout.py', 'deck_layout/anchor_contract.py',
+                                                 'deck_layout/build_controller_patch.py')})
+    (staging / 'recipe.json').write_text(json.dumps(recipe, indent=2) + '\n')
+    try:
+        publish(staging, output)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
 
 
 if __name__ == '__main__':
