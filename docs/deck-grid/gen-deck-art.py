@@ -39,13 +39,18 @@ PLAN = {
     # hero 把裁切框右移并只取上半，左侧那片天空留给 Steam 详情页自己的标题；
     # 下沿 y=560 让字标与平台横幅都进不来。
     # 竖海报取右半区 2:3（Link 与浮岛），字标由 totk-logo.png 叠在顶部。
-    # 图标取 x>=840 的 1:1 右半区，那里既无字标也无平台横幅。
+    # 图标取 x>=840 的 1:1 右半区（那里既无字标也无平台横幅），
+    # 另把字标压在浮岛下方那片雾空，库缩略图尺寸下才认得出是哪部游戏。
     "totk-grid.png": (KEYART, (0, 63, 1920, 960), (920, 430)),
     "totk-hero.png": (KEYART, (186, 0, 1920, 560), (1920, 620)),
     "totk-grid-p.png": (KEYART, (1200, 0, 1920, 1080), (600, 900)),
     "totk-shortcut-icon.png": (KEYART, (840, 0, 1920, 1080), (1254, 1254)),
 }
-LOGO_ON_POSTER = (0.70, 0.05)   # 字标宽占海报宽的比例、顶边占海报高的比例
+# 字标叠放位置：(字标宽占画面宽的比例, 顶边占画面高的比例)
+LOGO_PLACEMENT = {
+    "totk-grid-p.png": (0.70, 0.05),
+    "totk-shortcut-icon.png": (0.66, 0.58),
+}
 
 
 def _aspect(src_box, size, name):
@@ -64,12 +69,13 @@ def main():
         assert 0 <= l < r <= im.width and 0 <= t < b <= im.height, "%s box %s 越界" % (name, box)
         _aspect(box, size, name)
         art = im.crop(box).resize(size, Image.LANCZOS)
-        if name == "totk-grid-p.png":
+        if name in LOGO_PLACEMENT:
+            wfrac, yfrac = LOGO_PLACEMENT[name]
             logo = Image.open(LOGO).convert("RGBA")
-            lw = int(size[0] * LOGO_ON_POSTER[0])
+            lw = int(size[0] * wfrac)
             logo = logo.resize((lw, int(logo.height * lw / logo.width)), Image.LANCZOS)
             art = art.convert("RGBA")
-            art.paste(logo, ((size[0] - lw) // 2, int(size[1] * LOGO_ON_POSTER[1])), logo)
+            art.paste(logo, ((size[0] - lw) // 2, int(size[1] * yfrac)), logo)
             art = art.convert("RGB")
         art.save(OUT / name, "PNG")
         print("%-26s %sx%s  %s" % (name, size[0], size[1],
