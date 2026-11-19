@@ -5,10 +5,13 @@
 媒体站 CDN 现在返回 403），只记 URL 的话换机器取不回同一批像素。
 源图 SHA-256 见 src/SHA256SUMS。
 
-  totk-bg.jpg      2560x1592 官方无字背景（起桥之台与浮岛，无字标无平台横幅）
-  totk-keyart.jpg  1920x1080 官方含 Link 的主视觉；左下有字标、底部有平台横幅，
-                   所以本脚本只取它 x>=840 的右半区
+  totk-keyart.jpg  1920x1080 任天堂官方主视觉：Link 在起桥之台蹲下，左下是大师之剑
+                   字标，底部有一条「Nintendo Switch 2 Edition」平台横幅
   totk-logo.png    696x362   官方白色字标，按 alpha 裁过，不含平台横幅
+
+四件都从这张主视觉取，画面里必有 Link 或字标。先前从一张无字背景板裁的横卡与
+hero 只剩天空和浮岛，认不出是哪部游戏，该背景板已弃用。裁切框下沿一律停在
+y=960 以上让平台横幅入不了镜，竖海报另叠白色字标补齐识别度。
 
 生成只做绝对坐标裁切、Lanczos 缩放与字标叠加，不重绘、不加滤镜。
 每个框都先核与目标尺寸的宽高比（见 __main__ 里的 _check），比例不符就是拉伸变形。
@@ -27,15 +30,19 @@ from PIL import Image
 HERE = pathlib.Path(__file__).resolve().parent
 OUT = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else HERE
 SRC = HERE / "src"
-BG = SRC / "totk-bg.jpg"
 KEYART = SRC / "totk-keyart.jpg"
 LOGO = SRC / "totk-logo.png"
 
 PLAN = {
     # out 文件名: (源图, (left, top, right, bottom), 目标尺寸)
-    "totk-grid.png": (BG, (0, 320, 2560, 1516), (920, 430)),
-    "totk-hero.png": (BG, (0, 300, 2560, 1126), (1920, 620)),
-    "totk-grid-p.png": (BG, (1339, 0, 2400, 1592), (600, 900)),
+    # 横卡取全幅主视觉：Link 在右、字标在左下，下沿 y=960 落在平台横幅之上。
+    # hero 把裁切框右移并只取上半，左侧那片天空留给 Steam 详情页自己的标题；
+    # 下沿 y=560 让字标与平台横幅都进不来。
+    # 竖海报取右半区 2:3（Link 与浮岛），字标由 totk-logo.png 叠在顶部。
+    # 图标取 x>=840 的 1:1 右半区，那里既无字标也无平台横幅。
+    "totk-grid.png": (KEYART, (0, 63, 1920, 960), (920, 430)),
+    "totk-hero.png": (KEYART, (186, 0, 1920, 560), (1920, 620)),
+    "totk-grid-p.png": (KEYART, (1200, 0, 1920, 1080), (600, 900)),
     "totk-shortcut-icon.png": (KEYART, (840, 0, 1920, 1080), (1254, 1254)),
 }
 LOGO_ON_POSTER = (0.70, 0.05)   # 字标宽占海报宽的比例、顶边占海报高的比例
