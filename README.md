@@ -17,7 +17,7 @@ python3 build.py build --dump /mnt/my-dump --work /mnt/totk-build
 /mnt/totk-build/package/run.sh
 ```
 
-成功后 `package/` 是个人完整运行目录，可复制到 Steam Deck，从桌面模式把其中 `run.sh` 添加为非 Steam 游戏，使用原生 Linux 启动。重启 Steam 后可在掌机模式打开。控制器使用 Steam Input 的普通游戏手柄布局。无需启用 Proton。
+成功后 `package/` 是个人完整运行目录，复制到 Steam Deck 后用 `tools/deploy_package.py` 装成一次发布，再由 `docs/deck-grid/` 建出库条目和封面海报；两步的做法与幂等语义见 [构建约定](docs/build.md)。重启 Steam 后可在掌机模式打开。控制器使用 Steam Input 的普通游戏手柄布局。无需启用 Proton。
 
 构建分为代码生成与编译、资源转换、打包；可用 `--stage code`、`--stage assets`、`--stage package` 分段诊断。输出与游戏输入必须在仓外且互不重叠；构建日志在工作目录 `logs/`。已有包不会被静默覆盖。
 

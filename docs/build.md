@@ -26,3 +26,19 @@
 - 被替换的发布保留在 `releases/` 并记入 `previous`；出问题用 `--rollback` 换回，再执行一次换回来。
 
 掌机布局语义不变：仍是 `releases/<id>` 加 `current`，launcher 不需要跟着改。
+
+## 库条目与九宫格图
+
+发布装好后，掌机库里还需要一条指向启动器的非 Steam 快捷方式，以及封面、海报和图标。
+`docs/deck-grid/` 带着图一起完成这件事，全新 Deck 上不需要任何仓外文件：
+
+    scp -r docs/deck-grid deck@DECK:/tmp/deck-grid-totk
+    ssh deck@DECK /tmp/deck-grid-totk/deploy-deck-launcher.sh
+    ssh deck@DECK /tmp/deck-grid-totk/deploy-deck-art.sh
+
+`deploy-deck-launcher.sh` 安装 `totk-steam.sh`，`deploy-deck-art.sh` 调用同目录的
+`deck-shortcut.py`：它解析二进制 `shortcuts.vdf`，找出本机已有快捷方式的 Steam 账号，
+沿用 Steam 已经分配给这个启动器的 appid（第一次安装时用由启动器路径派生的稳定 id），
+就地更新这一条，其余快捷方式按原字节重新序列化。九宫格图装到该 appid 下，快捷方式图标
+装进 `~/.local/share/Steam/appicons/`。已装过再跑一遍不会改动任何字节；加 `--check`
+只报告差异。多账号 Deck 传 `STEAM_ID`。改完在 Steam 里重启一次生效。
