@@ -27,10 +27,10 @@ static int handheld_mode(void) {
 int runtime_handheld_mode(void) { return handheld_mode(); }
 
 /* The game's language: TOTK_LANG as given (a Switch language code), otherwise from TOTK_LOCALE or the user's
-   Windows UI language. Brazil maps to "pt-BR" in 1.4.3, whose RomFS has the official Brazilian text. */
-static uint64_t desired_language(void) {
+   Windows UI language. Brazil maps to "pt-BR" in 1.4.3, whose RomFS has the official Brazilian text.
+   `code` receives the 8 bytes the game reads (shorter codes keep the trailing zeros). */
+static void language_code(char *code) {
     const char *explicit_code = getenv("TOTK_LANG");
-    char code[8] = {0};
     if (explicit_code) {
         if (strlen(explicit_code) > 7) runtime_fail("language code too long");
         memcpy(code, explicit_code, strlen(explicit_code));
@@ -71,9 +71,27 @@ static uint64_t desired_language(void) {
             : !strcmp(language, "pt") ? portuguese : "en-US";
         memcpy(code, selected, strlen(selected));
     }
+}
+
+static uint64_t desired_language(void) {
+    char code[8] = {0};
+    language_code(code);
     uint64_t result;
     memcpy(&result, code, 8);
     return result;
+}
+
+/* The control bar reads its own labels, and an English panel over Chinese game text (or the other way round)
+   reads as a broken translation. One answer for both: whatever the game itself was told to speak. Cached, because
+   the font atlas is built once per run and the game asks on every language query. */
+int runtime_language_chinese(void) {
+    static int cached = -1;
+    if (cached < 0) {
+        char code[8] = {0};
+        language_code(code);
+        cached = !memcmp(code, "zh", 2);
+    }
+    return cached;
 }
 
 static int focus_policy;

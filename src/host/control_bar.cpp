@@ -35,6 +35,7 @@ extern "C" {
 void runtime_input_clear(void);
 void runtime_motion_start(void);
 int runtime_hid_feedback_flag(const char *, int);
+int runtime_language_chinese(void);   // overrides_oe.c: what the game itself was told to speak
 }
 
 static std::mutex lock;
@@ -117,7 +118,9 @@ static void *read_ui_font(const char *name,int *bytes) {
     *bytes=(int)size-8;return data;
 }
 static void fonts(ImGuiIO &io) {
-    const char *lang=getenv("TOTK_LANG");chinese=lang && !strncmp(lang,"zh",2);
+    // Follow the game's own language, including the TOTK_LOCALE fallback, so the panel and the text
+    // underneath it are never in two different languages.
+    chinese=runtime_language_chinese()!=0;
     int bytes;void *data=read_ui_font("0-standard",&bytes);
     if(data) {
         if(io.Fonts->AddFontFromMemoryTTF(data,bytes,22)) scalable_font=true;
