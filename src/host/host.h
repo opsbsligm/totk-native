@@ -64,6 +64,9 @@ int runtime_menu_confirm_active(void);
 int window_init(void);              // 1 = window up (presentation may still be missing: logged)
 _Noreturn void window_loop(void);
 
+// ---- language (overrides_oe.c): the code the game was told to speak, 1 when Chinese (overrides_oe.c caches it)
+int runtime_language_chinese(void);
+
 // ---- rumble and motion (hid_feedback.c <- window_sdl.c, motion_fusion.c; MacNativeGames runtime.h)
 #define RUNTIME_MOTION_MAX 32
 typedef struct { uint64_t sampling, delta_ns; float acc[3], gyro[3], angle[3], dir[9]; } RuntimeMotionState;   // G, rev/s, rev, 3 axes
