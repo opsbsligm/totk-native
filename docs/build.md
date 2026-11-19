@@ -42,3 +42,13 @@
 就地更新这一条，其余快捷方式按原字节重新序列化。九宫格图装到该 appid 下，快捷方式图标
 装进 `~/.local/share/Steam/appicons/`。已装过再跑一遍不会改动任何字节；加 `--check`
 只报告差异。多账号 Deck 传 `STEAM_ID`。改完在 Steam 里重启一次生效。
+
+四张图不是手工产物：`gen-deck-art.py` 从 `docs/deck-grid/src/` 里的任天堂官方宣传图
+按绝对坐标裁切重生成它们，`src/SHA256SUMS` 钉住源图内容。源图入仓是因为官方下载点会
+失效（媒体站 CDN 现已 403），只记 URL 就无法在新机器上复现同一批像素。换图或改构图时
+改脚本里的裁切框重跑，再执行一次 `deploy-deck-art.sh`：
+
+    python3 docs/deck-grid/gen-deck-art.py
+    scp -r docs/deck-grid deck@DECK:/tmp/deck-grid-totk
+    ssh deck@DECK /tmp/deck-grid-totk/deploy-deck-art.sh
+
