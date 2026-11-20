@@ -62,6 +62,32 @@ class HarnessTest(unittest.TestCase):
             self.assertEqual(summary['gpu_passprof_at'], 900)
             self.assertIn('GPU pass profiling active: this run is a pass breakdown, not a frame-rate sample',
                           summary['limits'])
+            self.assertIsNone(summary['gpu_pass_profile'])       # no log in this case: nothing invented
+
+    def test_the_render_pass_breakdown_is_read_from_the_game_log(self):
+        with tempfile.TemporaryDirectory() as name:
+            case = Path(name)
+            write_case(case, 100, 200)
+            session = json.loads((case / 'session.json').read_text())
+            session['gpu_passprof_at'] = 900
+            (case / 'session.json').write_text(json.dumps(session))
+            log = case / 'data/ultratears/ultratears.log'
+            log.parent.mkdir(parents=True, exist_ok=True)
+            log.write_text(
+                '[totk-gfx] [vk] some unrelated line mentioning passes\n'
+                '[totk-gfx] [vk] pass profile of present 900: 493 passes, 18.33 ms in passes, '
+                '2.76 ms between them, 21.09 ms first to last\n'
+                '[totk-gfx] [vk]     3.569 ms  pass  115  1280x720  6 colour (fmt 0x25) depth 0x34  '
+                '3353 draws  fs 1606026991dc\n'
+                '[totk-gfx] [vk]     0.316 ms  pass  411  640x360  8 colour (fmt 0x25) depth 0x32  '
+                '2 draws  fs ffd00d5e6cb2\n')
+            profile = harness.summarize(case)['gpu_pass_profile']
+            self.assertEqual(profile['present'], 900)
+            self.assertEqual((profile['passes'], profile['in_pass_ms'], profile['between_ms'], profile['span_ms']),
+                             (493, 18.33, 2.76, 21.09))
+            self.assertEqual(profile['top'][0], dict(ms=3.569, passes=115, extent='1280x720',
+                                                     draws=3353, shader='1606026991dc'))
+            self.assertEqual(len(profile['top']), 2)
 
     def test_a_frame_missing_mid_sample_is_rejected(self):
         with tempfile.TemporaryDirectory() as name:

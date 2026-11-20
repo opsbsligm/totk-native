@@ -216,6 +216,13 @@ def frames_in(case, first, last):
     return frames
 
 
+# The game's own per-pass breakdown of one profiled frame, as the backend logs it (backend_vk.c pp_report):
+# "pass profile of present N: P passes, X ms in passes, Y ms between them, Z ms first to last" and the sorted rows.
+PASS_PROFILE = re.compile(r'pass profile of present (?P<present>\d+): (?P<passes>\d+) passes, (?P<inpass>[\d.]+) ms in '
+                          r'passes, (?P<between>[\d.]+) ms between them, (?P<span>[\d.]+) ms first to last')
+PASS_LINE = re.compile(r'(?P<ms>[\d.]+) ms {2}pass +(?P<passes>\d+) +(?P<extent>\d+x\d+) +.*? (?P<draws>\d+) draws + fs (?P<shader>\S+)')
+
+
 def summarize(case):
     """Percentiles over the frames the verified sample window covers exclusively."""
     sampling = json.loads((case / 'sampling-report.json').read_text())
@@ -233,10 +240,25 @@ def summarize(case):
             metrics[key] = dict(frames=len(values), mean=statistics.mean(values), p50=percentile(values, .5),
                                 p95=percentile(values, .95), p99=percentile(values, .99), max=values[-1])
     intervals = [row['@frame_ms'] for row in frames.values()]
+    # The game's own log holds the render-pass breakdown of the profiled frame, if that run asked for one. It is a
+    # GPU-side split of one frame, so it is reported apart from the sample-window numbers and never as a frame rate.
+    passes = None
+    log = case / 'data/ultratears/ultratears.log'
+    if log.is_file():
+        for line in log.read_text(errors='replace').splitlines():
+            total = PASS_PROFILE.search(line)
+            if total:
+                passes = dict(present=int(total['present']), passes=int(total['passes']), in_pass_ms=float(total['inpass']),
+                              between_ms=float(total['between']), span_ms=float(total['span']), top=[])
+                continue
+            one = PASS_LINE.search(line)
+            if one and passes is not None and len(passes['top']) < 12:   # the log already sorts them by time
+                passes['top'].append(dict(ms=float(one['ms']), passes=int(one['passes']), draws=int(one['draws']),
+                                          extent=one['extent'], shader=one['shader']))
     summary = dict(source_commit=session['source_commit'], pool_mode=session['pool_mode'],
                    pool_mem=session.get('pool_mem', 'n/a'),
                    scope=session.get('scope', 'one scene; one window; foreground verified every sample'),
-                   scene=session.get('scene', 'opening cave'),
+                   scene=session.get('scene', 'not labeled'),
                    verified_focus_samples=sampling['samples'],
                    sample_seconds=sampling['sample_end_time'] - sampling['sample_start_time'],
                    first_exclusive_frame=first, last_exclusive_frame=last, selected_frames=len(frames),
@@ -252,6 +274,7 @@ def summarize(case):
                    original_saves_unchanged=result['player_saves_unchanged'],
                    focus_restored=True, hardware_validated=False,
                    gpu_passprof_at=session.get('gpu_passprof_at'),
+                   gpu_pass_profile=passes or None,
                    limits=(['GPU pass profiling active: this run is a pass breakdown, not a frame-rate sample']
                            if session.get('gpu_passprof_at') else []) +
                           ['single scene, short sample', 'game present cadence is not panel scanout',
@@ -412,7 +435,9 @@ def main():
     run_parser.add_argument('--commit', required=True, help='source_commit the release must report')
     run_parser.add_argument('--save-fixture', default=str(Path.home() / '.local/share/ultratears/'
                                                           'test-profiles/v8-opening-20261102/ultratears/userdata'))
-    run_parser.add_argument('--scene', default='opening cave')
+    run_parser.add_argument('--scene', required=True,
+                            help='what the run is standing in, from this case\'s own screenshots '
+                                 '(the harness cannot know the game\'s location)')
     run_parser.add_argument('--warmup-seconds', type=int, default=30)
     run_parser.add_argument('--load-seconds', type=int, default=30)
     run_parser.add_argument('--sample-seconds', type=int, default=50)
