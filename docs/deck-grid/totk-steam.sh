@@ -10,5 +10,8 @@ unset DM_NVN_TSV DM_NVN_TSV_CALLS DM_NVN_FRAMES DM_NVN_PROF DM_PRESENT_HZ DM_PRE
 unset TOTK_HEADLESS TOTK_SHOT LARECOMP_FNPROF
 export XDG_DATA_HOME="$HOME/.local/share/ultratears/test-profiles/v8-opening-20261102"
 export TOTK_GYRO=1
+# 池内存改用主机可见副本：初始空岛草地的 A/B/A 是 20.93→29.67→19.46 FPS，队列提交 API p50 26.63→0.29→30.54 ms
+# （docs/linux-pool-copies.md）。环境不支持时运行时自动回退导入并记录原因，不会因此启动失败。
+export TOTK_POOL_COPY=1
 export SDL_VIDEO_DRIVER=x11 SDL_VIDEODRIVER=x11
 exec "$HOME/native-recomp/totk-native/current/run.sh"

@@ -187,6 +187,16 @@ class DeckShortcut(unittest.TestCase):
         mine = [e for e in self.m.entries(top) if self.m._int(e, b"appid") == 2245023905]
         self.assertEqual(self.m._raw(mine[0], b"icon"), icon)
 
+    def test_shipped_launcher_keeps_the_entry_contract(self):
+        # The Deck entry is the production configuration: A/B and gyro come from the launcher, and the pool
+        # path is the one measured on the Deck. Asserting the file itself, because a rebuilt release reuses it.
+        text = (ROOT / 'docs/deck-grid/totk-steam.sh').read_text()
+        self.assertIn('export TOTK_GYRO=1', text)
+        self.assertIn('export TOTK_POOL_COPY=1', text)
+        self.assertNotIn('export TOTK_POOL_IMPORT=1', text)
+        self.assertIn('current/run.sh', text)
+        self.assertNotIn('TOTK_FPS60', text)        # the frame cap lives in the runtime, not the entry
+
     def test_stale_duplicate_does_not_win(self):
         # A second shortcut runs the same launcher file name from another directory. The
         # entry that runs the path we install is the one to update; the appid the user
