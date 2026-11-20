@@ -13,6 +13,7 @@ GPU execution measurements, and the game's present cadence is not the panel's sc
 usage: python3 tools/deck_pool_ab.py run --dir <case-dir> --release <release-dir> \
            --pool-mode import|copy --commit <source-commit> [--sample-seconds 50]
            (copy only) --pool-mem cached|uncached|device selects the memory the copies live in
+           --gpu-passprof-at <present> takes the GPU time of every render pass of that one frame
        python3 tools/deck_pool_ab.py summarize --dir <case-dir>   # one completed case
 """
 import argparse
@@ -250,7 +251,10 @@ def summarize(case):
                    original_save_files=result['player_save_files'],
                    original_saves_unchanged=result['player_saves_unchanged'],
                    focus_restored=True, hardware_validated=False,
-                   limits=['single scene, short sample', 'game present cadence is not panel scanout',
+                   gpu_passprof_at=session.get('gpu_passprof_at'),
+                   limits=(['GPU pass profiling active: this run is a pass breakdown, not a frame-rate sample']
+                           if session.get('gpu_passprof_at') else []) +
+                          ['single scene, short sample', 'game present cadence is not panel scanout',
                            'first and last partial frames excluded',
                            'instrumentation overhead not measured separately',
                            'queue timings are host submission intervals, not GPU execution'])
@@ -300,6 +304,10 @@ def run(args):
         if pool_mem != 'cached':
             env['TOTK_POOL_MEM'] = pool_mem
     env['TOTK_INPUT_FIFO'] = str(case / 'input.fifo')
+    passprof = getattr(args, 'gpu_passprof_at', 0)
+    if passprof:
+        # One frame gets a timestamp pair per render pass; the report waits for the GPU, so that run is a diagnostic.
+        env['TOTK_GPU_PASSPROF'] = str(passprof)
 
     command = ['bwrap', '--ro-bind', '/', '/', '--proc', '/proc', '--dev-bind', '/dev', '/dev',
                '--bind', str(case), str(case), '--tmpfs', '/tmp',
@@ -312,6 +320,7 @@ def run(args):
         pid=child.pid, started=started, source_commit=args.commit, pool_mode=args.pool_mode,
         pool_mem=pool_mem or 'cached (the default kind)',
         release=str(release), scene=args.scene, save_isolated=True, maximum_seconds=args.maximum_seconds,
+        gpu_passprof_at=passprof or None,
         command=command), indent=2) + '\n')
 
     deck = Deck(case, env)
@@ -408,6 +417,8 @@ def main():
     run_parser.add_argument('--load-seconds', type=int, default=30)
     run_parser.add_argument('--sample-seconds', type=int, default=50)
     run_parser.add_argument('--maximum-seconds', type=int, default=240)
+    run_parser.add_argument('--gpu-passprof-at', type=int, default=0,
+                            help='present number whose render passes get GPU timestamps (diagnostic run)')
     commands.add_parser('summarize', parents=[both], help='recompute one completed case')
     args = top.parse_args()
     if args.command == 'summarize':

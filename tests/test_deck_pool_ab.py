@@ -51,6 +51,18 @@ class HarnessTest(unittest.TestCase):
                           summary['limits'])
             self.assertTrue((case / 'timing-summary.json').is_file())
 
+    def test_a_gpu_pass_profiled_run_is_flagged_as_a_diagnostic(self):
+        with tempfile.TemporaryDirectory() as name:
+            case = Path(name)
+            write_case(case, 100, 200)
+            session = json.loads((case / 'session.json').read_text())
+            session['gpu_passprof_at'] = 900
+            (case / 'session.json').write_text(json.dumps(session))
+            summary = harness.summarize(case)
+            self.assertEqual(summary['gpu_passprof_at'], 900)
+            self.assertIn('GPU pass profiling active: this run is a pass breakdown, not a frame-rate sample',
+                          summary['limits'])
+
     def test_a_frame_missing_mid_sample_is_rejected(self):
         with tempfile.TemporaryDirectory() as name:
             case = Path(name)
