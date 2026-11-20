@@ -357,20 +357,29 @@ static int import_host(uintptr_t a, uintptr_t b, VkBuffer *out_buf, VkDeviceMemo
 //    and the copy back keeps them in game memory (and marks their page written, so that the copy takes it again);
 //    the other bytes of the range get the GPU's. Unlike upstream, an unavailable or over-budget snapshot is fatal;
 //    an untracked guest pool is also fatal instead of silently using the GPU-wins fallback.
-// This fork keeps copies opt-in (TOTK_POOL_COPY=1), with imports as the production default.
-// TOTK_POOL_IMPORT=1 wins. Integrated GPUs only; no frozen-region optimization is imported.
+// This fork keeps copies opt-in (TOTK_POOL_COPY=1); TOTK_POOL_IMPORT=1 wins. Integrated GPUs only; no frozen-region
+// optimization is imported. The copies stay a candidate path: a machine that cannot support them keeps the imports it
+// already had, so enabling them in the launcher cannot make the game fail to start (pool_copies_off below).
+static int g_pool_copies = -1;
 int vkb_pool_copies(void) {
-    static int enabled = -1;
-    if (enabled < 0) {
+    if (g_pool_copies < 0) {
 #ifdef __linux__
         const char *copy = getenv("TOTK_POOL_COPY"), *imp = getenv("TOTK_POOL_IMPORT");
-        enabled = copy && !strcmp(copy, "1") && !(imp && !strcmp(imp, "1"));
+        g_pool_copies = copy && !strcmp(copy, "1") && !(imp && !strcmp(imp, "1"));
 #else
-        enabled = 0;
+        g_pool_copies = 0;
 #endif
-        VLOG("memory pools: %s", enabled ? "experimental host-visible copies" : "game memory imported");
+        VLOG("memory pools: %s", g_pool_copies ? "experimental host-visible copies" : "game memory imported");
     }
-    return enabled;
+    return g_pool_copies;
+}
+// A copy the environment cannot keep (no asynchronous write watch, a discrete GPU, pool shadows on): imports for the
+// whole run. Only before the first pool, while no copy holds game memory's bytes: a copy already filled would have to
+// be written back first, and the checks below are properties of the machine, not of one pool.
+static void pool_copies_off(const char *why) {
+    if (g_npools) die("pool copies became unavailable after pools were copied: %s; restart without TOTK_POOL_COPY", why);
+    g_pool_copies = 0;
+    VLOG("memory pool copies disabled: %s (game memory imported)", why);
 }
 
 static const pool_ent *pool_find(uintptr_t addr, uint64_t len);
@@ -576,20 +585,25 @@ void mtl_pool_add(const void *mem, uint64_t size) {
     backend_init();
     if (!g_ok || !mem || !size) return;
     int copy = vkb_pool_copies();
+#ifdef __linux__
+    // The copies need three things of the machine. Any one missing is a property of this Deck/driver, not of this
+    // pool, so the whole run keeps the imports it would have had before the candidate was enabled.
+    if (copy) {
+        uint64_t probe, page;
+        if (plat_written_pages(GUEST_LO, 4096, &probe, 1, &page) < 0)
+            pool_copies_off("no asynchronous write watch");
+        else if (vkc.props.deviceType != VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+            pool_copies_off("a discrete GPU");
+        else if (vkb_shadow_on())
+            pool_copies_off("pool shadows are on");
+        copy = g_pool_copies;
+    }
+#endif
     uintptr_t align = copy ? 4096 : vkc.host_pointer_alignment ? vkc.host_pointer_alignment : 4096;
     uintptr_t lo = (uintptr_t)mem;
     if (align & (align - 1) || size > UINTPTR_MAX - lo || lo + size > UINTPTR_MAX - (align - 1))
         die("invalid memory pool bounds");
     uintptr_t hi = lo + size, a = lo & ~(align - 1), b = (hi + align - 1) & ~(align - 1);
-#ifdef __linux__
-    if (copy) {
-        uint64_t probe, page;
-        if (plat_written_pages(GUEST_LO, 4096, &probe, 1, &page) < 0)
-            die("pool copies require asynchronous write watch; restart without TOTK_POOL_COPY");
-        if (vkc.props.deviceType != VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU || vkb_shadow_on())
-            die("experimental pool copies require an integrated GPU without pool shadows");
-    }
-#endif
 #ifdef __linux__
     if (copy && !linux_host_readable(a, b - a)) return;   // virtual/inaccessible pools keep their separate NVN path
 #endif

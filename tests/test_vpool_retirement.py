@@ -18,6 +18,7 @@ class VpoolRetirement(unittest.TestCase):
         finalizer = hle[hle.index('NVN(nvnMemoryPoolFinalize,'):hle.index('NVN(nvnMemoryPoolFlushMappedRange,')]
         deletion = backend[backend.index('#ifdef __linux__\ntypedef struct pool_release'):backend.index('void mtl_pool_invalidate(')]
         retirement = backend[backend.index('typedef struct dead {'):backend.index('static void gpu_span(int slot, uint64_t fence);')]
+        gate = backend[backend.index('static int g_pool_copies = -1;'):backend.index('static const pool_ent *pool_find(uintptr_t addr, uint64_t len);', backend.index('static int g_pool_copies = -1;'))]
         registration = backend[backend.index('void mtl_pool_add('):backend.index('static void destroy_later(VkImageView view', backend.index('void mtl_pool_add('))]
         importing = backend[backend.index('static int import_host('):backend.index('// Pinned adaptation:', backend.index('static int import_host('))]
         pool_type = backend[backend.index('typedef struct { uintptr_t lo, hi, base;'):backend.index('static pool_ent *g_pools;')]
@@ -35,7 +36,9 @@ class VpoolRetirement(unittest.TestCase):
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/mman.h>
+#include <sys/wait.h>
 #include <vulkan/vulkan.h>
 #include "totk_vpool.h"
 #include "src/runtime/platform/linux_watch.h"
@@ -60,12 +63,14 @@ static int g_npools,g_capools,g_ok=1;
 static uint64_t g_pool_bytes;
 static struct {int has_checkpoints,has_buffer_marker;VkDevice device;uintptr_t host_pointer_alignment;VkPhysicalDeviceProperties props;} vkc;
 static void backend_init(void) {}
-static int vkb_pool_copies(void) {return 0;}
-static int vkb_shadow_on(void) {return 0;}
+static int shadow_on;
+static int vkb_shadow_on(void) {return shadow_on;}
 static int linux_host_readable(uintptr_t a,uint64_t n) {(void)a;(void)n;return 1;}
 static int pc_alloc(uintptr_t a,uintptr_t b,VkBuffer *v,uint8_t **p,uint32_t *h) {(void)a;(void)b;(void)v;(void)p;(void)h;abort();}
 #define GUEST_LO 0
-int plat_written_pages(uint64_t a,uint64_t n,uint64_t *p,int m,uint64_t *s) {(void)a;(void)n;(void)p;(void)m;(void)s;abort();}
+static int watch_ok;
+int plat_written_pages(uint64_t a,uint64_t n,uint64_t *p,int m,uint64_t *s) {(void)a;(void)n;(void)p;(void)m;(void)s;return watch_ok?0:-1;}
+POOL_COPIES_GATE
 static uint64_t vkb_frame(void) {return 1;}
 static void vkb_shadow_free(uint32_t h) {(void)h;}
 static void vkb_poolmem_free(uint32_t h) {(void)h;}
@@ -226,15 +231,42 @@ int main(void) {
     for(import_failure=PROPERTY_FAIL;import_failure<=BIND_FAIL;import_failure++) {
         mtl_pool_add(guest,0x10000);assert(!g_npools && !g_pool_bytes && !g_linux_memory_refs);
     }
+    // The candidate's environment gate: on a machine that cannot support the copies, enabling them keeps the
+    // import this pool would always have had instead of failing to start, and reports the copies as off.
+    setenv("TOTK_POOL_COPY","1",1);setenv("TOTK_POOL_IMPORT","0",1);
+    for (int reason=0;reason<3;reason++) {   // 0 no watch, 1 discrete GPU, 2 pool shadows
+        g_pool_copies=1;watch_ok=reason!=0;shadow_on=reason==2;
+        vkc.props.deviceType=reason==1?VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+        guest=mmap(NULL,0x10000,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);assert(guest!=MAP_FAILED);
+        memset(guest,0x5a,0x10000);
+        unsigned imported_before=freed_imports;
+        mtl_pool_add(guest,0x10000);
+        assert(!g_pool_copies && g_npools==1 && g_pools[0].buf && !g_pools[0].cmap);   // imported, copies off
+        mtl_pool_del(guest);dead_tag(13+reason);dead_reap(13+reason);
+        assert(freed_imports==imported_before+1 && !g_npools && !g_linux_memory_refs);
+        assert(!munmap(guest,0x10000));
+    }
+    vkc.props.deviceType=VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;unsetenv("TOTK_POOL_COPY");
+    // A copy that holds game memory's bytes cannot be dropped silently: with a pool already registered the
+    // same loss of the environment is fatal. Checked in a child process because the harness dies by aborting.
+    pid_t kid=fork();
+    if (kid==0) {
+        setenv("TOTK_POOL_COPY","1",1);g_pool_copies=1;watch_ok=0;
+        void *at=mmap(NULL,0x10000,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
+        memset(at,0x2b,0x10000);mtl_pool_add(at,0x10000);   // falls back, so a pool is now registered
+        assert(g_npools==1);pool_copies_off("no asynchronous write watch");_exit(0);
+    }
+    int status=0;assert(waitpid(kid,&status,0)==kid);
+    assert(WIFSIGNALED(status) && WTERMSIG(status)==SIGABRT);
     assert(!munmap(guest,0x10000));free(g_pools);
     totk_vpool_host_stats(&bytes,&pools);assert(!bytes && !pools && !g_dead && !g_dead_new && !g_linux_memory_refs);
-    puts("Owned pool VM: actual imports/failures, GPU-fence retirement, guest discard after retirement, object reuse and CPU/null paths PASS");
+    puts("Owned pool VM: actual imports/failures, GPU-fence retirement, guest discard after retirement, object reuse, CPU/null paths and the candidate environment gate PASS");
     return 0;
 }
 '''
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as folder:
             source, binary = Path(folder)/'retirement.c', Path(folder)/'retirement'
-            source.write_text(prefix.replace('PRODUCTION_POOL_TYPE',pool_type)+vm+importing+registration+deletion+retirement+jobs+limits+queue+release+finalizer+
+            source.write_text(prefix.replace('PRODUCTION_POOL_TYPE',pool_type).replace('POOL_COPIES_GATE',gate)+vm+importing+registration+deletion+retirement+jobs+limits+queue+release+finalizer+
                               suffix.replace('REPLAY_POOL_RELEASE', replay))
             command = ['clang','-std=gnu17','-O1','-g','-pthread','-ffunction-sections','-fdata-sections',
                        '-fsanitize=address,undefined','-fno-sanitize-recover=all','-Wl,--gc-sections',
