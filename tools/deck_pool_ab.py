@@ -220,7 +220,7 @@ def frames_in(case, first, last):
 # "pass profile of present N: P passes, X ms in passes, Y ms between them, Z ms first to last" and the sorted rows.
 PASS_PROFILE = re.compile(r'pass profile of present (?P<present>\d+): (?P<passes>\d+) passes, (?P<inpass>[\d.]+) ms in '
                           r'passes, (?P<between>[\d.]+) ms between them, (?P<span>[\d.]+) ms first to last')
-PASS_LINE = re.compile(r'(?P<ms>[\d.]+) ms {2}pass +(?P<passes>\d+) +(?P<extent>\d+x\d+) +.*? (?P<draws>\d+) draws + fs (?P<shader>\S+)')
+PASS_LINE = re.compile(r'(?P<ms>[\d.]+) ms {2}pass +(?P<index>\d+) +(?P<extent>\d+x\d+) +.*? (?P<draws>\d+) draws + fs (?P<shader>\S+)')
 
 
 def summarize(case):
@@ -253,7 +253,7 @@ def summarize(case):
                 continue
             one = PASS_LINE.search(line)
             if one and passes is not None and len(passes['top']) < 12:   # the log already sorts them by time
-                passes['top'].append(dict(ms=float(one['ms']), passes=int(one['passes']), draws=int(one['draws']),
+                passes['top'].append(dict(ms=float(one['ms']), index=int(one['index']), draws=int(one['draws']),
                                           extent=one['extent'], shader=one['shader']))
     summary = dict(source_commit=session['source_commit'], pool_mode=session['pool_mode'],
                    pool_mem=session.get('pool_mem', 'n/a'),

@@ -85,7 +85,8 @@ class HarnessTest(unittest.TestCase):
             self.assertEqual(profile['present'], 900)
             self.assertEqual((profile['passes'], profile['in_pass_ms'], profile['between_ms'], profile['span_ms']),
                              (493, 18.33, 2.76, 21.09))
-            self.assertEqual(profile['top'][0], dict(ms=3.569, passes=115, extent='1280x720',
+            # 'index' is the pass's position in the frame, not a count of passes: the report is one row per pass.
+            self.assertEqual(profile['top'][0], dict(ms=3.569, index=115, extent='1280x720',
                                                      draws=3353, shader='1606026991dc'))
             self.assertEqual(len(profile['top']), 2)
 
