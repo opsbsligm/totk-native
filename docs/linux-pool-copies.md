@@ -24,11 +24,12 @@ A/B/A，每轮连续采样 50 秒，场景仍是初始空岛草地（每轮前�
 30.07→0.29→26.75 ms。副本臂把该场景的长帧占比从四成帧数降到 0.3%，A/B/A 复现，与 `81f997f` 的结论一致。副本臂残余
 长帧的 `submit+present` 为 23–36 ms，同一采样窗口的每帧 GPU 时间戳跨度为 26.2–26.3 ms（导入臂 21.7–21.8 ms），
 即该场景的剩余限制已在 GPU 侧；长帧行的单帧 GPU 字段读回 -1.0 ms，表示那一帧没有取到时间戳。三臂的
-`present_effective_ticks` 均为每帧一次，采样期电源上限 15 W、GPU 均温 65 °C，未修改内核或功耗设置。
+`present_effective_ticks` 均为每帧一次；每轮结束时读到电源上限 15 W、GPU 65 °C，未修改内核或功耗设置。
 
-三臂原始采样（`frame-timing.tsv`、逐轮前后截图、游戏日志、存档副本清单，共 278 个文件）打包为单个私有归档
-（SHA-256 `b62651101a869c95a8feba2e3eec1f1218374b7feb6103ffe7f1ca476c6f7db6`）存在构建工位，不入库；包内三臂
-`timing-summary.json` 与掌机原文件逐文件 SHA 一致后删除掌机暂存。真机手感未测，`hardware_validated=false`。
+三臂原始采样（`frame-timing.tsv`、逐轮前后截图、游戏日志，以及本轮实际使用的存档副本本体，共 278 个文件）打包为
+单个归档（SHA-256 `b62651101a869c95a8feba2e3eec1f1218374b7feb6103ffe7f1ca476c6f7db6`）存在构建工位：包内含玩家
+存档，属私有内容，不入仓库。包内三臂 `timing-summary.json` 与掌机原文件逐文件 SHA 一致后删除掌机暂存。真机手感
+未测，`hardware_validated=false`。
 
 按采样窗口的稳态日志核对开销在哪一侧（同一窗口内 `vkQueueSubmit` 墙钟、GPU 时间戳跨度、绘制量）：导入臂每帧
 `vkQueueSubmit` 墙钟 28.1 ms，占该臂 47.8 ms 帧间隔的主要部分，同期 GPU 时间戳跨度中位数 21.9 ms 而
