@@ -17,7 +17,7 @@ usage: python3 tools/deck_pool_ab.py run --dir <case-dir> --release <release-dir
        python3 tools/deck_pool_ab.py summarize --dir <case-dir>   # one completed case
 """
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 import hashlib
 import json
 import math
@@ -199,6 +199,31 @@ def thread_cpu(pid):
     return dict(ticks_per_second=os.sysconf('SC_CLK_TCK'), threads=rows)
 
 
+def last_frame(path):
+    """Highest frame number in the timing TSV, reading only its end (called once per sample second)."""
+    with path.open('rb') as stream:
+        stream.seek(0, os.SEEK_END)
+        stream.seek(max(0, stream.tell() - 65536))
+        tail = stream.read().decode('utf-8', 'replace')
+    numbers = [int(line.split('\t', 1)[0]) for line in tail.splitlines() if line.split('\t', 1)[0].isdigit()]
+    return max(numbers) if numbers else 0
+
+
+def thread_cpu_by_name(pid, previous):
+    """CPU milliseconds per thread *name* since the previous call, so a sample says who was busy that second.
+
+    Named rather than per-thread-id: the recording pool reuses names, and the point is which kind of work ran.
+    Threads that appeared or exited between the snapshots are counted under their own name from/to zero.
+    """
+    now = thread_cpu(pid)
+    out = {}
+    for row in now['threads'].values():
+        out[row['name']] = out.get(row['name'], 0.0) + row['user_ticks'] + row['kernel_ticks']
+    ticks = now['ticks_per_second']
+    delta = {name: round((value - previous.get(name, value)) * 1000 / ticks, 1) for name, value in out.items()}
+    return {name: value for name, value in delta.items() if value > 0}, out
+
+
 def frames_in(case, first, last):
     """The complete frames of one sample window as frame -> metric -> value."""
     frames = {}
@@ -221,6 +246,66 @@ def frames_in(case, first, last):
 PASS_PROFILE = re.compile(r'pass profile of present (?P<present>\d+): (?P<passes>\d+) passes, (?P<inpass>[\d.]+) ms in '
                           r'passes, (?P<between>[\d.]+) ms between them, (?P<span>[\d.]+) ms first to last')
 PASS_LINE = re.compile(r'(?P<ms>[\d.]+) ms {2}pass +(?P<index>\d+) +(?P<extent>\d+x\d+) +.*? (?P<draws>\d+) draws + fs (?P<shader>\S+)')
+
+
+def attribute_long_frames(frames, samples, threshold=50.0, top=4):
+    """Which thread names were busy in the second that held each long frame, against the sample's own median.
+
+    One sample row covers the second before it was taken: its CPU deltas and the frame number read at the end of
+    that second. The game's TSV timestamps are seconds since process start, so the row that reports frame F ties
+    the two clocks at F's own `@t_s`; that offset puts a long frame in a second. A second holds about 30 frames, so
+    this names a candidate, and only a candidate: with one long frame in the second it is the same second's work,
+    not proof that the work is the cause.
+    """
+    # Counted on the frame interval alone: a long frame the clock cannot place is still a long frame that was seen,
+    # and dropping it here would report a cleaner run than the sample actually was.
+    long = sorted((f for f, row in frames.items() if row.get('@frame_ms', 0) > threshold),
+                  key=lambda f: frames[f].get('@t_s', 0.0))
+    if not long or not samples:
+        return dict(long_frames=len(long), attributed=0, note='no long frame in this window or no per-second samples')
+    anchors = [(s['time'], s['last_frame']) for s in samples if 'last_frame' in s and 'thread_cpu_ms' in s]
+    if not anchors:
+        return dict(long_frames=len(long), attributed=0, note='the samples carry no per-thread CPU')
+    offsets = []
+    by_frame = {f: row for f, row in frames.items()}
+    for wall, frame in anchors:
+        row = by_frame.get(frame)
+        if row and '@t_s' in row:
+            offsets.append(wall - row['@t_s'])
+    if not offsets:
+        untied = ('the timing TSV carries no @t_s row: the sample clock cannot be tied to the frame clock'
+                  if not any('@t_s' in row for row in frames.values())
+                  else 'no sampled frame is present in the timing TSV')
+        return dict(long_frames=len(long), attributed=0, note=untied)
+    offset = statistics.median(offsets)
+    busy = defaultdict(list)
+    for sample in samples:
+        for name, ms in (sample.get('thread_cpu_ms') or {}).items():
+            busy[name].append(ms)
+    median = {name: statistics.median(values) for name, values in busy.items()}
+    rows = []
+    for f in long:
+        if '@t_s' not in frames[f]:
+            continue
+        wall = offset + frames[f]['@t_s']
+        holder = None
+        for sample in samples:
+            if 'thread_cpu_ms' not in sample or 'last_frame' not in sample:
+                continue
+            if sample.get('prev_time', sample['time'] - 1) <= wall < sample['time']:
+                holder = sample
+                break
+        if holder is None:
+            continue
+        excess = sorted(((name, ms - median.get(name, 0.0)) for name, ms in holder['thread_cpu_ms'].items()),
+                        key=lambda pair: -pair[1])[:top]
+        rows.append(dict(frame=f, frame_ms=round(frames[f]['@frame_ms'], 2), second=round(wall, 2),
+                         busy_in_second=holder['thread_cpu_ms'],
+                         above_the_window_median=[dict(thread=name, ms=round(ms, 1)) for name, ms in excess]))
+    return dict(long_frames=len(long), attributed=len(rows), clock_offset_s=round(offset, 3),
+                window_median_thread_cpu_ms={name: round(value, 1) for name, value in median.items()},
+                resolution='one sample second covers about 30 frames: a candidate, not a cause',
+                frames=rows)
 
 
 def summarize(case):
@@ -281,6 +366,10 @@ def summarize(case):
                            'first and last partial frames excluded',
                            'instrumentation overhead not measured separately',
                            'queue timings are host submission intervals, not GPU execution'])
+    summary['long_frame_attribution'] = attribute_long_frames(
+        frames, json.loads((case / 'sampling-report.json').read_text()).get('device_samples') or [])
+    if summary['long_frame_attribution'].get('attributed'):
+        summary['limits'].append('long-frame thread attribution is per sample second: a candidate thread, not a cause')
     (case / 'timing-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     return summary
 
@@ -374,11 +463,17 @@ def run(args):
                                              for line in timing.read_text().splitlines()
                                              if line.split('\t', 1)[0].isdigit())
         sampling['sample_start_time'] = time.time()
+        _, cpu_seen = thread_cpu_by_name(pid, {})   # first real delta is measured from here
+        prev_sample_time = sampling['sample_start_time']
         with (case / 'foreground-samples.jsonl').open('x') as stream:
             for _ in range(args.sample_seconds):
                 if child.poll() is not None:
                     raise RuntimeError('the game exited during the sample')
                 row = deck.device_sample()
+                row['prev_time'] = prev_sample_time
+                row['last_frame'] = last_frame(timing)
+                row['thread_cpu_ms'], cpu_seen = thread_cpu_by_name(pid, cpu_seen)
+                prev_sample_time = row['time']
                 stream.write(json.dumps(row) + '\n')
                 stream.flush()
                 sampling['samples'] += 1
@@ -388,6 +483,8 @@ def run(args):
                     raise RuntimeError('the launch log passed its budget')
                 time.sleep(1)
         sampling['sample_end_time'] = time.time()
+        sampling['device_samples'] = [json.loads(line) for line in
+                                      (case / 'foreground-samples.jsonl').read_text().splitlines() if line.strip()]
         assert timing.stat().st_size < MAX_TSV_BYTES, 'the timing file passed its budget'
         sampling['timing_end_frame'] = max(int(line.split('\t', 1)[0])
                                           for line in timing.read_text().splitlines()

@@ -11,7 +11,7 @@ harness = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(harness)
 
 
-def write_case(case, first, last, drop=(), frame_ms=lambda number: 16.0 + number % 3):
+def write_case(case, first, last, drop=(), frame_ms=lambda number: 16.0 + number % 3, t_s=None):
     """A completed case with a synthetic frame TSV: frames (first, last) except those dropped."""
     rows = []
     for number in range(first, last + 1):
@@ -23,6 +23,8 @@ def write_case(case, first, last, drop=(), frame_ms=lambda number: 16.0 + number
                            ('@work_ms', interval), ('@proc_cpu_ms', 50.0), ('@present_effective_ticks', 1.0),
                            ('@present_guest_ticks', 2.0)]:
             rows.append(f'{number}\t{key}\t{value}')
+        if t_s is not None:
+            rows.append(f'{number}\t@t_s\t{t_s(number):.3f}')
     (case / 'frame-timing.tsv').write_text('\n'.join(rows) + '\n')
     (case / 'session.json').write_text(json.dumps(dict(source_commit='a' * 40, pool_mode='copy',
                                                       scene='opening cave')))
@@ -89,6 +91,53 @@ class HarnessTest(unittest.TestCase):
             self.assertEqual(profile['top'][0], dict(ms=3.569, index=115, extent='1280x720',
                                                      draws=3353, shader='1606026991dc'))
             self.assertEqual(len(profile['top']), 2)
+
+    def test_a_long_frame_is_attributed_to_the_thread_busy_in_its_second(self):
+        """The clock tie is the load-bearing part: the TSV counts from process start, the samples from wall clock."""
+        with tempfile.TemporaryDirectory() as name:
+            case = Path(name)
+            # Frame n starts 0.5 + n/30 s after process start, so every sample taken on second boundaries ties the
+            # two clocks at 105 s: frame 150 starts at 110.5 s, mid-second inside the sample reported at 111.
+            write_case(case, 100, 200, frame_ms=lambda n: 90.0 if n == 150 else 30.0, t_s=lambda n: 0.5 + n / 30)
+            samples = []
+            for second in range(109, 113):                     # wall clock; (second - 105.5) * 30 is the last frame
+                row = dict(time=float(second), last_frame=int((second - 105.5) * 30),
+                           thread_cpu_ms={'totk-translate': 900.0, 'totk-record-1': 900.0})
+                if second == 111:                              # the second that holds frame 150
+                    row['thread_cpu_ms']['totk-record-1'] = 1400.0
+                samples.append(row)
+            report = json.loads((case / 'sampling-report.json').read_text())
+            report['device_samples'] = samples
+            (case / 'sampling-report.json').write_text(json.dumps(report))
+            summary = harness.summarize(case)
+            found = summary['long_frame_attribution']
+            self.assertEqual(found['long_frames'], 1)
+            self.assertEqual(found['attributed'], 1)
+            self.assertAlmostEqual(found['clock_offset_s'], 105.0, places=3)   # every sample agrees on this tie
+            entry = found['frames'][0]
+            self.assertEqual(entry['frame'], 150)
+            self.assertEqual(entry['above_the_window_median'][0]['thread'], 'totk-record-1')
+            self.assertGreater(entry['above_the_window_median'][0]['ms'], 400.0)
+            self.assertIn('candidate thread, not a cause', ' '.join(summary['limits']))
+
+    def test_attribution_reports_what_it_could_not_place(self):
+        with tempfile.TemporaryDirectory() as name:
+            case = Path(name)
+            write_case(case, 100, 200, frame_ms=lambda n: 90.0 if n == 150 else 30.0)   # no @t_s: no clock tie
+            summary = harness.summarize(case)
+            found = summary['long_frame_attribution']
+            self.assertEqual(found['long_frames'], 1)           # the long frame is still reported
+            self.assertEqual(found['attributed'], 0)            # only the clock tie is missing
+            self.assertIn('per-second samples', found['note'])
+            self.assertNotIn('long-frame thread attribution', ' '.join(summary['limits']))
+
+    def test_last_frame_reads_the_end_of_a_growing_tsv(self):
+        with tempfile.TemporaryDirectory() as name:
+            path = Path(name) / 'frame-timing.tsv'
+            path.write_text(''.join(f'{n}\t@frame_ms\t30.0\n' for n in range(1, 5001)))
+            self.assertEqual(harness.last_frame(path), 5000)
+            path.write_text('# kind: header only\n')
+            self.assertEqual(harness.last_frame(path), 0)
 
     def test_a_frame_missing_mid_sample_is_rejected(self):
         with tempfile.TemporaryDirectory() as name:
