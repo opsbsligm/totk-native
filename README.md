@@ -1,5 +1,8 @@
 # totk-native
 
+
+> **版权与商标**：*The Legend of Zelda: Tears of the Kingdom* © Nintendo。本仓为个人源码工程（fan project），未与任天堂关联、获其认可或赞助；*Nintendo Switch* 与 *The Legend of Zelda* 为任天堂注册商标，仅用于描述兼容性对象。仓库内官方宣传图见 [NINTENDO-ART-NOTICE.md](docs/NINTENDO-ART-NOTICE.md)；游戏代码、密钥与固件由用户从自有卡带提供，本仓不含。
+
 《王国之泪》1.4.3 的独立 Linux / Steam Deck 原生源码工程。源码、构建工具和版本检查均在本仓库；不依赖旧 `nativedeck` 工作区，也不需要既有游戏二进制或对象文件。
 
 ## 构建与运行
