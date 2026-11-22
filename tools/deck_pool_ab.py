@@ -36,12 +36,20 @@ APPID = 4131851805          # this game's Deck library entry (the signed value i
 MAX_LOG_BYTES = 20 * 2**20  # a runaway log aborts the sample rather than filling the volume
 MAX_TSV_BYTES = 32 * 2**20
 MIN_FREE_BYTES = 2 * 2**30
-# The Deck's native resolution and the size the game's own scene follows: the window is a measured
-# variable (run --window-size) because the scene targets track it, so it separates pixel-bound GPU work
-# from draw-call and barrier work without rebuilding the game.
+# The Deck's panel size, which is also the size the game is played at. The presenting window is a measured
+# variable (run --window-size), but it is NOT the scene size: with the game's dynamic resolution patched off
+# (tools/lifter/patches.py drs_off) the scene targets stay at the mode's fixed size, so a smaller window only
+# shrinks the swapchain and the upscale. The knob that actually moves scene pixels is TOTK_OPERATION_MODE
+# (handheld 1280x720 against docked 1600x900), passed with --env.
 WINDOW_W, WINDOW_H = 1280, 800
 REQUIRED_METRICS = ['@frame_ms', '@nvn_ms', '@sub_wall_ms', '@sub_cpu_ms',
                     '@queue_lock_ms', '@queue_api_ms', '@present_effective_ticks']
+# Variables the harness owns: the pool backing (which of the two is set defines the arm), the isolated save/cache
+# paths, the TSV output, the input fifo, and the profiling switches. They are cleared from the inherited environment
+# so a case measures the arm and nothing else, and an --env arm may not set them either.
+RESERVED_ENV = ('TOTK_POOL_COPY', 'TOTK_POOL_IMPORT', 'TOTK_WRITE_WATCH', 'TOTK_POOL_MEM',
+                'TOTK_INPUT_SCRIPT', 'TOTK_INPUT_FIFO', 'LD_PRELOAD', 'TOTK_HEADLESS', 'TOTK_SHOT',
+                'TOTK_GPU_PASSPROF')
 
 
 def inventory(root):
@@ -192,9 +200,12 @@ class Deck:
 def parse_size(text):
     """`1280x800` as (1280, 800), rejecting anything that is not a smaller size of the panel's own aspect ratio.
 
-    The panel is 1280x800, and TOTK renders its scene at the window's size, so a smaller window is a smaller scene:
-    comparing two sizes of the same shape says what the pixels cost, with no aspect distortion and no different amount
-    of the world on screen. Cross-multiplied, so the match is exact rather than rounded.
+    Only sizes of the panel's own shape are allowed, so a reduced window cannot change how much of the world is on
+    screen or stretch it. Cross-multiplied, so the match is exact rather than rounded. Note what this does NOT do:
+    with the game's dynamic resolution patched off the scene keeps its mode's fixed size, so a smaller window measures
+    the swapchain and upscale path only. Measured on the Deck: 1280x800, 960x600 and 640x400 run within 0.4 ms of each
+    other, which is what told us the scene targets do not track the window. To move scene pixels, run an arm of
+    TOTK_OPERATION_MODE (see --env); handheld against docked is 1280x720 against 1600x900.
     """
     match = re.fullmatch(r'(\d+)x(\d+)', text.strip())
     if not match:
@@ -206,6 +217,26 @@ def parse_size(text):
     if w < WINDOW_W // 2 or w > WINDOW_W:
         raise SystemExit(f'--window-size {w}x{h}: keep the width between {WINDOW_W // 2} and the panel at {WINDOW_W}')
     return w, h
+
+
+def arm_env(items, baseline):
+    """One A/B arm's extra environment, checked against the variables the harness itself owns.
+
+    An arm is meant to move exactly one development switch (e.g. TOTK_VK_NO_LOCAL_BARRIER=1), so a name the harness
+    already sets is refused: otherwise the arm silently moves the baseline under the measurement -- the pool mode, the
+    isolated save paths and the TSV output are what makes two runs comparable at all.
+    TOTK_POOL_IMPORT is reserved even in the copy arm, where the harness deliberately leaves it unset: the runtime
+    prefers an import over a copy, so setting it from an arm would flip the baseline without appearing in it.
+    """
+    extra = {}
+    for item in items:
+        key, sep, value = item.partition('=')
+        if not sep or not key or not key.replace('_', '').isalnum() or not key[0].isalpha():
+            raise SystemExit(f'--env wants KEY=VALUE, got {item!r}')
+        if key in baseline or key in RESERVED_ENV:
+            raise SystemExit(f'--env {key}: the harness sets this variable itself, an arm may not override it')
+        extra[key] = value
+    return extra
 
 
 def thread_cpu(pid):
@@ -387,8 +418,9 @@ def summarize(case):
                    gpu_pass_profile=passes or None,
                    limits=(['GPU pass profiling active: this run is a pass breakdown, not a frame-rate sample']
                            if session.get('gpu_passprof_at') else []) +
-                          (['scene rendered at %dx%d, below the panel: comparable only with the same size'
-                            % tuple(session['window_size'])]
+                          ([('presenting window %dx%d, below the panel: the scene keeps its fixed size, so this run '
+                             'measures the upscale path; comparable only with the same size'
+                             % tuple(session['window_size']))]
                            if tuple(session.get('window_size', [WINDOW_W, WINDOW_H])) != (WINDOW_W, WINDOW_H) else []) +
                           ['single scene, short sample', 'game present cadence is not panel scanout',
                            'first and last partial frames excluded',
@@ -449,6 +481,9 @@ def run(args):
     if passprof:
         # One frame gets a timestamp pair per render pass; the report waits for the GPU, so that run is a diagnostic.
         env['TOTK_GPU_PASSPROF'] = str(passprof)
+    # An A/B arm of one development switch: the caller names the variable, the harness owns every other one.
+    extra = arm_env(getattr(args, 'env', []), env)
+    env.update(extra)
 
     command = ['bwrap', '--ro-bind', '/', '/', '--proc', '/proc', '--dev-bind', '/dev', '/dev',
                '--bind', str(case), str(case), '--tmpfs', '/tmp',
@@ -462,6 +497,7 @@ def run(args):
         pool_mem=pool_mem or 'cached (the default kind)',
         release=str(release), scene=args.scene, save_isolated=True, maximum_seconds=args.maximum_seconds,
         window_size=list(size), gpu_passprof_at=passprof or None,
+        extra_env=extra or None,
         command=command), indent=2) + '\n')
 
     deck = Deck(case, env)
@@ -574,6 +610,11 @@ def main():
                                  'panel size, as the game is played)')
     run_parser.add_argument('--gpu-passprof-at', type=int, default=0,
                             help='present number whose render passes get GPU timestamps (diagnostic run)')
+    run_parser.add_argument('--env', action='append', default=[], metavar='KEY=VALUE',
+                            help='extra environment variable for the game, repeatable, for an A/B arm of one '
+                                 'development switch (e.g. TOTK_VK_NO_LOCAL_BARRIER=1). Names already set by the '
+                                 'harness itself are refused: an arm must not move the baseline under the measurement. '
+                                 'Every accepted variable is recorded in the case\'s session.json.')
     commands.add_parser('summarize', parents=[both], help='recompute one completed case')
     args = top.parse_args()
     if args.command == 'summarize':
