@@ -131,6 +131,54 @@ class HarnessTest(unittest.TestCase):
             self.assertIn('per-second samples', found['note'])
             self.assertNotIn('long-frame thread attribution', ' '.join(summary['limits']))
 
+    def test_window_sizes_offered_are_the_panel_shape_only(self):
+        """The window is a measured variable, so a wrong size has to fail before the game starts, not skew the sample."""
+        self.assertEqual(harness.parse_size('1280x800'), (1280, 800))
+        self.assertEqual(harness.parse_size(' 960x600 '), (960, 600))
+        for bad in ('1280x720',      # the panel's width at a different height: a different amount of world
+                    '960x540',       # 16:9 on a 16:10 panel
+                    '600x400',       # right shape, below the smallest size offered
+                    '1440x900',      # larger than the panel
+                    'big'):
+            with self.assertRaises(SystemExit, msg=bad):
+                harness.parse_size(bad)
+
+    def test_a_reduced_window_size_is_stated_as_the_upscale_path(self):
+        """A frame time measured at 640x400 is not comparable with one at the panel size, and it is not a smaller
+        scene either (the scene keeps its fixed size), so the summary has to say which one it was."""
+        with tempfile.TemporaryDirectory() as name:
+            case = Path(name)
+            write_case(case, 100, 200)
+            panel = harness.summarize(case)
+            self.assertEqual(panel['window_size'], [1280, 800])
+            self.assertNotIn('below the panel', ' '.join(panel['limits']))
+
+            session = json.loads((case / 'session.json').read_text())
+            session['window_size'] = [640, 400]
+            (case / 'session.json').write_text(json.dumps(session))
+            reduced = harness.summarize(case)
+            self.assertEqual(reduced['window_size'], [640, 400])
+            stated = ' '.join(reduced['limits'])
+            self.assertIn('presenting window 640x400', stated)
+            self.assertIn('the scene keeps its fixed size', stated)
+
+    def test_an_arm_may_only_move_one_switch_of_its_own(self):
+        """An --env arm that would move the harness's own baseline fails before the game starts."""
+        baseline = {'TOTK_POOL_COPY': '1', 'XDG_DATA_HOME': '/case/data', 'DM_NVN_TSV': '/case/f.tsv'}
+        self.assertEqual(harness.arm_env(['TOTK_VK_NO_LOCAL_BARRIER=1'], baseline),
+                         {'TOTK_VK_NO_LOCAL_BARRIER': '1'})
+        self.assertEqual(harness.arm_env([], baseline), {})
+        for bad in ('TOTK_POOL_COPY=1',     # the arm's pool mode, already set by the harness
+                    'TOTK_POOL_IMPORT=1',   # the runtime prefers import: this flips a copy arm
+                    'TOTK_POOL_MEM=device', # a second variable of the same arm
+                    'DM_NVN_TSV=/tmp/x',    # the measurement output itself
+                    'LD_PRELOAD=/tmp/x.so'):
+            with self.assertRaises(SystemExit, msg=bad):
+                harness.arm_env([bad], baseline)
+        for bad in ('BARRIER', '1BAD=1', 'A-B=1', '=1'):
+            with self.assertRaises(SystemExit, msg=bad):
+                harness.arm_env([bad], baseline)
+
     def test_last_frame_reads_the_end_of_a_growing_tsv(self):
         with tempfile.TemporaryDirectory() as name:
             path = Path(name) / 'frame-timing.tsv'
