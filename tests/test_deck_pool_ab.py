@@ -131,6 +131,34 @@ class HarnessTest(unittest.TestCase):
             self.assertIn('per-second samples', found['note'])
             self.assertNotIn('long-frame thread attribution', ' '.join(summary['limits']))
 
+    def test_window_sizes_offered_are_the_panel_shape_only(self):
+        """The window is a measured variable, so a wrong size has to fail before the game starts, not skew the sample."""
+        self.assertEqual(harness.parse_size('1280x800'), (1280, 800))
+        self.assertEqual(harness.parse_size(' 960x600 '), (960, 600))
+        for bad in ('1280x720',      # the panel's width at a different height: a different amount of world
+                    '960x540',       # 16:9 on a 16:10 panel
+                    '600x400',       # right shape, below the smallest size offered
+                    '1440x900',      # larger than the panel
+                    'big'):
+            with self.assertRaises(SystemExit, msg=bad):
+                harness.parse_size(bad)
+
+    def test_a_reduced_scene_size_is_stated_on_the_summary(self):
+        """A frame time measured at 640x400 is not comparable with one at the panel size, so it cannot be silent."""
+        with tempfile.TemporaryDirectory() as name:
+            case = Path(name)
+            write_case(case, 100, 200)
+            panel = harness.summarize(case)
+            self.assertEqual(panel['window_size'], [1280, 800])
+            self.assertNotIn('below the panel', ' '.join(panel['limits']))
+
+            session = json.loads((case / 'session.json').read_text())
+            session['window_size'] = [640, 400]
+            (case / 'session.json').write_text(json.dumps(session))
+            reduced = harness.summarize(case)
+            self.assertEqual(reduced['window_size'], [640, 400])
+            self.assertIn('scene rendered at 640x400', ' '.join(reduced['limits']))
+
     def test_last_frame_reads_the_end_of_a_growing_tsv(self):
         with tempfile.TemporaryDirectory() as name:
             path = Path(name) / 'frame-timing.tsv'

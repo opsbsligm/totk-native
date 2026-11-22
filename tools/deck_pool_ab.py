@@ -36,6 +36,10 @@ APPID = 4131851805          # this game's Deck library entry (the signed value i
 MAX_LOG_BYTES = 20 * 2**20  # a runaway log aborts the sample rather than filling the volume
 MAX_TSV_BYTES = 32 * 2**20
 MIN_FREE_BYTES = 2 * 2**30
+# The Deck's native resolution and the size the game's own scene follows: the window is a measured
+# variable (run --window-size) because the scene targets track it, so it separates pixel-bound GPU work
+# from draw-call and barrier work without rebuilding the game.
+WINDOW_W, WINDOW_H = 1280, 800
 REQUIRED_METRICS = ['@frame_ms', '@nvn_ms', '@sub_wall_ms', '@sub_cpu_ms',
                     '@queue_lock_ms', '@queue_api_ms', '@present_effective_ticks']
 
@@ -76,13 +80,14 @@ class Deck:
     def set_property(self, key, value):
         self.call(['xprop', '-root', '-f', key, '32c', '-set', key, str(value)])
 
-    def bind_game(self, pid):
+    def bind_game(self, pid, size=(WINDOW_W, WINDOW_H)):
         rows = self.output(['xdotool', 'search', '--pid', str(pid)]).split()
         assert len(rows) == 1, f'expected one window, found {rows}'
         self.window = rows[0]
         self.report['game_window'] = self.window
+        self.report['window_size'] = list(size)
         self.call(['xprop', '-id', self.window, '-f', 'STEAM_GAME', '32c', '-set', 'STEAM_GAME', str(APPID)])
-        self.call(['xdotool', 'windowsize', self.window, '1280', '800'])
+        self.call(['xdotool', 'windowsize', self.window, str(size[0]), str(size[1])])
         for key in ('GAMESCOPECTRL_BASELAYER_WINDOW', 'GAMESCOPECTRL_BASELAYER_APPID'):
             raw = self.output(['xprop', '-root', key])
             self.original[key] = raw.split(' = ', 1)[1] if ' = ' in raw else None
@@ -182,6 +187,25 @@ class Deck:
             restored[key] = raw.split(' = ', 1)[1] if ' = ' in raw else None
         self.report['focus_restored'] = restored == self.original
         return self.report['focus_restored']
+
+
+def parse_size(text):
+    """`1280x800` as (1280, 800), rejecting anything that is not a smaller size of the panel's own aspect ratio.
+
+    The panel is 1280x800, and TOTK renders its scene at the window's size, so a smaller window is a smaller scene:
+    comparing two sizes of the same shape says what the pixels cost, with no aspect distortion and no different amount
+    of the world on screen. Cross-multiplied, so the match is exact rather than rounded.
+    """
+    match = re.fullmatch(r'(\d+)x(\d+)', text.strip())
+    if not match:
+        raise SystemExit(f'--window-size wants WxH (e.g. 960x600), got {text!r}')
+    w, h = int(match[1]), int(match[2])
+    if w * WINDOW_H != h * WINDOW_W:
+        raise SystemExit(f'--window-size {w}x{h} is not the panel aspect ratio of {WINDOW_W}x{WINDOW_H} '
+                         f'(e.g. 960x600, 640x400)')
+    if w < WINDOW_W // 2 or w > WINDOW_W:
+        raise SystemExit(f'--window-size {w}x{h}: keep the width between {WINDOW_W // 2} and the panel at {WINDOW_W}')
+    return w, h
 
 
 def thread_cpu(pid):
@@ -342,6 +366,7 @@ def summarize(case):
                                           extent=one['extent'], shader=one['shader']))
     summary = dict(source_commit=session['source_commit'], pool_mode=session['pool_mode'],
                    pool_mem=session.get('pool_mem', 'n/a'),
+                   window_size=session.get('window_size', [WINDOW_W, WINDOW_H]),
                    scope=session.get('scope', 'one scene; one window; foreground verified every sample'),
                    scene=session.get('scene', 'not labeled'),
                    verified_focus_samples=sampling['samples'],
@@ -362,6 +387,9 @@ def summarize(case):
                    gpu_pass_profile=passes or None,
                    limits=(['GPU pass profiling active: this run is a pass breakdown, not a frame-rate sample']
                            if session.get('gpu_passprof_at') else []) +
+                          (['scene rendered at %dx%d, below the panel: comparable only with the same size'
+                            % tuple(session['window_size'])]
+                           if tuple(session.get('window_size', [WINDOW_W, WINDOW_H])) != (WINDOW_W, WINDOW_H) else []) +
                           ['single scene, short sample', 'game present cadence is not panel scanout',
                            'first and last partial frames excluded',
                            'instrumentation overhead not measured separately',
@@ -376,6 +404,7 @@ def summarize(case):
 
 def run(args):
     case, release = Path(args.dir).resolve(), Path(args.release).resolve()
+    size = parse_size(args.window_size)
     for name in ('savagewind', 'ultratears', 'astralchain'):
         assert subprocess.run(['pgrep', '-x', name], capture_output=True).returncode == 1, f'{name} already running'
     assert case.is_dir() and not any(case.iterdir()), f'{case} is not an empty case directory'
@@ -432,7 +461,7 @@ def run(args):
         pid=child.pid, started=started, source_commit=args.commit, pool_mode=args.pool_mode,
         pool_mem=pool_mem or 'cached (the default kind)',
         release=str(release), scene=args.scene, save_isolated=True, maximum_seconds=args.maximum_seconds,
-        gpu_passprof_at=passprof or None,
+        window_size=list(size), gpu_passprof_at=passprof or None,
         command=command), indent=2) + '\n')
 
     deck = Deck(case, env)
@@ -444,7 +473,7 @@ def run(args):
         pid = int(rows[0])
         assert Path(f'/proc/{pid}/exe').resolve() == release / 'ultratears', 'a different build is running'
         assert os.getpgid(pid) == child.pid, "the game is not in this run's process group"
-        deck.bind_game(pid)
+        deck.bind_game(pid, size)
         deck.capture('00-title.png')
         deck.send(1)
         time.sleep(4)
@@ -539,6 +568,10 @@ def main():
     run_parser.add_argument('--load-seconds', type=int, default=30)
     run_parser.add_argument('--sample-seconds', type=int, default=50)
     run_parser.add_argument('--maximum-seconds', type=int, default=240)
+    run_parser.add_argument('--window-size', default=f'{WINDOW_W}x{WINDOW_H}',
+                            help='presenting window size WxH; TOTK renders its scene at this size, so it is the '
+                                 'knob that separates pixel-bound GPU work from per-draw overhead (default: the Deck '
+                                 'panel size, as the game is played)')
     run_parser.add_argument('--gpu-passprof-at', type=int, default=0,
                             help='present number whose render passes get GPU timestamps (diagnostic run)')
     commands.add_parser('summarize', parents=[both], help='recompute one completed case')
