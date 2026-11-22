@@ -15,4 +15,6 @@
 
 **用户自带**：运行需要用户自行提取 ExeFS，本仓不含游戏代码、密钥或固件。
 
+**生成物**：`docs/deck-grid/*.png` 为 `docs/deck-grid/src/` 源图的派生生成物，随源图许可。
+
 *This project is not affiliated with, endorsed by, or sponsored by Nintendo.*

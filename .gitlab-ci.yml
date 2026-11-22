@@ -171,3 +171,27 @@ secret_detection:
   allow_failure: false
   artifacts:
     expire_in: 7 days
+# ── GitHub 镜像（展示仓单向同步：GitLab 源 → opsbsligm/$CI_PROJECT_NAME）──
+# 只读 deploy key 直推，known_hosts 取 GitHub 官方 /meta 固定指纹。
+# 项目级 CI 变量：GITHUB_DEPLOY_KEY(file)、GITHUB_SSH_KNOWN_HOSTS(env_var)。
+
+mirror-github:
+  stage: test
+  tags: [macos]
+  needs: []
+  timeout: 5m
+  resource_group: github-mirror
+  variables:
+    GIT_CONFIG_GLOBAL: /dev/null
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+  script:
+    - echo "$GITHUB_SSH_KNOWN_HOSTS" > "$CI_PROJECT_DIR/.github_known_hosts"
+    - printf '%s' "$GITHUB_DEPLOY_KEY_B64" | base64 -d > "$CI_PROJECT_DIR/GITHUB_DEPLOY_KEY"
+    - chmod 600 "$CI_PROJECT_DIR/GITHUB_DEPLOY_KEY"
+    - test -s "$CI_PROJECT_DIR/GITHUB_DEPLOY_KEY"
+    - export GIT_SSH_COMMAND="ssh -F /dev/null -i $CI_PROJECT_DIR/GITHUB_DEPLOY_KEY -o UserKnownHostsFile=$CI_PROJECT_DIR/.github_known_hosts -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o AddressFamily=inet -o ConnectTimeout=12"
+    - git push "ssh://git@ssh.github.com:443/opsbsligm/$CI_PROJECT_NAME.git" "$CI_COMMIT_SHA:refs/heads/main"
+    - git push "ssh://git@ssh.github.com:443/opsbsligm/$CI_PROJECT_NAME.git" --tags
+  after_script:
+    - rm -f "$CI_PROJECT_DIR/GITHUB_DEPLOY_KEY" "$CI_PROJECT_DIR/.github_known_hosts"
