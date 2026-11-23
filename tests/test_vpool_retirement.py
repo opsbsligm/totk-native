@@ -57,10 +57,13 @@ typedef int vkb_rw;
 static vkb_rw g_pool_mu;
 static void vkb_rw_write(vkb_rw *p,int k) {(void)p;(void)k;}
 static void vkb_rw_write_end(vkb_rw *p) {(void)p;}
-// The candidate batch holds the table's read lock across a whole command, so the gate it extracts needs the read side
-// too (same shape as tests/test_pool_copies.py): the counters, not the kernel lock, are what that gate is about.
+// The batch's helpers live in the pool-copies block (backend_vk.c), which this harness extracts only as the gate, so
+// a slice that calls them needs the same no-op lock the harness already stubs: this test is about a pool's life and
+// GPU-fence retirement, not about how often the table's lock is taken (tests/test_pool_copies.py compiles that block).
 static void vkb_rw_read(vkb_rw *p,int kind) {(void)p;(void)kind;}
 static void vkb_rw_read_end(vkb_rw *p) {(void)p;}
+static int pool_hold_drop(void) {return 0;}
+static void pool_hold_restore(int d) {(void)d;}
 PRODUCTION_POOL_TYPE
 static pool_ent *g_pools;
 static int g_npools,g_capools,g_ok=1;
