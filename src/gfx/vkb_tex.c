@@ -579,8 +579,11 @@ VkImageLayout vkb_layout(vkb_image *im) {
 // of the frame spent *between* passes rather than in them.
 // Reads belong in the scope as much as writes: a layout change also has to wait for the last sampler of a texture that
 // is about to be written (write-after-read), which a writes-only scope would let through.
-// GENERAL is the one layout with more than one kind of user here -- a storage image, an attachment in the
-// feedback-loop fallback, and a copy destination (vkb_copy.c) -- so its scope is the union of those.
+// The stages are every stage that can reach the image *in that layout*, which is wider than the stage the sampled read
+// is requested with would suggest: a texture is sampled from vertex, tessellation, geometry, fragment and compute
+// shaders alike, so naming only fragment and compute would let a write start over a vertex shader's read. Where this
+// code does not know what a layout means, it waits for everything -- a too-wide scope is a lost microsecond, a too-narrow
+// one is a corrupted frame.
 void vkb_write_scope(VkImageLayout l, VkPipelineStageFlags2 *stage, VkAccessFlags2 *access) {
     switch (l) {
     case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
@@ -607,20 +610,25 @@ void vkb_write_scope(VkImageLayout l, VkPipelineStageFlags2 *stage, VkAccessFlag
         *access = VK_ACCESS_2_TRANSFER_READ_BIT;
         break;
     case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-        *stage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        *stage = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
         *access = VK_ACCESS_2_SHADER_READ_BIT;
         break;
     case VK_IMAGE_LAYOUT_GENERAL:
-        *stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
-                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-                 VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+        // The one layout with more than one kind of user here -- a storage image, an attachment in the feedback-loop
+        // fallback, and a copy destination (vkb_copy.c) -- so its scope is the union of those.
+        *stage = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+                 VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
         *access = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
                   VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
                   VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
                   VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT;
         break;
-    default:   // UNDEFINED: the image is new (create, the BC7 re-make, a feedback twin), so nothing is outstanding
+    case VK_IMAGE_LAYOUT_UNDEFINED:   // the image is new (create, the BC7 re-make, a feedback twin): nothing is outstanding
         *stage = 0; *access = 0;
+        break;
+    default:
+        *stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        *access = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
     }
 }
 
