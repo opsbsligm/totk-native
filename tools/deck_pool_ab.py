@@ -380,6 +380,27 @@ def summarize(case):
             metrics[key] = dict(frames=len(values), mean=statistics.mean(values), p50=percentile(values, .5),
                                 p95=percentile(values, .95), p99=percentile(values, .99), max=values[-1])
     intervals = [row['@frame_ms'] for row in frames.values()]
+    # The write-watch scan is booked per code location (nvn_dirty.h NVN_SCAN_WHO_*), so a frame budget spent in it can
+    # be traced to the logic that asked. The rows are absent in a build without the attribution, so an empty report here
+    # means "not measured", never "nothing to see".
+    scan = {}
+    for key in {k for row in frames.values() for k in row if k.startswith('@scan_')}:
+        values = [row[key] for row in frames.values() if key in row]
+        name = key[len('@scan_'):]
+        counting = key.endswith('_calls')
+        entry = scan.setdefault(name[:-len('_calls')] if counting else name, {})
+        if counting:
+            entry['calls_per_frame'] = round(statistics.mean(values), 2)
+            entry['frames_with_calls'] = sum(1 for value in values if value)
+        else:
+            entry['ms_per_frame'] = round(statistics.mean(values), 3)
+            entry['ms_p99'] = round(percentile(sorted(values), .99), 3)
+            entry['frames_over_1ms'] = sum(1 for value in values if value > 1.0)
+    total_scan_ms = sum(e.get('ms_per_frame', 0.0) for e in scan.values())
+    if scan:
+        scan['total'] = dict(ms_per_frame=round(total_scan_ms, 3),
+                             share_of_frame_ms=round(100 * total_scan_ms
+                                                     / statistics.mean(intervals), 1))
     # The game's own log holds the render-pass breakdown of the profiled frame, if that run asked for one. It is a
     # GPU-side split of one frame, so it is reported apart from the sample-window numbers and never as a frame rate.
     passes = None
@@ -407,6 +428,7 @@ def summarize(case):
                    frame_threshold_counts={str(cutoff): sum(value > cutoff for value in intervals)
                                            for cutoff in (16.7, 25, 33.4, 50, 100)},
                    metrics_ms=metrics,
+                   write_watch_scan=scan or None,
                    present_ticks={key: dict(Counter(row[key] for row in frames.values() if key in row))
                                   for key in ('@present_guest_ticks', '@present_effective_ticks')},
                    gamescope_rate_properties=sampling.get('gamescope_rate_properties', []),

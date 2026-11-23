@@ -44,6 +44,7 @@ static void vkb_rw_read_end(vkb_rw *p) {(void)p;}
 static uint64_t runtime_now_ns(void) {return ++clock_ns;}
 static uint64_t nvn_dirty_now(void) {return ++stamp;}
 static int nvn_dirty_since(const void *p,uint64_t n,uint64_t s) {(void)p;(void)n;(void)s;return 0;}
+{NVN_SCAN_WHO}
 static int nvn_dirty_runs(const void *p,uint64_t n,uint64_t s,size_t gap,void (*fn)(void*,size_t,size_t),void *ctx) {
     (void)p;(void)n;(void)s;(void)gap;
     if(untracked) return -1;
@@ -70,6 +71,13 @@ static int interleaved_memcmp(const void *a,const void *b,size_t n) {
 static void *snapshot_malloc(size_t n) {return allocation_fails?NULL:malloc(n);}
 #define malloc snapshot_malloc
 '''
+        # The slice books its scans to a code location, so it needs those names. They are read out of the production
+        # header rather than repeated here: a rename or a new location fails the test instead of hiding behind a copy.
+        header = (ROOT / 'src/gfx/nvn/nvn_dirty.h').read_text().replace('\r', '')
+        begin = header.index('enum { NVN_SCAN_WHO_TEX_STALE')
+        who = header[begin:header.index('NVN_SCAN_WHO_COUNT };', begin) + len('NVN_SCAN_WHO_COUNT };')]
+        assert 'void nvn_dirty_scan_who(int who);' in header
+        prefix = prefix.replace('{NVN_SCAN_WHO}', who + '\nstatic void nvn_dirty_scan_who(int who) {(void)who;}')
         suffix = r'''
 #undef malloc
 #undef memcmp

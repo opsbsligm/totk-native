@@ -179,6 +179,7 @@ int totk_vpool_dirty_since(uintptr_t va, uint64_t len, uint64_t stamp) {
             const vpage *p = page < t->npages ? &t->pages[page] : NULL;
             if (p && p->phys) {
                 const uint8_t *cpu = (const uint8_t *)p->phys->mem + p->off + in;
+                nvn_dirty_scan_who(NVN_SCAN_WHO_VPOOL);
                 found = (nvn_dirty_tracked(cpu, n) && nvn_dirty_since(cpu, n, stamp)) ||
                         nvn_dirty_marked_since(cpu, n, stamp) > 0;
             }
