@@ -129,12 +129,21 @@ static void VKAPI_CALL memory_free(VkDevice d,VkDeviceMemory m,const VkAllocatio
 static struct {
     PFN_vkDestroyShaderEXT vkDestroyShaderEXT;PFN_vkDestroyImageView vkDestroyImageView;
     PFN_vkDestroyImage vkDestroyImage;PFN_vkDestroyBuffer vkDestroyBuffer;PFN_vkFreeMemory vkFreeMemory;
+    PFN_vkDestroySampler vkDestroySampler;
     PFN_vkGetMemoryHostPointerPropertiesEXT vkGetMemoryHostPointerPropertiesEXT;
     PFN_vkCreateBuffer vkCreateBuffer;PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements;
     PFN_vkAllocateMemory vkAllocateMemory;PFN_vkBindBufferMemory vkBindBufferMemory;
 } vk;
+// A sampler the game's pool re-registered rides the same fence as a deleted pool's import (mtl_reg_samp used to wait
+// for the whole GPU here), so the harness has to see it destroyed too.
+static int samplers_destroyed;
+static void VKAPI_CALL sampler_destroy(VkDevice d,VkSampler s,const VkAllocationCallbacks *a) {
+    (void)d;(void)a;assert((uintptr_t)s==0x77);samplers_destroyed++;
+}
 static void destroy_later(VkImageView,VkImage,VkDeviceMemory,VkBuffer);
 static void destroy_later_release(VkImageView,VkImage,VkDeviceMemory,VkBuffer,void (*)(void *),void *);
+void vkb_destroy_sampler_later(VkSampler);
+uint64_t vkb_samplers_deferred(void);
 void mtl_pool_del(const void *);
 void mtl_pool_del_release(const void *,void (*)(void *),void *);
 '''
@@ -167,6 +176,7 @@ static void setup(pool_t *p,int flags,int imported) {
 }
 int main(void) {
     vk.vkDestroyBuffer=buffer_destroy;vk.vkFreeMemory=memory_free;
+    vk.vkDestroySampler=sampler_destroy;
     vk.vkGetMemoryHostPointerPropertiesEXT=host_properties;vk.vkCreateBuffer=buffer_create;
     vk.vkGetBufferMemoryRequirements=requirements;vk.vkAllocateMemory=memory_allocate;vk.vkBindBufferMemory=memory_bind;
     vkc.host_pointer_alignment=4096;
@@ -233,6 +243,11 @@ int main(void) {
     for(unsigned i=0;i<16;i++)assert(!(residency[i]&1));
     for(unsigned i=0;i<0x10000;i++)assert(!((unsigned char *)guest)[i]);
     assert(!munmap(guest,0x10000));
+    // A sampler the game re-registered is given up without waiting for the GPU, and its destruction waits for the
+    // submission that may still sample with it — the same fence a deleted pool's import waits for.
+    vkb_destroy_sampler_later((VkSampler)(uintptr_t)0x77);
+    dead_tag(20);dead_reap(19);assert(!samplers_destroyed);
+    dead_reap(20);assert(samplers_destroyed==1);
     // Every import failure releases its host reference after any Vulkan cleanup.
     g_ok=1;guest=mmap(NULL,0x10000,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);assert(guest!=MAP_FAILED);
     for(import_failure=PROPERTY_FAIL;import_failure<=BIND_FAIL;import_failure++) {
@@ -266,6 +281,7 @@ int main(void) {
     int status=0;assert(waitpid(kid,&status,0)==kid);
     assert(WIFSIGNALED(status) && WTERMSIG(status)==SIGABRT);
     assert(!munmap(guest,0x10000));free(g_pools);
+    assert(vkb_samplers_deferred()==1 && samplers_destroyed==1);
     totk_vpool_host_stats(&bytes,&pools);assert(!bytes && !pools && !g_dead && !g_dead_new && !g_linux_memory_refs);
     puts("Owned pool VM: actual imports/failures, GPU-fence retirement, guest discard after retirement, object reuse, CPU/null paths and the candidate environment gate PASS");
     return 0;

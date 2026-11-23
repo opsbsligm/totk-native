@@ -336,7 +336,9 @@ void mtl_reg_samp(int id, const samp_par *p) {
     r->valid = p != NULL;
     if (p) r->p = *p;
     vkb_rw_write_end(&g_reg_mu);
-    if (old) { mtl_finish(); vk.vkDestroySampler(vkc.device, old, NULL); }   // [temporary] waits for the GPU
+    // The sampler the game gave up may still be used by commands of the submission being recorded, so it waits for that
+    // submission's fence (dead_reap). Waiting for the whole GPU here stalled the game thread on every re-registration.
+    if (old) vkb_destroy_sampler_later(old);
 }
 void mtl_set_tex_pool_n(int n) { (void)n; }
 // Anisotropic filtering, set by the host (control bar video page): the factor to apply to

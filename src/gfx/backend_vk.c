@@ -1519,7 +1519,9 @@ static void checkpoint_report(void) {
 // the device was lost (TOTK's item-get screen, 2026-10-24). Now each waits for the first submission after it was given up.
 // Deleted memory pools' imports too (mtl_pool_del): another game thread's submission, recorded while the pool was being
 // deleted, brought the copies of recently used pools up to date from it (2026-10-27, L16).
-typedef struct dead { uint64_t fence; VkImageView view; VkImage img; VkDeviceMemory mem; VkBuffer buf; VkShaderEXT sh; void (*release)(void *); void *arg; struct dead *next; } dead;
+// Samplers the game re-registered (vkb_draw.c): their own wait used to stop the game thread for the whole GPU.
+typedef struct dead { uint64_t fence; VkImageView view; VkImage img; VkDeviceMemory mem; VkBuffer buf; VkShaderEXT sh;
+                      VkSampler samp; void (*release)(void *); void *arg; struct dead *next; } dead;
 static dead *g_dead_new, *g_dead;   // given up since the last submission (no fence yet) / waiting for their fence
 static pthread_mutex_t g_dead_mu = PTHREAD_MUTEX_INITIALIZER;
 static void destroy_later_release(VkImageView view, VkImage img, VkDeviceMemory mem, VkBuffer buf,
@@ -1549,6 +1551,21 @@ static void dead_tag(uint64_t fence) {   // a submission: what was given up so f
     while (g_dead_new) { dead *d = g_dead_new; g_dead_new = d->next; d->fence = fence; d->next = g_dead; g_dead = d; }
     pthread_mutex_unlock(&g_dead_mu);
 }
+// A sampler the game's pool gave up while this submission is being recorded (mtl_reg_samp): an earlier command of it may
+// still sample with it, so it waits for its submission's fence like the rest. Before this, re-registering a sampler
+// stopped the game thread for every submission in flight (mtl_finish, marked [temporary] since 2026-10-24).
+static _Atomic uint64_t g_samp_deferred;
+void vkb_destroy_sampler_later(VkSampler s) {
+    if (!s) return;
+    dead *d = malloc(sizeof *d);
+    if (!d) die("deferred destruction");
+    *d = (dead){.samp = s};
+    atomic_fetch_add_explicit(&g_samp_deferred, 1, memory_order_relaxed);
+    pthread_mutex_lock(&g_dead_mu);
+    d->next = g_dead_new; g_dead_new = d;
+    pthread_mutex_unlock(&g_dead_mu);
+}
+uint64_t vkb_samplers_deferred(void) { return atomic_load_explicit(&g_samp_deferred, memory_order_relaxed); }
 static void dead_reap(uint64_t done) {   // the GPU finished up to `done`
     dead *free_list = NULL;
     pthread_mutex_lock(&g_dead_mu);
@@ -1559,6 +1576,7 @@ static void dead_reap(uint64_t done) {   // the GPU finished up to `done`
     while (free_list) {
         dead *d = free_list; free_list = d->next;
         if (d->sh) vk.vkDestroyShaderEXT(vkc.device, d->sh, NULL);
+        if (d->samp) vk.vkDestroySampler(vkc.device, d->samp, NULL);
         if (d->view) vk.vkDestroyImageView(vkc.device, d->view, NULL);
         if (d->img) vk.vkDestroyImage(vkc.device, d->img, NULL);
         if (d->buf) vk.vkDestroyBuffer(vkc.device, d->buf, NULL);
@@ -2491,9 +2509,14 @@ uint64_t mtl_present(const tex_t *t, double period_s, const int crop[4]) {
                 pin = g_sh_in; pib = g_sh_in_bytes; pob = g_sh_out_bytes; pdf = g_sh_deferred; psc = g_sh_scan_ns;
             }
             memory_log();
-            VLOG("per frame: GPU %.1f ms (whole submissions), recording waited %.1f ms for a free command slot",
-                 (double)(g_gpu_ns - pgpu) / 1e6 / f, (double)(g_slot_wait_ns - pwait) / 1e6 / f);
+            static uint64_t psamp;
+            uint64_t nsamp = vkb_samplers_deferred();
+            VLOG("per frame: GPU %.1f ms (whole submissions), recording waited %.1f ms for a free command slot, "
+                 "samplers given up %.1f",
+                 (double)(g_gpu_ns - pgpu) / 1e6 / f, (double)(g_slot_wait_ns - pwait) / 1e6 / f,
+                 (double)(nsamp - psamp) / f);
             pgpu = g_gpu_ns; pwait = g_slot_wait_ns;
+            psamp = nsamp;
             static uint64_t pl[LK_COUNT], pn[LK_COUNT];
             uint64_t l0 = atomic_load(&vkb_lock_wait_ns[0]), l1 = atomic_load(&vkb_lock_wait_ns[1]), l2 = atomic_load(&vkb_lock_wait_ns[2]);
             static uint64_t plk;

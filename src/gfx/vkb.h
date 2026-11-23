@@ -33,6 +33,10 @@ uint64_t vkb_draw_count(void);   // draws and dispatches recorded so far   // vk
 // Destroys a view / an image and its memory once the GPU has finished every submission that may use them: the one being
 // recorded now included (its earlier commands may already refer to them).
 void vkb_destroy_later(VkImageView view, VkImage img, VkDeviceMemory mem);
+// A sampler the game's sampler pool re-registered (vkb_draw.c): the same deferral, so that re-registering one does not
+// stop the game thread for the whole GPU. Samplers given up so far, for the per-frame log line.
+void vkb_destroy_sampler_later(VkSampler s);
+uint64_t vkb_samplers_deferred(void);
 void vkb_passprof_note(const char *key);   // TOTK_GPU_PASSPROF: names the open pass by its first shader
 void vkb_checkpoint(const char *what, const char *k1, const char *k2);   // TOTK_VK_CHECKPOINTS: names the next GPU command
 int vkb_in_pass(void);
