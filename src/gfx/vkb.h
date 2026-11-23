@@ -116,6 +116,11 @@ int vkb_pool_copies(void);
 uint32_t vkb_poolmem_alloc(VkBuffer buf, uint8_t **map);
 void vkb_poolmem_free(uint32_t h);
 uint64_t vkb_poolmem_bytes(void);
+// One read lock of the pool table for a whole command (backend_vk.c): vkb_draw.c holds it across a draw's 15 to 20
+// lookups. 1: the caller must release it with vkb_pool_unhold(); 0: batching is off, lookups lock on their own.
+int vkb_pool_hold(void);
+void vkb_pool_unhold(void);
+uint64_t vkb_pool_lock_count(void);   // the per-frame log line: lookups that really took the lock
 
 // ---- vkb_ucap.c: uniform contents as of the submit call
 int vkb_ucap_on(void);
