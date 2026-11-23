@@ -33,6 +33,10 @@ uint64_t vkb_draw_count(void);   // draws and dispatches recorded so far   // vk
 // Destroys a view / an image and its memory once the GPU has finished every submission that may use them: the one being
 // recorded now included (its earlier commands may already refer to them).
 void vkb_destroy_later(VkImageView view, VkImage img, VkDeviceMemory mem);
+// A sampler the game's sampler pool re-registered (vkb_draw.c): the same deferral, so that re-registering one does not
+// stop the game thread for the whole GPU. Samplers given up so far, for the per-frame log line.
+void vkb_destroy_sampler_later(VkSampler s);
+uint64_t vkb_samplers_deferred(void);
 void vkb_passprof_note(const char *key);   // TOTK_GPU_PASSPROF: names the open pass by its first shader
 void vkb_checkpoint(const char *what, const char *k1, const char *k2);   // TOTK_VK_CHECKPOINTS: names the next GPU command
 int vkb_in_pass(void);
@@ -116,6 +120,11 @@ int vkb_pool_copies(void);
 uint32_t vkb_poolmem_alloc(VkBuffer buf, uint8_t **map);
 void vkb_poolmem_free(uint32_t h);
 uint64_t vkb_poolmem_bytes(void);
+// One read lock of the pool table for a whole command (backend_vk.c): vkb_draw.c holds it across a draw's 15 to 20
+// lookups. 1: the caller must release it with vkb_pool_unhold(); 0: batching is off, lookups lock on their own.
+int vkb_pool_hold(void);
+void vkb_pool_unhold(void);
+uint64_t vkb_pool_lock_count(void);   // the per-frame log line: lookups that really took the lock
 
 // ---- vkb_ucap.c: uniform contents as of the submit call
 int vkb_ucap_on(void);

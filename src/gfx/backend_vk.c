@@ -383,6 +383,55 @@ static void pool_copies_off(const char *why) {
 }
 
 static const pool_ent *pool_find(uintptr_t addr, uint64_t len);
+// ---- the pool table's read lock, held across one command's lookups ----
+// A draw looks the table up 15 to 20 times (every vertex stream, index range, uniform and storage buffer of both
+// stages, L13). Four recording threads take and drop that one read lock ~148 000 times a frame on the Deck, which
+// showed up as 7.5 % of the process's CPU in the copy arm (pthread_rwlock_tryrdlock / _unlock, perf on case-perf3)
+// while the lock itself never waited (pools 0.00 ms / 0 in the per-frame line): the cost is the shared cache line
+// moving between cores, not contention. One command now takes it once, at its start, and every lookup in it nests.
+// A thread holding it only ever holds the READ lock, and a writer of the table drops this thread's hold first
+// (pool_hold_drop / pool_hold_restore), so a batch can never wait for a writer that waits for it.
+static __thread int g_pool_held;                      // lookups this thread holds the read lock for
+static _Atomic uint64_t g_pool_locks;                 // times the read lock was really taken (the per-frame log line)
+static int g_pool_batch = -1;                         // TOTK_VK_NO_POOL_BATCH=1 (development A/B): lock per lookup
+static int pool_batch_on(void) {
+    if (g_pool_batch < 0) {
+        const char *e = getenv("TOTK_VK_NO_POOL_BATCH");
+        g_pool_batch = vkb_pool_copies() && !(e && *e && *e != '0');
+    }
+    return g_pool_batch;
+}
+static void pool_lock(void) {
+    if (g_pool_held++) return;   // already ours further up this command
+    atomic_fetch_add_explicit(&g_pool_locks, 1, memory_order_relaxed);
+    vkb_rw_read(&g_pool_mu, LK_POOLS);
+}
+static void pool_unlock(void) {
+    if (--g_pool_held) return;
+    vkb_rw_read_end(&g_pool_mu);
+}
+// A writer of the table cannot take the write lock while this thread holds the read one — a draw's batched hold spans
+// the very call that wants to update a copy — so its hold goes down first and comes back after. The depth is the
+// writer's own nesting (at most one below a batched draw), never more than one lock here.
+static int pool_hold_drop(void) {
+    int d = g_pool_held;
+    if (d) { g_pool_held = 0; vkb_rw_read_end(&g_pool_mu); }
+    return d;
+}
+static void pool_hold_restore(int d) {
+    if (!d) return;
+    g_pool_held = 0;
+    pool_lock();
+    g_pool_held = d;
+}
+int vkb_pool_hold(void) {   // vkb_draw.c: one read lock for a whole command (0: the caller locks per lookup)
+    if (!pool_batch_on()) return 0;
+    pool_lock();
+    return 1;
+}
+void vkb_pool_unhold(void) { pool_unlock(); }
+uint64_t vkb_pool_lock_count(void) { return atomic_load_explicit(&g_pool_locks, memory_order_relaxed); }
+
 // A GPU write into the copy of the pool whose buffer is buf (a pool made again at the same address is another one);
 // fence 0: in the submission being recorded. was: game memory's bytes [lo, hi) at its submission's sync (NULL: none
 // taken until sync; an unsafe snapshot budget fails explicitly).
@@ -460,7 +509,7 @@ static void pc_sync_pool(pool_ent *p) {
 static void pc_sync(uint64_t fence) {
     if (!vkb_pool_copies()) return;
     uint64_t t0 = runtime_now_ns();
-    vkb_rw_read(&g_pool_mu, LK_POOLS);
+    pool_lock();
     pthread_mutex_lock(&g_pc_mu);
     // once a submission: with partial submission (vkb_mt_submit) at the first part that uses the pool, as the GPU may be
     // reading the copy for the parts already submitted
@@ -485,7 +534,7 @@ static void pc_sync(uint64_t fence) {
     g_pc_copy_ns += runtime_now_ns() - ts;
     g_pc_ns += runtime_now_ns() - t0;
     pthread_mutex_unlock(&g_pc_mu);
-    vkb_rw_read_end(&g_pool_mu);
+    pool_unlock();
 }
 // g_pc_mu held: write r of a completed submission, from p's copy into game memory. With a snapshot, a byte the CPU
 // changed since it stays. Compare/exchange closes the race between comparing and writing. After the GPU watch
@@ -539,7 +588,7 @@ static void pc_back(const pool_ent *p, const pc_range *r, int k) {
 // Retire thread, submission `fence` complete: its GPU writes from the copies into game memory (pc_back).
 static void pc_writeback(uint64_t fence) {
     if (!vkb_pool_copies()) return;
-    vkb_rw_read(&g_pool_mu, LK_POOLS);
+    pool_lock();
     pthread_mutex_lock(&g_pc_mu);
     for (int k = 0; k < g_npc_pend;) {
         pc_range r = g_pc_pend[k];
@@ -551,7 +600,7 @@ static void pc_writeback(uint64_t fence) {
         free(r.was);
     }
     pthread_mutex_unlock(&g_pc_mu);
-    vkb_rw_read_end(&g_pool_mu);
+    pool_unlock();
 }
 // A pool as a host-visible copy of [a, b) (pc_sync fills it at its first use). 0: no memory.
 static int pc_alloc(uintptr_t a, uintptr_t b, VkBuffer *out_buf, uint8_t **map, uint32_t *h) {
@@ -625,6 +674,7 @@ void mtl_pool_add(const void *mem, uint64_t size) {
         if (copy) die("pool copy allocation failed");
         return;
     }
+    int hold = pool_hold_drop();   // a batched draw on this thread holds the read lock (pool_hold_drop)
     vkb_rw_write(&g_pool_mu, LK_POOLS);
     if (g_npools == g_capools) {
         g_capools = g_capools ? g_capools * 2 : 64;
@@ -656,6 +706,7 @@ void mtl_pool_add(const void *mem, uint64_t size) {
         VLOG("memory pool %p %#llx..%#llx imported as %#llx..%#llx (present %llu)", mem, (unsigned long long)lo, (unsigned long long)hi,
              (unsigned long long)a, (unsigned long long)b, (unsigned long long)vkb_frame());
     vkb_rw_write_end(&g_pool_mu);
+    pool_hold_restore(hold);
 }
 
 static void destroy_later(VkImageView view, VkImage img, VkDeviceMemory mem, VkBuffer buf);
@@ -676,6 +727,7 @@ void mtl_pool_del(const void *mem) {
 void mtl_pool_del_release(const void *mem, void (*release)(void *), void *arg) {
     if (g_ok != 1) { if (release) release(arg); return; }
     pool_ent e = {0};
+    int hold = pool_hold_drop();
     vkb_rw_write(&g_pool_mu, LK_POOLS);
     for (int i = 0; i < g_npools; i++)
         if (g_pools[i].key == mem) {
@@ -689,6 +741,7 @@ void mtl_pool_del_release(const void *mem, void (*release)(void *), void *arg) {
     if (e.ch) vkb_poolmem_free(e.ch);
     if (e.buf) wb_forget(e.buf);
     vkb_rw_write_end(&g_pool_mu);
+    pool_hold_restore(hold);
     if (!e.buf) { if (release) release(arg); return; }
 #ifdef __linux__
     if (e.host_ref) {
@@ -1053,6 +1106,7 @@ static void wb_merge(const uint64_t *r, int n, const uint8_t *src, const wb_snap
     }
 }
 static void shadow_writeback(VkCommandBuffer cb) {   // end of a submission: GPU writes to the slot's host memory
+    int hold = pool_hold_drop();
     vkb_rw_write(&g_pool_mu, LK_POOLS);
     g_wb_ranges = NULL; g_wb_nranges = 0;
     g_wb_snaps = g_snaps; g_wb_nsnaps = g_nsnaps;   // taken by the job (also with no range: then only freed)
@@ -1099,19 +1153,22 @@ static void shadow_writeback(VkCommandBuffer cb) {   // end of a submission: GPU
         g_nwb = 0;
     }
     vkb_rw_write_end(&g_pool_mu);
+    pool_hold_restore(hold);
 }
 // The first pass of a submission: the pools used in the two before are brought up to date together (one pair of
 // barriers), so that draws in passes find them current.
 static void shadow_presync(void) {
     uint64_t sub = g_fence + 1;
     if (!vkb_shadow_on() || __atomic_load_n(&g_presync_sub, __ATOMIC_ACQUIRE) == sub) return;
+    int hold = pool_hold_drop();
     vkb_rw_write(&g_pool_mu, LK_POOLS);
-    if (g_presync_sub == sub) { vkb_rw_write_end(&g_pool_mu); return; }   // another thread did it meanwhile
+    if (g_presync_sub == sub) { vkb_rw_write_end(&g_pool_mu); pool_hold_restore(hold); return; }   // another thread did it meanwhile
     __atomic_store_n(&g_presync_sub, sub, __ATOMIC_RELEASE);
     for (int i = 0; i < g_npools; i++)
         if (g_pools[i].sh && g_pools[i].sync_sub != sub && g_pools[i].used_sub + 2 >= sub) sync_gather(&g_pools[i], sub, 1);
     sync_flush();
     vkb_rw_write_end(&g_pool_mu);
+    pool_hold_restore(hold);
 }
 static pool_ent *pool_find_mut(uintptr_t addr, uint64_t len);
 // The GPU writes of this submission (g_wb, g_snaps and the slot's "before" buffer) when the pool table is only read:
@@ -1124,15 +1181,15 @@ void vkb_pool_use(uint64_t addr, uint64_t len, int write) {
     if (len > UINT64_MAX - addr) die("invalid GPU pool range");
     uint64_t sub = g_fence + 1;
     if (vkb_pool_copies()) {
-        vkb_rw_read(&g_pool_mu, LK_POOLS);
+        pool_lock();
         pool_ent *p = pool_find_mut((uintptr_t)addr, 1);
         uint64_t bytes = p && len > p->hi - addr ? p->hi - addr : len;
         if (p) __atomic_store_n(&p->used_sub, sub, __ATOMIC_RELAXED);
         if (p && write) pc_pend_add(p->buf, addr, bytes);
-        vkb_rw_read_end(&g_pool_mu);
+        pool_unlock();
     }
     if (!vkb_shadow_on()) return;
-    vkb_rw_read(&g_pool_mu, LK_POOLS);   // the common cases: a pool already current in this submission, or not copied
+    pool_lock();   // the common cases: a pool already current in this submission, or not copied
     pool_ent *p = pool_find_mut((uintptr_t)addr, len);
     int done = !p || p->no_shadow || (p->sync_sub == sub && !write);
     if (p) __atomic_store_n(&p->used_sub, sub, __ATOMIC_RELAXED);
@@ -1143,9 +1200,10 @@ void vkb_pool_use(uint64_t addr, uint64_t len, int write) {
         atomic_fetch_add_explicit(&g_pool_use_n[2], 1, memory_order_relaxed);
         done = 1;
     }
-    vkb_rw_read_end(&g_pool_mu);
+    pool_unlock();
     if (done) return;
     atomic_fetch_add_explicit(&g_pool_use_n[write ? 1 : 0], 1, memory_order_relaxed);
+    int hold = pool_hold_drop();   // this thread's own read hold would wait for the write lock it now wants
     vkb_rw_write(&g_pool_mu, LK_POOLS);
     p = pool_find_mut((uintptr_t)addr, len);   // the table may have changed between the locks
     if (p) {
@@ -1156,10 +1214,11 @@ void vkb_pool_use(uint64_t addr, uint64_t len, int write) {
         if (ok && write) wb_add(p, addr, len);
     }
     vkb_rw_write_end(&g_pool_mu);
+    pool_hold_restore(hold);
 }
 int vkb_pool_addr(uint64_t addr, uint64_t len, VkBuffer *buf, VkDeviceSize *off) {
     if (g_ok != 1) return 0;
-    vkb_rw_read(&g_pool_mu, LK_POOLS);
+    pool_lock();
     pool_ent *p = pool_find_mut((uintptr_t)addr, len);
     if (p) {
         uint64_t sub = g_fence + 1;
@@ -1167,17 +1226,17 @@ int vkb_pool_addr(uint64_t addr, uint64_t len, VkBuffer *buf, VkDeviceSize *off)
         if (p->sh && p->sync_sub == sub) { *buf = p->sbuf; *off = p->soff + (addr - p->base); }
         else { *buf = p->buf; *off = addr - p->base; }
     }
-    vkb_rw_read_end(&g_pool_mu);
+    pool_unlock();
     return p != NULL;
 }
 static pool_ent *pool_find_mut(uintptr_t addr, uint64_t len) { return (pool_ent *)pool_find(addr, len); }
 
 uint64_t vkb_pool_room(uint64_t addr) {   // bytes from addr to the end of the imported pool holding it (0: none)
     if (g_ok != 1) return 0;
-    vkb_rw_read(&g_pool_mu, LK_POOLS);
+    pool_lock();
     const pool_ent *p = pool_find((uintptr_t)addr, 1);
     uint64_t n = p ? p->hi - addr : 0;
-    vkb_rw_read_end(&g_pool_mu);
+    pool_unlock();
     return n;
 }
 
@@ -1202,10 +1261,10 @@ int vkb_span_addr(uint64_t addr, uint64_t len, VkBuffer *buf, VkDeviceSize *off)
     if (!va || va == addr) return 0;   // GPU addresses off, or not in a pool
     uint64_t lo = va;
     {   // from the start of the pool the range starts in: draws starting at other places in it share the span
-        vkb_rw_read(&g_pool_mu, LK_POOLS);
+        pool_lock();
         const pool_ent *p = pool_find((uintptr_t)addr, 1);
         if (p) lo = va - (addr - p->lo);
-        vkb_rw_read_end(&g_pool_mu);
+        pool_unlock();
     }
     uint64_t hi = (va + len + 0xfff) & ~0xfffull;
     pthread_mutex_lock(&g_span_mu);
@@ -1274,9 +1333,10 @@ static void span_presync(void) {
     static _Atomic uint64_t done_sub;
     uint64_t sub = g_fence + 1;
     if (!g_nspans || atomic_load(&done_sub) == sub) return;
+    pool_lock();   // the pool table before g_span_mu, the order vkb_span_addr takes them in
     pthread_mutex_lock(&g_span_mu);
-    if (atomic_exchange(&done_sub, sub) == sub) { pthread_mutex_unlock(&g_span_mu); return; }
-    vkb_rw_read(&g_pool_mu, LK_POOLS);   // the pool table, then the prologue: the order sync_flush takes them in
+    if (atomic_exchange(&done_sub, sub) == sub) { pthread_mutex_unlock(&g_span_mu); pool_unlock(); return; }
+    // then the prologue: the order sync_flush takes the pool table and it in
     int mt = t_recording, any = 0;
     VkCommandBuffer cb = VK_NULL_HANDLE;
     for (int i = 0; i < g_nspans; i++) {
@@ -1301,18 +1361,18 @@ static void span_presync(void) {
                                 VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_MEMORY_READ_BIT);
         if (mt) vkb_pro_end();
     }
-    vkb_rw_read_end(&g_pool_mu);
+    pool_unlock();
     pthread_mutex_unlock(&g_span_mu);
 }
 int mtl_addr(uint64_t addr, uint64_t len, void **buf, uint64_t *off) {
     if (g_ok != 1) { *buf = NULL; *off = 0; return 0; }
-    vkb_rw_read(&g_pool_mu, LK_POOLS);
+    pool_lock();
     const pool_ent *p = pool_find((uintptr_t)addr, len);
     if (p) {
         *buf = (void *)p->buf; *off = addr - p->base;
         if (vkb_pool_copies()) __atomic_store_n(&((pool_ent *)p)->used_sub, g_fence + 1, __ATOMIC_RELAXED);
     }
-    vkb_rw_read_end(&g_pool_mu);
+    pool_unlock();
     return p != NULL;
 }
 
@@ -1406,18 +1466,18 @@ static void checkpoint_addr(const char *k1) {   // an address: what the memory a
     unsigned long long a = strtoull(k1, NULL, 16);
     if (!a) return;
 #ifdef __linux__
-    vkb_rw_read(&g_pool_mu, LK_POOLS);
+    pool_lock();
     const pool_ent *p = pool_find((uintptr_t)a, 1);
     VLOG("    memory %#llx readable %d; pool %s", a, linux_host_readable((uintptr_t)a, 1), p ? "registered" : "none");
 #else
     MEMORY_BASIC_INFORMATION mi = {0};
     VirtualQuery((void *)(uintptr_t)a, &mi, sizeof mi);
-    vkb_rw_read(&g_pool_mu, LK_POOLS);
+    pool_lock();
     const pool_ent *p = pool_find((uintptr_t)a, 1);
     VLOG("    memory %#llx: state %#lx protect %#lx region %p+%#llx; pool %s %#llx..%#llx", a, mi.State, mi.Protect, mi.BaseAddress,
          (unsigned long long)mi.RegionSize, p ? "registered" : "none", p ? (unsigned long long)p->lo : 0ull, p ? (unsigned long long)p->hi : 0ull);
 #endif
-    vkb_rw_read_end(&g_pool_mu);
+    pool_unlock();
 }
 static void checkpoint_line(const char *how, uint32_t n) {
     const ckpt_t *c = &g_ckpt[n % CKPT_RING];
@@ -1459,7 +1519,9 @@ static void checkpoint_report(void) {
 // the device was lost (TOTK's item-get screen, 2026-10-24). Now each waits for the first submission after it was given up.
 // Deleted memory pools' imports too (mtl_pool_del): another game thread's submission, recorded while the pool was being
 // deleted, brought the copies of recently used pools up to date from it (2026-10-27, L16).
-typedef struct dead { uint64_t fence; VkImageView view; VkImage img; VkDeviceMemory mem; VkBuffer buf; VkShaderEXT sh; void (*release)(void *); void *arg; struct dead *next; } dead;
+// Samplers the game re-registered (vkb_draw.c): their own wait used to stop the game thread for the whole GPU.
+typedef struct dead { uint64_t fence; VkImageView view; VkImage img; VkDeviceMemory mem; VkBuffer buf; VkShaderEXT sh;
+                      VkSampler samp; void (*release)(void *); void *arg; struct dead *next; } dead;
 static dead *g_dead_new, *g_dead;   // given up since the last submission (no fence yet) / waiting for their fence
 static pthread_mutex_t g_dead_mu = PTHREAD_MUTEX_INITIALIZER;
 static void destroy_later_release(VkImageView view, VkImage img, VkDeviceMemory mem, VkBuffer buf,
@@ -1489,6 +1551,21 @@ static void dead_tag(uint64_t fence) {   // a submission: what was given up so f
     while (g_dead_new) { dead *d = g_dead_new; g_dead_new = d->next; d->fence = fence; d->next = g_dead; g_dead = d; }
     pthread_mutex_unlock(&g_dead_mu);
 }
+// A sampler the game's pool gave up while this submission is being recorded (mtl_reg_samp): an earlier command of it may
+// still sample with it, so it waits for its submission's fence like the rest. Before this, re-registering a sampler
+// stopped the game thread for every submission in flight (mtl_finish, marked [temporary] since 2026-10-24).
+static _Atomic uint64_t g_samp_deferred;
+void vkb_destroy_sampler_later(VkSampler s) {
+    if (!s) return;
+    dead *d = malloc(sizeof *d);
+    if (!d) die("deferred destruction");
+    *d = (dead){.samp = s};
+    atomic_fetch_add_explicit(&g_samp_deferred, 1, memory_order_relaxed);
+    pthread_mutex_lock(&g_dead_mu);
+    d->next = g_dead_new; g_dead_new = d;
+    pthread_mutex_unlock(&g_dead_mu);
+}
+uint64_t vkb_samplers_deferred(void) { return atomic_load_explicit(&g_samp_deferred, memory_order_relaxed); }
 static void dead_reap(uint64_t done) {   // the GPU finished up to `done`
     dead *free_list = NULL;
     pthread_mutex_lock(&g_dead_mu);
@@ -1499,6 +1576,7 @@ static void dead_reap(uint64_t done) {   // the GPU finished up to `done`
     while (free_list) {
         dead *d = free_list; free_list = d->next;
         if (d->sh) vk.vkDestroyShaderEXT(vkc.device, d->sh, NULL);
+        if (d->samp) vk.vkDestroySampler(vkc.device, d->samp, NULL);
         if (d->view) vk.vkDestroyImageView(vkc.device, d->view, NULL);
         if (d->img) vk.vkDestroyImage(vkc.device, d->img, NULL);
         if (d->buf) vk.vkDestroyBuffer(vkc.device, d->buf, NULL);
@@ -2312,7 +2390,7 @@ static void vcheck_run(void) {
         VkDeviceSize used = 0;
         mtl_sub_begin();
         VkCommandBuffer cb = vkb_cmd();
-        vkb_rw_read(&g_pool_mu, LK_POOLS);
+        pool_lock();
         for (; k < g_nvr && n < 4096; k++) {
             const vrange_t *r = &g_vr[k];
             if (used + r->len > CAP) { if (!n) { k++; continue; } break; }   // larger than the buffer: not checked
@@ -2323,7 +2401,7 @@ static void vcheck_run(void) {
             it[n++] = (item){*r, used, p->stamp};
             used += (r->len + 15) & ~15ull;
         }
-        vkb_rw_read_end(&g_pool_mu);
+        pool_unlock();
         mtl_wait(mtl_sub_commit(), UINT64_MAX);
         for (int i = 0; i < n; i++) {
             const uint8_t *g = (const uint8_t *)(uintptr_t)it[i].r.addr, *c = map + it[i].at;
@@ -2431,15 +2509,25 @@ uint64_t mtl_present(const tex_t *t, double period_s, const int crop[4]) {
                 pin = g_sh_in; pib = g_sh_in_bytes; pob = g_sh_out_bytes; pdf = g_sh_deferred; psc = g_sh_scan_ns;
             }
             memory_log();
-            VLOG("per frame: GPU %.1f ms (whole submissions), recording waited %.1f ms for a free command slot",
-                 (double)(g_gpu_ns - pgpu) / 1e6 / f, (double)(g_slot_wait_ns - pwait) / 1e6 / f);
+            static uint64_t psamp;
+            uint64_t nsamp = vkb_samplers_deferred();
+            VLOG("per frame: GPU %.1f ms (whole submissions), recording waited %.1f ms for a free command slot, "
+                 "samplers given up %.1f",
+                 (double)(g_gpu_ns - pgpu) / 1e6 / f, (double)(g_slot_wait_ns - pwait) / 1e6 / f,
+                 (double)(nsamp - psamp) / f);
             pgpu = g_gpu_ns; pwait = g_slot_wait_ns;
+            psamp = nsamp;
             static uint64_t pl[LK_COUNT], pn[LK_COUNT];
             uint64_t l0 = atomic_load(&vkb_lock_wait_ns[0]), l1 = atomic_load(&vkb_lock_wait_ns[1]), l2 = atomic_load(&vkb_lock_wait_ns[2]);
-            VLOG("per frame: lock waits (all threads) texture registry %.2f ms / %.0f, images %.2f ms / %.0f, pools %.2f ms / %.0f",
+            static uint64_t plk;
+            uint64_t plk_now = vkb_pool_lock_count();
+            VLOG("per frame: lock waits (all threads) texture registry %.2f ms / %.0f, images %.2f ms / %.0f, pools %.2f ms / %.0f "
+                 "(pool table lookups that really locked: %.0f)",
                  (double)(l0 - pl[0]) / 1e6 / f, (double)(atomic_load(&vkb_lock_waits[0]) - pn[0]) / f,
                  (double)(l1 - pl[1]) / 1e6 / f, (double)(atomic_load(&vkb_lock_waits[1]) - pn[1]) / f,
-                 (double)(l2 - pl[2]) / 1e6 / f, (double)(atomic_load(&vkb_lock_waits[2]) - pn[2]) / f);
+                 (double)(l2 - pl[2]) / 1e6 / f, (double)(atomic_load(&vkb_lock_waits[2]) - pn[2]) / f,
+                 (double)(plk_now - plk) / f);
+            plk = plk_now;
             for (int k = 0; k < LK_COUNT; k++) { pl[k] = atomic_load(&vkb_lock_wait_ns[k]); pn[k] = atomic_load(&vkb_lock_waits[k]); }
             static uint64_t ps[PK_COUNT], psn[PK_COUNT];
             VLOG("per frame: new images %.2f ms / %.1f, uploads %.2f ms / %.1f, queue submits %.2f ms / %.1f",

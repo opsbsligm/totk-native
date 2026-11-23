@@ -336,7 +336,9 @@ void mtl_reg_samp(int id, const samp_par *p) {
     r->valid = p != NULL;
     if (p) r->p = *p;
     vkb_rw_write_end(&g_reg_mu);
-    if (old) { mtl_finish(); vk.vkDestroySampler(vkc.device, old, NULL); }   // [temporary] waits for the GPU
+    // The sampler the game gave up may still be used by commands of the submission being recorded, so it waits for that
+    // submission's fence (dead_reap). Waiting for the whole GPU here stalled the game thread on every re-registration.
+    if (old) vkb_destroy_sampler_later(old);
 }
 void mtl_set_tex_pool_n(int n) { (void)n; }
 // Anisotropic filtering, set by the host (control bar video page): the factor to apply to
@@ -1725,7 +1727,17 @@ void vkb_draw_mt_init(void) {
     sampler(-1);
 }
 
+// One read lock of the pool table per command (backend_vk.c): a draw looks it up 15 to 20 times, and the Deck's four
+// recording threads took and dropped that lock ~148 000 times a frame — 7.5 % of the process's CPU in perf, while the
+// lock itself never waited. Around the whole call rather than inside it: the body has early returns, and a hold left
+// behind would have the thread read the table with no lock at all.
+static void vkb_draw_impl(const uint8_t *a, int indexed);
 void vkb_draw(const uint8_t *a, int indexed) {
+    int hold = vkb_pool_hold();
+    vkb_draw_impl(a, indexed);
+    if (hold) vkb_pool_unhold();
+}
+static void vkb_draw_impl(const uint8_t *a, int indexed) {
     big_init();
     fixed_buffers();
     vkb_audit_draw_begin();
@@ -1997,7 +2009,17 @@ void vkb_draw(const uint8_t *a, int indexed) {
     }
 }
 
+// One read lock of the pool table per command (backend_vk.c): a draw looks it up 15 to 20 times, and the Deck's four
+// recording threads took and dropped that lock ~148 000 times a frame — 7.5 % of the process's CPU in perf, while the
+// lock itself never waited. Around the whole call rather than inside it: the body has early returns, and a hold left
+// behind would have the thread read the table with no lock at all.
+static void vkb_dispatch_impl(const uint8_t *a);
 void vkb_dispatch(const uint8_t *a) {
+    int hold = vkb_pool_hold();
+    vkb_dispatch_impl(a);
+    if (hold) vkb_pool_unhold();
+}
+static void vkb_dispatch_impl(const uint8_t *a) {
     big_init();
     fixed_buffers();
     const p_dispatch *d = (const p_dispatch *)a;
