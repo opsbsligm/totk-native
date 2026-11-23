@@ -477,6 +477,7 @@ vkb_image *vkb_image_of(const tex_t *t) {
         if (k < g_naside) memmove(&g_aside[k], &g_aside[k + 1], (size_t)(--g_naside - k) * sizeof g_aside[0]);
         nvn_texlayout L;
         nvn_tex_layout(&e->im.d, &L);
+        nvn_dirty_scan_who(NVN_SCAN_WHO_TAKE_BACK);
         int wrote = (nvn_dirty_tracked(e->im.storage, L.size) && nvn_dirty_since(e->im.storage, L.size, e->released_stamp)) ||
                     nvn_dirty_marked_since(e->im.storage, L.size, e->released_stamp) > 0;
         if (wrote) { e->im.gpu_written = 0; e->im.upload_stamp = 0; }
@@ -824,6 +825,7 @@ int vkb_tex_stale(vkb_image *im) {
         nvn_tex_layout(&im->d, &L);
         // a virtual pool: the physical pages behind it; [temporary] untracked memory (CPU-no-access pools hold GPU data)
         // counts as unchanged: uploaded once
+        nvn_dirty_scan_who(NVN_SCAN_WHO_TEX_STALE);   // "has this texture's game memory changed": the scan most often asked
         int v = im->vpool_gen ? totk_vpool_dirty_since((uintptr_t)im->storage, L.size, im->upload_stamp) : -1;
         int pending_notice = im->stale;
         im->stale = v >= 0 ? v : nvn_dirty_tracked(im->storage, L.size) && nvn_dirty_since(im->storage, L.size, im->upload_stamp);
@@ -2153,6 +2155,7 @@ void vkb_tex_vcheck_run(void) {
             continue;
         }
         int tracked = vp || nvn_dirty_tracked(im->storage, L.size);
+        nvn_dirty_scan_who(NVN_SCAN_WHO_VCHECK);
         int wrote = vp ? totk_vpool_dirty_since((uintptr_t)im->storage, L.size, im->upload_stamp) : tracked && nvn_dirty_since(im->storage, L.size, im->upload_stamp);
         if (wrote > 0) { cpu++; continue; }
         bad++;

@@ -3009,6 +3009,22 @@ NVN(nvnQueuePresentTexture, void, NVNqueue *q, NVNwindow *w, int idx) {
         trow(f, "@faults", (double)(fa_ - pfa)); trow(f, "@reuploads", (double)(re_ - pre_)); pfa = fa_; pre_ = re_;
         static uint64_t pmc, pmp, pmn; uint64_t mc_, mpg_, mn_; nvn_dirty_mp_stats(&mc_, &mpg_, &mn_);
         trow(f, "@mprotect_calls", (double)(mc_ - pmc)); trow(f, "@mprotect_pages", (double)(mpg_ - pmp)); trow(f, "@mprotect_ms", (mn_ - pmn) / 1e6); pmc = mc_; pmp = mpg_; pmn = mn_;
+        {   // 扫描归因：这些内核调用是谁发起的（nvn_dirty.h NVN_SCAN_WHO_*）| Scan attribution: who asked for these calls
+            static const char *who_names[NVN_SCAN_WHO_COUNT] = { "tex_stale", "take_back", "wb_merge", "snap_take", "sync_gather",
+                                                                 "pc_sync", "vcheck", "vpool", "gpu_write", "other" };
+            static uint64_t pwc[NVN_SCAN_WHO_COUNT], pwn[NVN_SCAN_WHO_COUNT], wtc[NVN_SCAN_WHO_COUNT], wtn[NVN_SCAN_WHO_COUNT];
+            nvn_dirty_scan_stats(wtc, wtn, NVN_SCAN_WHO_COUNT);
+            for (int w = 0; w < NVN_SCAN_WHO_COUNT; w++) {
+                double dc = (double)(wtc[w] - pwc[w]), dms = (double)(wtn[w] - pwn[w]) / 1e6;
+                pwc[w] = wtc[w]; pwn[w] = wtn[w];
+                if (!dc && !dms) continue;   // a location that never scanned: no row, no cost in the log
+                char key[40];
+                snprintf(key, sizeof key, "@scan_%s", who_names[w]);
+                trow(f, key, dms);
+                snprintf(key, sizeof key, "@scan_%s_calls", who_names[w]);
+                trow(f, key, dc);
+            }
+        }
         double up_ms = mtl_upload_ns_take() / 1e6; trow(f, "@upload_ms", up_ms);
         trow(f, "@upload_gpu_ms", mtl_upload_gpu_ns_take() / 1e6);
         // 分账：本帧提交线程同步创建数 + 与 UIMSG 同一时钟的时刻（离线按读取画面区间把帧分成 前端 / 读取 / 局内）

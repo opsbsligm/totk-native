@@ -488,6 +488,7 @@ static void pc_run(void *ctx, size_t off, size_t n) {   // nvn_dirty_runs: off f
 // Before submission `fence` is submitted (g_pool_mu read, g_pc_mu held): the pools it used brought up to date.
 static void pc_sync_pool(pool_ent *p) {
     if (!p->cfilled) {   // the first use: all of it (writes up to now are in it)
+        nvn_dirty_scan_who(NVN_SCAN_WHO_PC_SYNC);
         nvn_dirty_since((const void *)p->lo, p->hi - p->lo, UINT64_MAX);
         p->cstamp = nvn_dirty_now();
         uint64_t t0 = runtime_now_ns();
@@ -885,6 +886,7 @@ static int sync_gather(pool_ent *p, uint64_t sub, int may_end) {
         }
         p->filled = 0;
     }
+    nvn_dirty_scan_who(NVN_SCAN_WHO_SYNC_GATHER);
     uint64_t t0 = runtime_now_ns();
     int first = g_nruns, grp = g_ngrp;
     uint64_t bytes0 = g_sh_in_bytes;
@@ -970,6 +972,7 @@ static void snap_take(const pool_ent *p, uint64_t addr, uint64_t len) {
     VkDeviceSize n = (len + 15) & ~(VkDeviceSize)15;
     VkBuffer bf;
     uint8_t *map;
+    nvn_dirty_scan_who(NVN_SCAN_WHO_SNAP_TAKE);
     int cpu_wrote = nvn_dirty_since((const void *)(uintptr_t)addr, len, p->stamp);   // else game memory is "before" itself
     if (cpu_wrote && (t_recording || !vkb_in_pass()) && g_bf_used + n <= BF_CAP && (map = bf_map(vkb_slot(), &bf))) {
         wb_snap_t *s = snap_new(addr, len);
@@ -1085,6 +1088,7 @@ static int wb_bytes(uint64_t p, uint64_t e, const uint8_t *gpu, const wb_snap_t 
     return tok != NULL;
 }
 static void wb_merge(const uint64_t *r, int n, const uint8_t *src, const wb_snap_t *snaps, int nsnaps) {
+    nvn_dirty_scan_who(NVN_SCAN_WHO_WB_MERGE);   // the retire thread: one location for the whole merge
     for (int k = 0; k < n; k++, r += 4) {
         uint64_t a = r[0], len = r[1], stamp = r[2];
         if (!nvn_dirty_since((const void *)(uintptr_t)a, len, stamp)) { wb_put(a, src + r[3], len); g_wb_pages += (len + 4095) / 4096; continue; }
@@ -2409,6 +2413,7 @@ static void vcheck_run(void) {
             for (uint64_t b = 0; b < it[i].r.len; b++) if (g[b] != c[b]) { if (!diff++) first = b; }
             checked++;
             if (!diff) continue;
+            nvn_dirty_scan_who(NVN_SCAN_WHO_VCHECK);
             int wrote = nvn_dirty_since(g, it[i].r.len, it[i].stamp);
             if (wrote) { cpu++; continue; }
             bad++;

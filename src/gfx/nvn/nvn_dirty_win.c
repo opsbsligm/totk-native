@@ -23,6 +23,19 @@ static _Atomic uint64_t g_now = 1, g_adds_total, g_scans, g_scan_pages, g_scan_n
 static pthread_mutex_t g_slot_mu = PTHREAD_MUTEX_INITIALIZER;
 static int g_watch = -1;   // write watch available (the window was reserved with it)
 
+// Which code a scan is booked to (nvn_dirty.h). A caller names its location before the logic that looks at the write
+// watch, so the log can say where the kernel calls come from: 2026-11-23 (case-copy, Great Plateau) the game spends
+// 2.7 ms a frame in them -- 556 ioctls at about 4.5 us -- and nothing in the log said who was asking.
+static _Thread_local int t_scan_who = NVN_SCAN_WHO_OTHER;
+static _Atomic uint64_t g_who_calls[NVN_SCAN_WHO_COUNT], g_who_ns[NVN_SCAN_WHO_COUNT];
+void nvn_dirty_scan_who(int who) { t_scan_who = who >= 0 && who < NVN_SCAN_WHO_COUNT ? who : NVN_SCAN_WHO_OTHER; }
+void nvn_dirty_scan_stats(uint64_t *calls, uint64_t *ns, int max) {
+    for (int i = 0; i < max && i < NVN_SCAN_WHO_COUNT; i++) {
+        calls[i] = atomic_load(&g_who_calls[i]);
+        ns[i] = atomic_load(&g_who_ns[i]);
+    }
+}
+
 static _Thread_local int t_last;   // the range this thread found last (most lookups repeat it)
 static range_t *find(uintptr_t a) {
     int n = atomic_load(&g_nr), k = t_last;
@@ -63,7 +76,8 @@ static void scan_pages(range_t *r, uintptr_t a, size_t len, int count) {
         clock_gettime(CLOCK_MONOTONIC, &t0);
         int n = plat_written_pages(lo, hi - lo, pages, 512, &pg);
         clock_gettime(CLOCK_MONOTONIC, &t1);
-        atomic_fetch_add(&g_scan_ns, (uint64_t)(t1.tv_sec - t0.tv_sec) * 1000000000u + (uint64_t)(t1.tv_nsec - t0.tv_nsec));
+        uint64_t spent = (uint64_t)(t1.tv_sec - t0.tv_sec) * 1000000000u + (uint64_t)(t1.tv_nsec - t0.tv_nsec);
+        atomic_fetch_add(&g_scan_ns, spent);
         if (n < 0) {   // this range only (it used to switch tracking off for every pool, silently)
             if (atomic_exchange(&r->watched, 0)) {
                 static _Atomic int said;
@@ -72,6 +86,8 @@ static void scan_pages(range_t *r, uintptr_t a, size_t len, int count) {
             return;
         }
         atomic_fetch_add(&g_scans, 1);
+        atomic_fetch_add(&g_who_calls[t_scan_who], 1);
+        atomic_fetch_add(&g_who_ns[t_scan_who], spent);
         uint64_t g = n && count ? atomic_fetch_add(&g_now, 1) + 1 : 0;
         for (int i = 0; i < n; i++) {
             uintptr_t p = (pages[i] - r->base) / 4096;
@@ -212,8 +228,12 @@ void *nvn_dirty_gpu_write_begin(void *addr, size_t len) {
 void nvn_dirty_gpu_write_end(void *tok) {
     gpu_tok *t = tok;
     if (!t) return;
+    // The look that forgets the GPU's own writes is its own cost, whatever logic asked for the write.
+    int saved = t_scan_who;
+    t_scan_who = NVN_SCAN_WHO_GPU_WRITE;
     range_t *r = find((uintptr_t)t->addr);
     if (r) scan(r, (uintptr_t)t->addr, t->len, 0);
+    t_scan_who = saved;
     free(t);
 }
 

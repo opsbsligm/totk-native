@@ -131,6 +131,28 @@ class HarnessTest(unittest.TestCase):
             self.assertIn('per-second samples', found['note'])
             self.assertNotIn('long-frame thread attribution', ' '.join(summary['limits']))
 
+    def test_write_watch_scans_are_booked_per_code_location(self):
+        """The scan rows say who asked the kernel; without them the report must say "not measured"."""
+        with tempfile.TemporaryDirectory() as name:
+            case = Path(name)
+            write_case(case, 100, 200)
+            self.assertIsNone(harness.summarize(case)['write_watch_scan'])   # a build without the attribution
+        with tempfile.TemporaryDirectory() as name:
+            case = Path(name)
+            write_case(case, 100, 200)
+            rows = (case / 'frame-timing.tsv').read_text().rstrip('\n').split('\n')
+            for n in range(101, 200):
+                rows += [f'{n}\t@scan_tex_stale\t1.2', f'{n}\t@scan_tex_stale_calls\t400',
+                         f'{n}\t@scan_gpu_write\t0.4', f'{n}\t@scan_gpu_write_calls\t10']
+            (case / 'frame-timing.tsv').write_text('\n'.join(rows) + '\n')
+            scan = harness.summarize(case)['write_watch_scan']
+            self.assertEqual(scan['tex_stale']['calls_per_frame'], 400)
+            self.assertEqual(scan['tex_stale']['ms_per_frame'], 1.2)
+            self.assertEqual(scan['tex_stale']['frames_with_calls'], 99)
+            self.assertEqual(scan['tex_stale']['frames_over_1ms'], 99)
+            self.assertAlmostEqual(scan['total']['ms_per_frame'], 1.6, places=3)
+            self.assertGreater(scan['total']['share_of_frame_ms'], 8.0)   # 1.6 ms of a ~17 ms frame
+
     def test_window_sizes_offered_are_the_panel_shape_only(self):
         """The window is a measured variable, so a wrong size has to fail before the game starts, not skew the sample."""
         self.assertEqual(harness.parse_size('1280x800'), (1280, 800))
