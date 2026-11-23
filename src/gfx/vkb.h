@@ -94,6 +94,9 @@ int vkb_fb_general(void);   // no feedback loops: sampled targets attached in GE
 vkb_image *vkb_image_of(const tex_t *t);   // creates it on first use; NULL for textures that cannot be images yet
 // Moves the image to `layout` before work of `stage`/`access` (records a barrier on the current command buffer).
 void vkb_image_use(VkCommandBuffer cb, vkb_image *im, VkImageLayout layout, VkPipelineStageFlags2 stage, VkAccessFlags2 access);
+// What an image in layout `l` can still have in flight (vkb_tex.c): the stages and accesses a barrier *before* its
+// next use has to wait for. Everything else belongs to a layout the image is not in.
+void vkb_write_scope(VkImageLayout l, VkPipelineStageFlags2 *stage, VkAccessFlags2 *access);
 // A view of the image as NVN's view (NULL = the whole texture); cached per image.
 // attachment: 0 sampled, 1 render target, 2 storage image. view_type: a VkImageViewType the shader samples it as, or -1
 // (from the texture / view target). VK_NULL_HANDLE when the image cannot be used so.
