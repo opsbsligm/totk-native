@@ -382,7 +382,6 @@ static void pool_copies_off(const char *why) {
     VLOG("memory pool copies disabled: %s (game memory imported)", why);
 }
 
-static const pool_ent *pool_find(uintptr_t addr, uint64_t len);
 // ---- the pool table's read lock, held across one command's lookups ----
 // A draw looks the table up 15 to 20 times (every vertex stream, index range, uniform and storage buffer of both
 // stages, L13). Four recording threads take and drop that one read lock ~148 000 times a frame on the Deck, which
@@ -432,6 +431,7 @@ int vkb_pool_hold(void) {   // vkb_draw.c: one read lock for a whole command (0:
 void vkb_pool_unhold(void) { pool_unlock(); }
 uint64_t vkb_pool_lock_count(void) { return atomic_load_explicit(&g_pool_locks, memory_order_relaxed); }
 
+static const pool_ent *pool_find(uintptr_t addr, uint64_t len);
 // A GPU write into the copy of the pool whose buffer is buf (a pool made again at the same address is another one);
 // fence 0: in the submission being recorded. was: game memory's bytes [lo, hi) at its submission's sync (NULL: none
 // taken until sync; an unsafe snapshot budget fails explicitly).
