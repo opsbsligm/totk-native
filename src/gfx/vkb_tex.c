@@ -568,6 +568,62 @@ VkImageLayout vkb_layout(vkb_image *im) {
     return e ? e->cur : im->layout;
 }
 
+// What an image can still have in flight, by the layout it is in now.
+//
+// An image may only be touched the way its current layout allows, and every layout change went through a barrier, so
+// everything outstanding on it is work of the current layout's own use: a texture being read (SHADER_READ_ONLY,
+// TRANSFER_SRC) has only its reads outstanding, an attachment only attachment reads and writes, an upload target only
+// transfer writes. Naming those is what lets the GPU keep running: until now every layout change waited on
+// ALL_COMMANDS, which on this driver drains compute, transfer, rasterizer, output merger and host work as well.
+// Measured 2026-11-23 (case-copy, Great Plateau): 3044 barrier commands and 1299 layout changes a frame, with 2.38 ms
+// of the frame spent *between* passes rather than in them.
+// Reads belong in the scope as much as writes: a layout change also has to wait for the last sampler of a texture that
+// is about to be written (write-after-read), which a writes-only scope would let through.
+// GENERAL is the one layout with more than one kind of user here -- a storage image, an attachment in the
+// feedback-loop fallback, and a copy destination (vkb_copy.c) -- so its scope is the union of those.
+void vkb_write_scope(VkImageLayout l, VkPipelineStageFlags2 *stage, VkAccessFlags2 *access) {
+    switch (l) {
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+        *stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        *access = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+        *stage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+        *access = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
+        *stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                 VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+        *access = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                  VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+        *stage = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+        *access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+        *stage = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+        *access = VK_ACCESS_2_TRANSFER_READ_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+        *stage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        *access = VK_ACCESS_2_SHADER_READ_BIT;
+        break;
+    case VK_IMAGE_LAYOUT_GENERAL:
+        *stage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                 VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+        *access = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
+                  VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                  VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        break;
+    default:   // UNDEFINED: the image is new (create, the BC7 re-make, a feedback twin), so nothing is outstanding
+        *stage = 0; *access = 0;
+    }
+}
+
 void vkb_image_use(VkCommandBuffer cb, vkb_image *im, VkImageLayout layout, VkPipelineStageFlags2 stage, VkAccessFlags2 access) {
     VkImageLayout old = im->layout;
     if (t_trk) {
@@ -576,9 +632,12 @@ void vkb_image_use(VkCommandBuffer cb, vkb_image *im, VkImageLayout layout, VkPi
         old = e->cur;
         e->cur = layout;
     } else im->layout = layout;
-    // [temporary] every use waits for all earlier work on the image: precise per-pass barriers come with the pass tracker
-    VkImageMemoryBarrier2 b = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-        .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT, .dstStageMask = stage, .dstAccessMask = access, .oldLayout = old,
+    // The barrier is recorded even when the layout does not change: two passes on the same attachment have no
+    // dependency of their own under dynamic rendering, and this is what ordered them before.
+    VkPipelineStageFlags2 sstage; VkAccessFlags2 saccess;
+    vkb_write_scope(old, &sstage, &saccess);
+    VkImageMemoryBarrier2 b = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, .srcStageMask = sstage,
+        .srcAccessMask = saccess, .dstStageMask = stage, .dstAccessMask = access, .oldLayout = old,
         .newLayout = layout, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image = im->img, .subresourceRange = {im->aspect, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS}};
     VkDependencyInfo di = {VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &b};

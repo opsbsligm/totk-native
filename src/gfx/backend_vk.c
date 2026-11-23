@@ -3040,8 +3040,10 @@ static void glue(VkCommandBuffer cb, vkb_trk *t) {
         if (k < t->n) {
             vkb_trk_e *e = &t->e[k];
             if (e->im->layout == e->first) continue;
-            ib[ni++] = (VkImageMemoryBarrier2){VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT, .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            VkPipelineStageFlags2 sstage; VkAccessFlags2 saccess;
+            vkb_write_scope(e->im->layout, &sstage, &saccess);   // what the earlier chunks can still be doing to it
+            ib[ni++] = (VkImageMemoryBarrier2){VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, .srcStageMask = sstage,
+                .srcAccessMask = saccess, .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                 .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT, .oldLayout = e->im->layout, .newLayout = e->first,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = e->im->img,
                 .subresourceRange = {e->im->aspect, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS}};
