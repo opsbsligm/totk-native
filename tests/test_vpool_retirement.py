@@ -57,6 +57,10 @@ typedef int vkb_rw;
 static vkb_rw g_pool_mu;
 static void vkb_rw_write(vkb_rw *p,int k) {(void)p;(void)k;}
 static void vkb_rw_write_end(vkb_rw *p) {(void)p;}
+// The candidate batch holds the table's read lock across a whole command, so the gate it extracts needs the read side
+// too (same shape as tests/test_pool_copies.py): the counters, not the kernel lock, are what that gate is about.
+static void vkb_rw_read(vkb_rw *p,int kind) {(void)p;(void)kind;}
+static void vkb_rw_read_end(vkb_rw *p) {(void)p;}
 PRODUCTION_POOL_TYPE
 static pool_ent *g_pools;
 static int g_npools,g_capools,g_ok=1;
