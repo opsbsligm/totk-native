@@ -1909,7 +1909,13 @@ enum { PP_MAX = 4096 };
 typedef struct { uint32_t w, h, ncolor, fmt0, depth, draws; uint64_t draws0; char key[16]; } pp_info;
 static VkQueryPool g_ppq;
 static pp_info g_pp[PP_MAX];
-static int g_ppn, g_pp_done, g_pp_open = -1;
+static int g_ppn, g_pp_done;
+// The profiled frame is recorded by several threads at once (the pass profile no longer forces one thread,
+// vkb_mt_on), so the table is shared: its bookkeeping is under a lock, and which pass this thread opened is
+// per thread. A pass's "draws" is then the draws of the thread that recorded it, and the pass order is the
+// order of the BeginRendering calls across threads - right for the sum and the ranking, not for spacing.
+static __thread int g_pp_open = -1;
+static pthread_mutex_t g_pp_mu = PTHREAD_MUTEX_INITIALIZER;
 static long long pp_frame(void) {
     static long long at = -1;
     if (at < 0) { const char *e = getenv("TOTK_GPU_PASSPROF"); at = e ? atoll(e) : 0; }
@@ -1917,13 +1923,18 @@ static long long pp_frame(void) {
 }
 static int pp_on(void) { return pp_frame() > 0 && !g_pp_done && vkb_frame() == (uint64_t)pp_frame(); }
 void vkb_passprof_note(const char *key) {   // vkb_draw.c: the first fragment shader of the open pass
-    if (g_pp_open >= 0 && !g_pp[g_pp_open].key[0] && key) snprintf(g_pp[g_pp_open].key, sizeof g_pp[0].key, "%.12s", key);
+    if (g_pp_open < 0 || !key) return;
+    pthread_mutex_lock(&g_pp_mu);
+    if (!g_pp[g_pp_open].key[0]) snprintf(g_pp[g_pp_open].key, sizeof g_pp[0].key, "%.12s", key);
+    pthread_mutex_unlock(&g_pp_mu);
 }
 static void pp_begin(VkCommandBuffer cb, VkExtent2D ext) {
-    if (!pp_on() || g_ppn >= PP_MAX / 2) return;
+    if (!pp_on() || g_pp_open >= 0) return;   // one pass open per thread (a pass inside a pass: the profile is of the first)
+    pthread_mutex_lock(&g_pp_mu);
+    if (g_pp_done || g_ppn >= PP_MAX / 2) { pthread_mutex_unlock(&g_pp_mu); return; }
     if (!g_ppq) {
         VkQueryPoolCreateInfo ci = {VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, .queryType = VK_QUERY_TYPE_TIMESTAMP, .queryCount = PP_MAX};
-        if (!vk_check(vk.vkCreateQueryPool(vkc.device, &ci, NULL, &g_ppq), "pass timestamp pool")) { g_pp_done = 1; return; }
+        if (!vk_check(vk.vkCreateQueryPool(vkc.device, &ci, NULL, &g_ppq), "pass timestamp pool")) { g_pp_done = 1; pthread_mutex_unlock(&g_pp_mu); return; }
         vk.vkResetQueryPool(vkc.device, g_ppq, 0, PP_MAX);
     }
     pp_info *p = &g_pp[g_ppn];
@@ -1935,12 +1946,16 @@ static void pp_begin(VkCommandBuffer cb, VkExtent2D ext) {
     p->draws0 = vkb_draw_count();
     vk.vkCmdWriteTimestamp2(cb, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, g_ppq, (uint32_t)(2 * g_ppn));
     g_pp_open = g_ppn++;
+    pthread_mutex_unlock(&g_pp_mu);
 }
 static void pp_end(VkCommandBuffer cb) {
     if (g_pp_open < 0) return;
-    g_pp[g_pp_open].draws = (uint32_t)(vkb_draw_count() - g_pp[g_pp_open].draws0);
-    vk.vkCmdWriteTimestamp2(cb, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, g_ppq, (uint32_t)(2 * g_pp_open + 1));
+    int i = g_pp_open;
     g_pp_open = -1;
+    pthread_mutex_lock(&g_pp_mu);
+    g_pp[i].draws = (uint32_t)(vkb_draw_count() - g_pp[i].draws0);
+    vk.vkCmdWriteTimestamp2(cb, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, g_ppq, (uint32_t)(2 * i + 1));
+    pthread_mutex_unlock(&g_pp_mu);
 }
 static int pp_cmp(const void *a, const void *b) {
     double x = ((const double *)a)[0], y = ((const double *)b)[0];
@@ -2860,7 +2875,11 @@ int vkb_mt_on(void) {
         n = e && *e ? atoi(e) : cpus >= 8 ? 4 : cpus >= 4 ? 2 : 1;
         if (n > VKB_MAXREC) n = VKB_MAXREC;
         if (n < 1) n = 1;
-        static const char *const diag[] = {"TOTK_VK_DRAWTRACE", "TOTK_VK_TRACE", "TOTK_SNAP", "TOTK_GPU_PROF", "TOTK_GPU_PASSPROF",
+        // The pass profile keeps its timestamps per thread (pp_begin) and measures the frame as the game plays it; the
+        // others follow the recording in order. Measured on the Deck: with the profile in this list every case ran at
+        // 19.5 FPS and 45 ms of CPU submit against 31 FPS and 22 ms without it, so the profile of the passes was taken
+        // in a run the CPU held back - which is what it was meant to explain.
+        static const char *const diag[] = {"TOTK_VK_DRAWTRACE", "TOTK_VK_TRACE", "TOTK_SNAP", "TOTK_GPU_PROF",
                                            "TOTK_VK_CHECKPOINTS", "TOTK_AUDIT", "TOTK_VK_SPLIT", "TOTK_VK_STORES_LOG", "TOTK_WATCH"};
         const char *why = NULL;   // development tools that follow the recording in order: one thread
         for (unsigned i = 0; i < sizeof diag / sizeof *diag; i++) if (getenv(diag[i])) why = diag[i];
