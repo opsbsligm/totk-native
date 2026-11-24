@@ -2916,6 +2916,10 @@ static int chunk_end_at(const mt_chunk *c, int hidx, const uint8_t *p) { return 
 static vkb_cnt g_mt_rec_ns;   // chunk recording time, all threads (the log line)
 static void mt_record(mt_chunk *c) {
     uint64_t t0 = runtime_now_ns();
+    // Every thread that records part of this submission shares its one write-watch look per pool (nvn_dirty_win.c);
+    // without this a worker re-scanned the pools the walk or another worker had already read (4.59 ms a frame on the
+    // Deck, 2026-11-24).
+    int epoch_saved = nvn_dirty_epoch_join();
     c->cb = wp_get(g_cur, t_worker);
     t_cb = c->cb;
     t_recording = 1;
@@ -2940,6 +2944,7 @@ static void mt_record(mt_chunk *c) {
     t_cb = VK_NULL_HANDLE;
     c->ns = runtime_now_ns() - t0;
     vkb_cnt_add(g_mt_rec_ns, c->ns);
+    nvn_dirty_epoch_leave(epoch_saved);
 }
 static int mt_take(void) {   // the next chunk cut and not taken, or -1
     pthread_mutex_lock(&g_mt_mu);

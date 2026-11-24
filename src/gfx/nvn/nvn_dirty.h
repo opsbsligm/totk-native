@@ -12,7 +12,11 @@ void nvn_dirty_protect(const void *addr, size_t len);              // 覆盖页�
 uint64_t nvn_dirty_now(void);                                      // 当前代号：上传前取，作为该份内容的戳 | Current generation: taken before upload, as the stamp of that content
 int nvn_dirty_since(const void *addr, size_t len, uint64_t stamp);
 // Runs of pages written since stamp (merged when closer than gap bytes): fn(ctx, offset, bytes); -1 = untracked
-void nvn_dirty_epoch_begin(void);   // [Windows port] a new submission: one write-watch scan per range on this thread until the next
+void nvn_dirty_epoch_begin(void);   // [Windows port] a new submission: one write-watch scan per range until the next
+// A thread that records part of that submission shares its one look per range rather than scanning the same pools again
+// (backend_vk.c mt_record). Outside a submission a thread does not join and scans whenever its logic asks.
+int nvn_dirty_epoch_join(void);              // returns what this thread had: pass it back to leave
+void nvn_dirty_epoch_leave(int saved);
 int nvn_dirty_runs(const void *addr, size_t len, uint64_t stamp, size_t gap, void (*fn)(void *ctx, size_t off, size_t n), void *ctx);
 void *nvn_dirty_gpu_write_begin(void *addr, size_t len);   // write guest memory on behalf of the GPU: not counted as a CPU write
 void nvn_dirty_gpu_write_end(void *tok);

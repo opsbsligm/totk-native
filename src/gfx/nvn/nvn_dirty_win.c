@@ -45,15 +45,31 @@ static range_t *find(uintptr_t a) {
     return NULL;
 }
 
-// Scans once per epoch (nvn_dirty_epoch_begin, a GPU submission being recorded) on the thread that began it: the first
-// look at a range scans all of it, later looks in the epoch use the generations gathered then. The game writes what a
-// submission uses before submitting it, so one look per submission sees those writes; per-texture and per-pool scans
-// were hundreds of GetWriteWatch calls a submission (~9% of the recording thread, Great Sky Island, 2026-10-24).
-// Other threads (the retire thread's copy back of GPU writes) scan every time.
+// Scans once per epoch (nvn_dirty_epoch_begin, a GPU submission being recorded): the first look at a range scans all of
+// it, later looks in the epoch use the generations gathered then. The game writes what a submission uses before
+// submitting it, so one look per submission sees those writes; per-texture and per-pool scans were hundreds of
+// GetWriteWatch calls a submission (~9% of the recording thread, Great Sky Island, 2026-10-24).
+// The dedup used to belong to the thread that began the epoch, so with the submission recorded on several threads every
+// one of them re-scanned the same pools: Deck (case-copy, Great Plateau, 2026-11-24) 1069 tex_stale scans a frame
+// costing 4.59 ms -- 20% of the frame -- where the same build on one recording thread asks 433 times. Now every thread
+// recording that submission shares the one look (nvn_dirty_epoch_join); whether a range was already seen is decided by
+// the epoch number itself, so a thread joining late still gets the answer gathered by another. Threads outside a
+// submission (the retire thread's copy back of GPU writes) do not join and scan every time, as before.
 static _Atomic uint64_t g_epoch;
 static _Atomic uint64_t g_notice_epoch;  // explicit CPU flushes, independent of OS write watch
 static _Thread_local int t_epoch_thread;
-void nvn_dirty_epoch_begin(void) { t_epoch_thread = 1; atomic_fetch_add(&g_epoch, 1); }
+static _Atomic int g_epoch_seen;   // at least one submission has begun: an epoch exists to share
+void nvn_dirty_epoch_begin(void) { t_epoch_thread = 1; atomic_store(&g_epoch_seen, 1); atomic_fetch_add(&g_epoch, 1); }
+// A thread that records part of the submission in progress may use the look another thread already made. It returns what
+// it had, for the caller to restore with nvn_dirty_epoch_leave(), so the thread that began the epoch keeps it and a
+// thread that already owned one is unaffected. Joining before any submission exists leaves the thread scanning, as it
+// did on its own thread before.
+int nvn_dirty_epoch_join(void) {
+    int saved = t_epoch_thread;
+    t_epoch_thread = atomic_load(&g_epoch_seen);
+    return saved;
+}
+void nvn_dirty_epoch_leave(int saved) { t_epoch_thread = saved; }
 
 // Pages of [a, a+len) written since the last scan get a new generation; their watch bits are reset.
 static void scan_pages(range_t *r, uintptr_t a, size_t len, int count);
@@ -61,8 +77,13 @@ static void scan(range_t *r, uintptr_t a, size_t len, int count) {
     if (count && t_epoch_thread) {
         uint64_t e = atomic_load(&g_epoch);
         if (atomic_load(&r->epoch) == e) return;
-        atomic_store(&r->epoch, e);
         a = r->base; len = r->end - r->base;
+        scan_pages(r, a, len, count);
+        // The generations of the whole range are in: a later look in this epoch, on any thread, may use them. Saying so
+        // before the scan let a second thread read generations that the first had not gathered yet and call a texture
+        // unchanged (the answer is shared since the dedup is, not thread-local).
+        atomic_store(&r->epoch, e);
+        return;
     }
     scan_pages(r, a, len, count);
 }
