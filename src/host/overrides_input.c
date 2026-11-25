@@ -46,12 +46,16 @@ static uint32_t styles = 1;
 static bool enabled, allowed = true;
 static int64_t sample;
 
-/* Mac virtual key codes -> Switch buttons (MacNativeGames' layout: J=A, K/Space=B, I=X, U=Y, Z/C=L/R ...). */
+/* Mac virtual key codes -> Switch buttons (MacNativeGames' layout: J=A, K/Space=B, I=X, U=Y, Z/C=L/R,
+   arrows = d-pad).  The arrow codes are what the development FIFO (UP/DOWN/LEFT/RIGHT) and the keyboard
+   both produce, so they must reach the d-pad here: a code with no case silently reports "no button",
+   which reads as input being ignored. */
 static uint64_t button(unsigned code) {
     switch (code) {
     case 38: return 1; case 40: case 49: return 2; case 34: return 4; case 32: return 8; case 6: return 16; case 8: return 32;
     case 12: return 64; case 14: return 128; case 58: return 256; case 56: return 512; case 36: return 1024;
     case 48: case 53: return 2048; case 3: return 4096; case 17: return 8192; case 4: return 16384; case 5: return 32768;
+    case 123: return 4096; case 126: return 8192; case 124: return 16384; case 125: return 32768;
     default: return 0;
     }
 }
