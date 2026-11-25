@@ -1475,9 +1475,10 @@ int mtl_write_texels_mem(const tex_t *t, unsigned level, unsigned layer0, const 
     // Move only the rectangle this write covers: block-linear is a byte permutation, so rewriting the rectangle's own bytes
     // is byte-identical to a whole-level round trip -- without copying a level for a few KB. TOTK writes its map
     // (5120x5120 BC1) this way every frame; the old path permuted 26 MiB on the game thread and its minimap flickered.
+    nvn_texlayout L; nvn_tex_layout(&t->d, &L);   // 层数来自布局：描述符里只有 depth | the layer count comes from the layout
     nvn_region rg;
     if (!nvn_region_of_write(&t->d, level, is3d ? 0 : layer0 + (uint32_t)r->zoffset,
-                             t->d.levels ? t->d.levels : 1, is3d ? 1 : t->d.layers ? t->d.layers : 1,
+                             t->d.levels ? t->d.levels : 1, is3d ? 1 : L.layers,
                              (uint32_t)r->xoffset, (uint32_t)r->yoffset, (uint32_t)r->width, (uint32_t)r->height, &rg)) {
         VLOG("WriteTexels: region outside texture %llu", (unsigned long long)t->serial);
         return 0;
