@@ -101,3 +101,97 @@ int nvn_deswizzle(const nvn_texdesc *d, unsigned level, unsigned layer, const vo
 int nvn_swizzle(const nvn_texdesc *d, unsigned level, unsigned layer, const void *src, size_t src_pitch, void *dst) {
     return move(d, level, layer, (uint8_t *)dst, (uint8_t *)src, src_pitch, 0);
 }
+
+// 一个 GOB 的一行里搬线性 [xa,xb)：切段不跨 16 字节扇区边界（跨边界处退成两段），段内块线性地址按 gob_off 直算。
+// Move linear bytes [xa,xb) of one GOB row, split so no segment crosses a 16-byte sector boundary; lin tracks xa.
+static void gob_row_copy(uint8_t *gob, unsigned r, uint8_t *lin, uint32_t xa, uint32_t xb, int to_linear) {
+    while (xa < xb) {
+        uint32_t step = 16 - (xa & 15);
+        if (step > xb - xa) step = xb - xa;
+        uint8_t *g = gob + gob_off(xa, r);
+        if (to_linear) memcpy(lin, g, step);
+        else memcpy(g, lin, step);
+        lin += step; xa += step;
+    }
+}
+
+// 矩形搬运，两个方向共用：只走与矩形相交的 GOB。块线性是字节置换，反向只写矩形自己的字节，与整级往返逐字节等价
+// （单测把两个方向都对拍整级实现，含 zoffset 非 0 的 3D 与不满整级的矩形）。
+// 线性缓冲只装这份矩形：每片的行距是矩形的行数 rows，不是本级行数——调用方不必为几 KB 分配整级。
+// Rectangle move, both directions: only the GOBs the rectangle touches. Block-linear is a byte permutation, so the
+// reverse direction writing only the rectangle's own bytes is byte-identical to a full-level round trip (the unit test
+// compares both directions with the full-level implementation, including 3D with a non-zero z offset). The linear buffer
+// holds just this rectangle: one slice is `rows` rows apart, not the level's row count.
+static int move_region(const nvn_texdesc *d, unsigned level, unsigned layer, uint8_t *bl, uint8_t *lin, size_t pitch,
+                       uint32_t x0, uint32_t y0, uint32_t z0, uint32_t zslices, uint32_t row_bytes, uint32_t rows,
+                       int to_linear) {
+    uint32_t full_row, full_rows, slices, bpb; uint64_t base; unsigned th, td;
+    if (!row_bytes || !rows || !zslices) return -1;
+    if (nvn_tex_is_linear(d)) {           // 行距存储：矩形就是行的一段 | pitch storage: the rectangle is a run of rows
+        if (level || layer || z0 || d->samples > 1 || (d->target != 0 && d->target != 1 && d->target != 7)) return -1;
+        int bw, bh, pb = nvn_fmt_bpb(d->format, &bw, &bh);
+        if (!pb) return -1;
+        uint32_t stride = nvn_tex_linear_stride(d), row_full = (uint32_t)((d->width + bw - 1) / bw) * (uint32_t)pb;
+        uint32_t height_rows = d->target == 0 ? 1 : (d->height + bh - 1) / bh;
+        if (pitch < row_bytes || x0 >= row_full || x0 + row_bytes > row_full || y0 >= height_rows || rows > height_rows - y0) return -1;
+        for (uint32_t y = y0; y < y0 + rows; y++) {
+            uint8_t *a = bl + (size_t)y * stride + x0, *b = lin + (size_t)(y - y0) * pitch;
+            if (to_linear) memcpy(b, a, row_bytes); else memcpy(a, b, row_bytes);
+        }
+        return 0;
+    }
+    if (nvn_deswizzle_geom(d, level, layer, &full_row, &full_rows, &slices, &base, &th, &td, &bpb)) return -1;
+    if (pitch < row_bytes || x0 >= full_row || y0 >= full_rows || z0 >= slices || zslices > slices - z0 ||
+        row_bytes > full_row - x0 || rows > full_rows - y0) return -1;
+    bl += base;
+    uint32_t bh = 1u << th, bd = 1u << td, gobs_x = (full_row + 63) / 64, blocks_y = (full_rows + 8 * bh - 1) / (8 * bh);
+    uint64_t block = 512ull * bh * bd, xend = (uint64_t)x0 + row_bytes;
+    for (uint32_t z = z0; z < z0 + zslices; z++)
+        for (uint32_t y = y0; y < y0 + rows; y++) {           /* 块行：起点不必对齐 GOB | block rows, no GOB alignment */
+            for (uint32_t gx = x0 / 64; (uint64_t)gx * 64 < xend; gx++) {
+                uint64_t xa = x0 > (uint64_t)gx * 64 ? x0 : (uint64_t)gx * 64;
+                uint64_t xb = xend < (uint64_t)gx * 64 + 64 ? xend : (uint64_t)gx * 64 + 64;
+                if (xb > full_row) xb = full_row;
+                if (xa >= xb) continue;
+                /* 该 (x,y) 所在 GOB 的地址，分解与 nvn_bl_offset 一致 */
+                uint8_t *gob = bl + (uint64_t)(z / bd) * gobs_x * blocks_y * block + (uint64_t)(y / (8 * bh)) * gobs_x * block
+                             + (uint64_t)gx * block + ((uint64_t)(z % bd) * bh + (y % (8 * bh)) / 8) * 512ull;
+                gob_row_copy(gob, y % 8, lin + ((size_t)(z - z0) * rows + (y - y0)) * pitch + (xa - x0),
+                             (uint32_t)xa, (uint32_t)xb, to_linear);
+            }
+        }
+    return 0;
+}
+
+int nvn_deswizzle_region(const nvn_texdesc *d, unsigned level, unsigned layer, unsigned z0, unsigned zslices,
+                         const void *src_storage, void *dst_linear, size_t dst_pitch,
+                         uint32_t x0, uint32_t y0, uint32_t row_bytes, uint32_t rows) {
+    return move_region(d, level, layer, (uint8_t *)src_storage, (uint8_t *)dst_linear, dst_pitch,
+                       x0, y0, z0, zslices, row_bytes, rows, 1);
+}
+
+int nvn_swizzle_region(const nvn_texdesc *d, unsigned level, unsigned layer, unsigned z0, unsigned zslices,
+                       const void *src_linear, size_t src_pitch, void *dst_storage,
+                       uint32_t x0, uint32_t y0, uint32_t row_bytes, uint32_t rows) {
+    return move_region(d, level, layer, (uint8_t *)dst_storage, (uint8_t *)src_linear, src_pitch,
+                       x0, y0, z0, zslices, row_bytes, rows, 0);
+}
+
+// 游戏的一次 CPU 写入能否只搬它自己那一块：把 texel 坐标的矩形换算成本级的块矩形并判界。压缩格式取整到完整块，
+// 起点必须落在块边界（NVN 的 WriteTexels 本就按块对齐，调用方已经筛过，这里再核一遍）。写入侧与上传侧共用这一条，
+// 两处各写一遍边界条件迟早会算得不一样。不可用返回 0。
+// Whether one CPU write can move just its own rectangle: the texel rectangle as this level's block rectangle, bounds
+// checked. Compressed formats round up to whole blocks, and the origin has to sit on a block boundary. Shared by the
+// write and upload paths so the bounds are written once. 0 = no.
+int nvn_region_of_write(const nvn_texdesc *d, unsigned level, unsigned layer, unsigned levels, unsigned layers,
+                        uint32_t x0, uint32_t y0, uint32_t w, uint32_t h, nvn_region *out) {
+    int bw = 1, bh = 1, bpb = nvn_fmt_bpb(d->format, &bw, &bh);
+    if (!bpb || !w || !h || level >= levels || layer >= layers) return 0;
+    if (bw > 1 && (x0 % bw || y0 % bh)) return 0;
+    uint32_t lw = mip(d->width, level), lh = mip(d->height, level), lbx = (lw + bw - 1) / bw, lby = (lh + bh - 1) / bh;
+    uint32_t bx = (w + bw - 1) / bw, by = (h + bh - 1) / bh, sx = x0 / bw, sy = y0 / bh;
+    if (!bx || !by || sx >= lbx || sy >= lby || bx > lbx - sx || by > lby - sy) return 0;
+    out->x = sx; out->y = sy; out->cols = bx; out->rows = by; out->row_bytes = bx * (uint32_t)bpb;
+    out->block_w = (unsigned)bw; out->block_h = (unsigned)bh;
+    return 1;
+}
