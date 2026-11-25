@@ -46,12 +46,16 @@ static uint32_t styles = 1;
 static bool enabled, allowed = true;
 static int64_t sample;
 
-/* Mac virtual key codes -> Switch buttons (MacNativeGames' layout: J=A, K/Space=B, I=X, U=Y, Z/C=L/R ...). */
+/* Mac virtual key codes -> Switch buttons (MacNativeGames' layout: J=A, K/Space=B, I=X, U=Y, Z/C=L/R,
+   arrows = d-pad).  The arrow codes are what the development FIFO (UP/DOWN/LEFT/RIGHT) and the keyboard
+   both produce, so they must reach the d-pad here: a code with no case silently reports "no button",
+   which reads as input being ignored. */
 static uint64_t button(unsigned code) {
     switch (code) {
     case 38: return 1; case 40: case 49: return 2; case 34: return 4; case 32: return 8; case 6: return 16; case 8: return 32;
     case 12: return 64; case 14: return 128; case 58: return 256; case 56: return 512; case 36: return 1024;
     case 48: case 53: return 2048; case 3: return 4096; case 17: return 8192; case 4: return 16384; case 5: return 32768;
+    case 123: return 4096; case 126: return 8192; case 124: return 16384; case 125: return 32768;
     default: return 0;
     }
 }
@@ -60,6 +64,11 @@ static uint64_t button(unsigned code) {
 static RuntimeGamepadState g_pad;
 void runtime_gamepad_set(const RuntimeGamepadState *s) { pthread_mutex_lock(&input_lock); g_pad = *s; pthread_mutex_unlock(&input_lock); }
 static void gamepad_read(RuntimeGamepadState *out) { *out = g_pad; }
+/* Development FIFO stick channel (TOTK_INPUT_FIFO only): a second source, merged as the gamepad's is. The
+   harness drives the FIFO from its own thread, so the setter takes the same lock as the window layer's. */
+static RuntimeGamepadState g_pad_fifo;
+static void gamepad_set_fifo(const RuntimeGamepadState *s) { pthread_mutex_lock(&input_lock); g_pad_fifo = *s; pthread_mutex_unlock(&input_lock); }
+static void gamepad_read_fifo(RuntimeGamepadState *out) { *out = g_pad_fifo; }
 
 void runtime_input_key(unsigned code, int down) {
     if (code >= 128) return;
@@ -93,14 +102,26 @@ static int script_code(const char *k, size_t n) {
         if (strlen(named[i].name) == n && !strncmp(named[i].name, k, n)) return named[i].code;
     return -1;
 }
+/* `seq:A,lx,ly,rx,ry*hold` — the stick half of the FIFO language (int16 units). A pure parse so a test can pin
+   the format: the harness writes these lines, and a silent mismatch would read as the game ignoring input. */
+static int parse_stick_command(const char *line, unsigned long long *seq, int axes[4], unsigned *hold) {
+    char extra;
+    return sscanf(line, "%llu:A,%d,%d,%d,%d*%u%c", seq, &axes[0], &axes[1], &axes[2], &axes[3], hold, &extra) == 6;
+}
+
 /* Opt-in local test input. Sequence:key*hold, one line per command; frame clock. */
 static void input_fifo_tick(uint64_t frame) {
     static int fd = -2, dropping;
     static char line[128];
     static size_t used;
     static uint64_t last, release[128];
+    static uint64_t fifo_release;
     for (unsigned k = 0; k < 128; k++) if (release[k] && frame >= release[k]) {
         runtime_input_key(k, 0); release[k] = 0;
+    }
+    if (fifo_release && frame >= fifo_release) {
+        fifo_release = 0;
+        gamepad_set_fifo(&(RuntimeGamepadState){0});   /* the hold expired: the sticks rest */
     }
     if (fd == -2) {
         fd = -1;
@@ -131,6 +152,7 @@ static void input_fifo_tick(uint64_t frame) {
         char key[16], extra;
         unsigned long long seq;
         unsigned hold;
+        int axes[4];
         int valid = !dropping && sscanf(line, "%llu:%15[A-Z]*%u%c", &seq, key, &hold, &extra) == 3;
         int code = valid ? script_code(key, strlen(key)) : -1;
         if (code >= 0 && seq > last && hold >= 1 && hold <= 1800) {
@@ -138,6 +160,16 @@ static void input_fifo_tick(uint64_t frame) {
             runtime_input_key((unsigned)code, 1);
             dprintf(STDERR_FILENO, "[totk-input] seq=%llu key=%s frame=%llu release=%llu\n",
                     seq, key, (unsigned long long)frame, (unsigned long long)release[code]);
+        } else if (!dropping && parse_stick_command(line, &seq, axes, &hold) &&
+                   seq > last && hold >= 1 && hold <= 1800) {
+            /* seq:A,lx,ly,rx,ry*hold: hold the sticks (int16 units) for hold frames, then release them. */
+            last = seq; fifo_release = frame + hold;
+            int32_t stick[4];
+            for (int i = 0; i < 4; i++)
+                stick[i] = axes[i] < -32767 ? -32767 : axes[i] > 32767 ? 32767 : axes[i];   /* npad sticks are int16 units */
+            gamepad_set_fifo(&(RuntimeGamepadState){.lx = stick[0], .ly = stick[1], .rx = stick[2], .ry = stick[3], .connected = 1});
+            dprintf(STDERR_FILENO, "[totk-input] seq=%llu stick=(%d,%d,%d,%d) frame=%llu release=%llu\n",
+                    seq, axes[0], axes[1], axes[2], axes[3], (unsigned long long)frame, (unsigned long long)fifo_release);
         } else dprintf(STDERR_FILENO, "[totk-input] rejected command\n");
         used = 0; dropping = 0;
     }
@@ -199,8 +231,9 @@ static int pad_states(NpadState *out, int max, const uint32_t *id, uint32_t want
         state.ly = 32767 * ((int)keys[13] - (int)keys[1]);      /* W / S */
         state.rx = 32767 * ((int)keys[124] - (int)keys[123]);   /* arrow right / left */
         state.ry = 32767 * ((int)keys[126] - (int)keys[125]);   /* arrow up / down */
-        RuntimeGamepadState pad;
+        RuntimeGamepadState pad, fpad;
         gamepad_read(&pad);
+        gamepad_read_fifo(&fpad);
 #ifdef __linux__
         const char *opt=getenv("TOTK_MENU_CONFIRM");
         bool active=(!opt || strcmp(opt,"0")) && nd_totk_menu_context(menu_read,NULL);
@@ -213,6 +246,9 @@ static int pad_states(NpadState *out, int max, const uint32_t *id, uint32_t want
         if (abs(pad.ly) > abs(state.ly)) state.ly = pad.ly;
         if (abs(pad.rx) > abs(state.rx)) state.rx = pad.rx;
         if (abs(pad.ry) > abs(state.ry)) state.ry = pad.ry;
+        /* The FIFO is the harness's hand: while it holds a stick, that stick is its, even over a physical pad. */
+        if (fpad.lx || fpad.ly) { state.lx = fpad.lx; state.ly = fpad.ly; }
+        if (fpad.rx || fpad.ry) { state.rx = fpad.rx; state.ry = fpad.ry; }
     }
     atomic_store(&nd_cheat_buttons,state.buttons);
     *out = state;

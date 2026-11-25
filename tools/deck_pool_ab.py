@@ -141,8 +141,8 @@ class Deck:
         assert path.is_file() and path.read_bytes().startswith(bytes.fromhex('89504e470d0a1a0a')), result.stderr[-500:]
         self.report['captures'].append(dict(file=name, bytes=path.stat().st_size))
 
-    def send(self, sequence, key='J'):
-        """One confirmed click through a private owner-only FIFO; the game maps it to its A button."""
+    def write_command(self, line):
+        """One FIFO line with the foreground verified first; the game logs every line it accepts."""
         self.focus()
         row = self.state()
         assert row['exact_window'] and row['exact_app'], 'foreground lost before input'
@@ -150,9 +150,18 @@ class Deck:
         try:
             info = os.fstat(fd)
             assert stat.S_ISFIFO(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o077
-            os.write(fd, f'{sequence}:{key}*3\n'.encode())
+            os.write(fd, line.encode())
         finally:
             os.close(fd)
+
+    def send(self, sequence, key='J'):
+        """One confirmed click through a private owner-only FIFO; the game maps it to its A button."""
+        self.write_command(f'{sequence}:{key}*3\n')
+
+    def stick(self, sequence, lx=0, ly=0, rx=0, ry=0, hold=60):
+        """Hold the sticks (int16 units) for `hold` frames. TOTK walks Link with the left stick only —
+        the d-pad opens menus but never moves him — so a scene that explores needs this channel."""
+        self.write_command(f'{sequence}:A,{lx},{ly},{rx},{ry}*{hold}\n')
 
     def device_sample(self):
         row = dict(time=time.time(), **self.state())
@@ -542,6 +551,11 @@ def run(args):
         deck.send(3)
         time.sleep(args.load_seconds)
         deck.capture('03-world-before-sample.png')
+        # Deterministic scene driving (development FIFO only): every --stick entry runs here, in order, before the sample.
+        for entry in getattr(args, 'stick', []):
+            seq, lx, ly, hold = (int(value) for value in entry.split(','))
+            deck.stick(seq, lx=lx, ly=ly, hold=hold)
+            time.sleep(hold / 30 + 1)           # let the hold elapse at the game's own frame clock
         sampling.update(deck.device_state())
         sampling['thread_cpu_start'] = thread_cpu(pid)
         timing = case / 'frame-timing.tsv'
@@ -632,6 +646,11 @@ def main():
                                  'panel size, as the game is played)')
     run_parser.add_argument('--gpu-passprof-at', type=int, default=0,
                             help='present number whose render passes get GPU timestamps (diagnostic run)')
+    run_parser.add_argument('--stick', action='append', default=[], metavar='SEQ,LX,LY,HOLD',
+                            help='hold the left stick (int16 units) for HOLD frames, run after the load and before '
+                                 'the sample; repeatable, run in order. TOTK moves Link with the stick only, so a '
+                                 'scene that explores (and redraws the map) needs these. Every command the game '
+                                 'accepts is logged; a rejected line fails the scene, not the run.')
     run_parser.add_argument('--env', action='append', default=[], metavar='KEY=VALUE',
                             help='extra environment variable for the game, repeatable, for an A/B arm of one '
                                  'development switch (e.g. TOTK_VK_NO_LOCAL_BARRIER=1). Names already set by the '
