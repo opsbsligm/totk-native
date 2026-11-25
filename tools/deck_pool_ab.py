@@ -13,7 +13,8 @@ GPU execution measurements, and the game's present cadence is not the panel's sc
 usage: python3 tools/deck_pool_ab.py run --dir <case-dir> --release <release-dir> \
            --pool-mode import|copy --commit <source-commit> [--sample-seconds 50]
            (copy only) --pool-mem cached|uncached|device selects the memory the copies live in
-           --gpu-passprof-at <present> takes the GPU time of every render pass of that one frame
+           --gpu-passprof-after <seconds> times every render pass of a window of presents that opens that far
+           into the run (the game aggregates it by pass kind and logs the breakdown; diagnostic)
        python3 tools/deck_pool_ab.py summarize --dir <case-dir>   # one completed case
 """
 import argparse
@@ -305,11 +306,14 @@ def frames_in(case, first, last):
     return frames
 
 
-# The game's own per-pass breakdown of one profiled frame, as the backend logs it (backend_vk.c pp_report):
-# "pass profile of present N: P passes, X ms in passes, Y ms between them, Z ms first to last" and the sorted rows.
-PASS_PROFILE = re.compile(r'pass profile of present (?P<present>\d+): (?P<passes>\d+) passes, (?P<inpass>[\d.]+) ms in '
-                          r'passes, (?P<between>[\d.]+) ms between them, (?P<span>[\d.]+) ms first to last')
-PASS_LINE = re.compile(r'(?P<ms>[\d.]+) ms {2}pass +(?P<index>\d+) +(?P<extent>\d+x\d+) +.*? (?P<draws>\d+) draws + fs (?P<shader>\S+)')
+# The game's own per-pass breakdown of the profiled window, as the backend logs it (backend_vk.c pp_report): the total
+# line names the presents covered, then one row per pass kind (extent, colour count, formats, first shader) ranked by
+# the GPU time it took over the window.
+PASS_PROFILE = re.compile(r'pass profile of presents (?P<from>\d+)\.\.(?P<to>\d+): (?P<passes>\d+) passes over '
+                          r'(?P<frames>\d+) presents, (?P<inpass>[\d.]+) ms in passes, (?P<between>[\d.]+) ms between '
+                          r'them, (?P<span>[\d.]+) ms first to last \((?P<per_present>[\d.]+) ms in passes per present\)')
+PASS_LINE = re.compile(r'(?P<ms>[\d.]+) ms x(?P<count>\d+) +(?P<kind>\S+) +(?P<draws>\d+) draws avg +per present '
+                       r'(?P<per_present>[\d.]+) ms + peak (?P<peak>[\d.]+) ms')
 
 
 def attribute_long_frames(frames, samples, threshold=50.0, top=4):
@@ -418,13 +422,18 @@ def summarize(case):
         for line in log.read_text(errors='replace').splitlines():
             total = PASS_PROFILE.search(line)
             if total:
-                passes = dict(present=int(total['present']), passes=int(total['passes']), in_pass_ms=float(total['inpass']),
-                              between_ms=float(total['between']), span_ms=float(total['span']), top=[])
+                passes = dict(presents=[int(total['from']), int(total['to'])], profiled_presents=int(total['frames']),
+                              passes=int(total['passes']), in_pass_ms=float(total['inpass']),
+                              between_ms=float(total['between']), span_ms=float(total['span']),
+                              in_pass_ms_per_present=float(total['per_present']), kinds=[])
                 continue
             one = PASS_LINE.search(line)
-            if one and passes is not None and len(passes['top']) < 12:   # the log already sorts them by time
-                passes['top'].append(dict(ms=float(one['ms']), index=int(one['index']), draws=int(one['draws']),
-                                          extent=one['extent'], shader=one['shader']))
+            if one and passes is not None and len(passes['kinds']) < 12:   # the log already sorts them by time
+                # kind: extent/colour count/colour format/depth format/first shader, as pp_report writes it.
+                fields = one['kind'].split('/')
+                passes['kinds'].append(dict(ms=float(one['ms']), count=int(one['count']), targets=one['kind'],
+                                            extent=fields[0], shader=fields[-1], draws_avg=int(one['draws']),
+                                            ms_per_present=float(one['per_present']), peak_ms=float(one['peak'])))
     summary = dict(source_commit=session['source_commit'], pool_mode=session['pool_mode'],
                    pool_mem=session.get('pool_mem', 'n/a'),
                    window_size=session.get('window_size', [WINDOW_W, WINDOW_H]),
@@ -445,10 +454,10 @@ def summarize(case):
                    original_save_files=result['player_save_files'],
                    original_saves_unchanged=result['player_saves_unchanged'],
                    focus_restored=True, hardware_validated=False,
-                   gpu_passprof_at=session.get('gpu_passprof_at'),
+                   gpu_passprof_after_s=session.get('gpu_passprof_after_s'),
                    gpu_pass_profile=passes or None,
                    limits=(['GPU pass profiling active: this run is a pass breakdown, not a frame-rate sample']
-                           if session.get('gpu_passprof_at') else []) +
+                           if session.get('gpu_passprof_after_s') else []) +
                           ([('presenting window %dx%d, below the panel: the scene keeps its fixed size, so this run '
                              'measures the upscale path; comparable only with the same size'
                              % tuple(session['window_size']))]
@@ -508,9 +517,10 @@ def run(args):
         if pool_mem != 'cached':
             env['TOTK_POOL_MEM'] = pool_mem
     env['TOTK_INPUT_FIFO'] = str(case / 'input.fifo')
-    passprof = getattr(args, 'gpu_passprof_at', 0)
+    passprof = getattr(args, 'gpu_passprof_after', 0)
     if passprof:
-        # One frame gets a timestamp pair per render pass; the report waits for the GPU, so that run is a diagnostic.
+        # A window of frames gets a timestamp pair per render pass; the report waits for the GPU, so that run is a
+        # diagnostic and not a frame-rate sample. The window opens after the scene has settled, not at a frame number.
         env['TOTK_GPU_PASSPROF'] = str(passprof)
     # An A/B arm of one development switch: the caller names the variable, the harness owns every other one.
     extra = arm_env(getattr(args, 'env', []), env)
@@ -527,7 +537,7 @@ def run(args):
         pid=child.pid, started=started, source_commit=args.commit, pool_mode=args.pool_mode,
         pool_mem=pool_mem or 'cached (the default kind)',
         release=str(release), scene=args.scene, save_isolated=True, maximum_seconds=args.maximum_seconds,
-        window_size=list(size), gpu_passprof_at=passprof or None,
+        window_size=list(size), gpu_passprof_after_s=passprof or None,
         extra_env=extra or None,
         command=command), indent=2) + '\n')
 
@@ -644,8 +654,9 @@ def main():
                             help='presenting window size WxH; TOTK renders its scene at this size, so it is the '
                                  'knob that separates pixel-bound GPU work from per-draw overhead (default: the Deck '
                                  'panel size, as the game is played)')
-    run_parser.add_argument('--gpu-passprof-at', type=int, default=0,
-                            help='present number whose render passes get GPU timestamps (diagnostic run)')
+    run_parser.add_argument('--gpu-passprof-after', type=int, default=0, metavar='SECONDS',
+                            help='open a GPU timestamp window over the render passes this many seconds into the run '
+                                 '(diagnostic run; the game reports the window by pass kind)')
     run_parser.add_argument('--stick', action='append', default=[], metavar='SEQ,LX,LY,HOLD',
                             help='hold the left stick (int16 units) for HOLD frames, run after the load and before '
                                  'the sample; repeatable, run in order. TOTK moves Link with the stick only, so a '
