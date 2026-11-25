@@ -16,14 +16,16 @@ static unsigned next_rand(void) { g_rng = g_rng * 1103515245u + 12345u; return g
    one descriptor, one block rectangle: A (whole level out, patch, whole level back) and B (only the rectangle moves)
    have to leave the storage identical */
 static void check(const nvn_texdesc *d, const char *what, unsigned level, unsigned layer,
-                  uint32_t sx, uint32_t sy, uint32_t bx, uint32_t by) {
+                  uint32_t sx, uint32_t sy, uint32_t bx, uint32_t by, unsigned z0, unsigned zslices) {
     uint32_t row_full, rows_full, slices, bpb; uint64_t base; unsigned th, td;
     if (nvn_deswizzle_geom(d, level, layer, &row_full, &rows_full, &slices, &base, &th, &td, &bpb)) return;
     if (sx >= row_full / bpb || sy >= rows_full || bx > row_full / bpb - sx || by > rows_full - sy || !bx || !by) return;
+    if (!zslices) zslices = slices;                       /* whole level by default | 默认整级 */
+    if (z0 >= slices || zslices > slices - z0) return;
     nvn_texlayout L; nvn_tex_layout(d, &L);
     size_t total = (size_t)L.size;
     uint32_t x0 = sx * bpb, pitch = bx * bpb;
-    size_t reg = (size_t)pitch * by * slices;
+    size_t reg = (size_t)pitch * by * zslices;   /* 矩形缓冲只装这份区域 | the region buffer holds just these slices */
     uint8_t *seed = malloc(total), *a = malloc(total), *b = malloc(total);
     uint8_t *lin_all = malloc((size_t)row_full * rows_full * slices), *lin_reg = malloc(reg), *patch = malloc(reg);
     if (!seed || !a || !b || !lin_all || !lin_reg || !patch) { puts("OOM"); exit(2); }
@@ -32,33 +34,34 @@ static void check(const nvn_texdesc *d, const char *what, unsigned level, unsign
     for (size_t i = 0; i < reg; i++) patch[i] = (uint8_t)(next_rand() & 0xff);
 
     if (nvn_deswizzle(d, level, layer, a, lin_all, row_full) ||
-        nvn_deswizzle_region(d, level, layer, b, lin_reg, pitch, x0, sy, pitch, by)) {
+        nvn_deswizzle_region(d, level, layer, z0, zslices, b, lin_reg, pitch, x0, sy, pitch, by)) {
         printf("FAIL %s level %u: move rejected\n", what, level); exit(1);
     }
     /* B 读出的矩形必须与整级解出的同一段一致，否则后面的比较没有意义
        B's read has to match the same bytes A read, or comparing the results would prove nothing */
-    for (uint32_t z = 0; z < slices; z++)
+    for (uint32_t z = z0; z < z0 + zslices; z++)
         for (uint32_t r = 0; r < by; r++)
-            if (memcmp(lin_all + ((size_t)z * rows_full + sy + r) * row_full + x0, lin_reg + ((size_t)z * by + r) * pitch, pitch)) {
+            if (memcmp(lin_all + ((size_t)z * rows_full + sy + r) * row_full + x0,
+                       lin_reg + ((size_t)(z - z0) * by + r) * pitch, pitch)) {
                 printf("FAIL %s level %u slice %u row %u: the rectangle read differs\n", what, level, z, r); exit(1);
             }
     /* 同一份新内容写进两边：整级的那份改到对应位置，矩形那份整块替换
        one new content into both: A's rows patched in place, B's whole buffer replaced */
-    for (uint32_t z = 0; z < slices; z++)
+    for (uint32_t z = z0; z < z0 + zslices; z++)
         for (uint32_t r = 0; r < by; r++) {
-            uint8_t *row = patch + ((size_t)z * by + r) * pitch;
+            uint8_t *row = patch + ((size_t)(z - z0) * by + r) * pitch;
             for (uint32_t i = 0; i < pitch; i++) row[i] = (uint8_t)(row[i] ^ 0x5a);
             memcpy(lin_all + ((size_t)z * rows_full + sy + r) * row_full + x0, row, pitch);
-            memcpy(lin_reg + ((size_t)z * by + r) * pitch, row, pitch);
+            memcpy(lin_reg + ((size_t)(z - z0) * by + r) * pitch, row, pitch);
         }
     if (nvn_swizzle(d, level, layer, lin_all, row_full, a) ||
-        nvn_swizzle_region(d, level, layer, lin_reg, pitch, b, x0, sy, pitch, by)) {
+        nvn_swizzle_region(d, level, layer, z0, zslices, lin_reg, pitch, b, x0, sy, pitch, by)) {
         printf("FAIL %s level %u: move back rejected\n", what, level); exit(1);
     }
     size_t first = 0, diff = 0;
     for (size_t i = 0; i < total; i++) if (a[i] != b[i]) { if (!diff) first = i; diff++; }
-    if (diff) { printf("FAIL %s level %u layer %u rect %u,%u %ux%u blocks: %zu bytes differ, first at +%zu\n",
-                       what, level, layer, sx, sy, bx, by, diff, first); exit(1); }
+    if (diff) { printf("FAIL %s level %u layer %u rect %u,%u %ux%u blocks slices %u+%u: %zu bytes differ, first at +%zu\n",
+                       what, level, layer, sx, sy, bx, by, z0, zslices, diff, first); exit(1); }
     free(seed); free(a); free(b); free(lin_all); free(lin_reg); free(patch);
 }
 
@@ -70,6 +73,7 @@ int main(void) {
         { .d = { .target=1, .format=0x01, .samples=0, .width=108, .height=108, .depth=1, .levels=1, .stride=0 }, "R8 108x108 (the prompt masks)" },
         { .d = { .target=4, .format=0x0A, .samples=0, .width=64, .height=64, .depth=12, .levels=1, .stride=0 }, "2D array RGBA8 64x64x12" },
         { .d = { .target=1, .format=0x41, .samples=0, .width=33, .height=17, .depth=1, .levels=1, .stride=0 }, "BC1 33x17 (partial GOB column)" },
+        { .d = { .target=2, .format=0x0A, .samples=0, .width=64, .height=64, .depth=12, .levels=1, .stride=0 }, "3D RGBA8 64x64x12 (WriteTexels with a slice offset)" },
     };
     int checks = 0;
     for (unsigned c = 0; c < sizeof cases / sizeof *cases; c++) {
@@ -78,11 +82,15 @@ int main(void) {
         for (unsigned level = 0; level < levels; level++)
             for (unsigned layer = 0; layer < layers; layer++) {
                 /* 对齐的、不对齐的、整级、贴右下的、单个块 | GOB-aligned, unaligned, whole, bottom-right, one block */
-                static const struct { uint32_t sx, sy, bx, by; } regs[] = {
-                    {0, 0, 1, 1}, {8, 1, 16, 2}, {0, 0, 1u << 20, 1u << 20}, {3, 5, 7, 9},
+                /* 对齐的、不对齐的、整级、贴右下的、单个块；3D 另加切片偏移 | GOB-aligned, unaligned, whole,
+                   bottom-right, one block; 3D also with a non-zero slice offset (the game writes a slice range, not just 0) */
+                static const struct { uint32_t sx, sy, bx, by; unsigned z0, zslices; } regs[] = {
+                    {0, 0, 1, 1, 0, 0}, {8, 1, 16, 2, 0, 0}, {0, 0, 1u << 20, 1u << 20, 0, 0}, {3, 5, 7, 9, 0, 0},
+                    {0, 0, 1u << 20, 1u << 20, 3, 4}, {4, 2, 3, 2, 1, 2},
                 };
                 for (unsigned p = 0; p < sizeof regs / sizeof *regs; p++) {
-                    check(d, cases[c].what, level, layer, regs[p].sx, regs[p].sy, regs[p].bx, regs[p].by);
+                    check(d, cases[c].what, level, layer, regs[p].sx, regs[p].sy, regs[p].bx, regs[p].by,
+                          regs[p].z0, regs[p].zslices);
                     checks++;
                 }
             }
