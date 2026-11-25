@@ -2029,7 +2029,7 @@ static void pp_report(void) {   // once the window is full: wait for the GPU, re
 // window, and takes the report when the window is full. Runs whether or not the window is visible, so a frame the game
 // drops cannot leave the profile waiting for a present that never comes.
 static void pp_window(void) {
-    if (g_pp_done || vkb_frame() < 1) return;
+    if (pp_after_s() <= 0 || g_pp_done || vkb_frame() < 1) return;   // off: nothing timed, nothing allocated
     if (!g_pp_t0) { g_pp_t0 = runtime_now_ns(); return; }
     if (!g_pp_started) {   // the window opens at a present, never mid-frame: a frame half in the window is not measurable
         if ((runtime_now_ns() - g_pp_t0) / 1000000000ull < (uint64_t)pp_after_s()) return;
