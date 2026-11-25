@@ -2509,12 +2509,15 @@ uint64_t mtl_present(const tex_t *t, double period_s, const int crop[4]) {
                 if (cn) VLOG("per frame: counter reports by type:%s", cl);
             }
             {
-                static uint64_t pc, pb, pn, ph, pd;
-                uint64_t c, b, ns, h, d;
-                vkb_ucap_stats(&c, &b, &ns, &h, &d);
+                static uint64_t pc, pb, pn, ph, pd, pw, pp, pr;
+                uint64_t c, b, ns, h, d, w, p, r;
+                vkb_ucap_stats(&c, &b, &ns, &h, &d, &w, &p, &r);
                 VLOG("per frame: uniforms copied at submit %.2f MiB in %.0f submissions (%.2f ms on the game thread), bindings from the copy %.0f, dropped by GPU writes %.1f",
                      (double)(b - pb) / 1048576.0 / f, (double)(c - pc) / f, (double)(ns - pn) / 1e6 / f, (double)(h - ph) / f, (double)(d - pd) / f);
+                VLOG("per frame: uniform capture of that %.2f ms walking and sorting %.0f ranges + %.2f ms copying the bytes",
+                     (double)(w - pw) / 1e6 / f, (double)(r - pr) / f, (double)(p - pp) / 1e6 / f);
                 pc = c; pb = b; pn = ns; ph = h; pd = d;
+                pw = w; pp = p; pr = r;
             }
             if (vkb_shadow_on()) {
                 static uint64_t pin, pib, pob, pdf, psc, pwp, pwk, pwb, pu0, pu1, pu2;
