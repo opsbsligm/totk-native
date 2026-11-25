@@ -26,10 +26,12 @@
 #define VLOG(...) LOG("[vk] " __VA_ARGS__)
 // SSBO_MAX: TOTK binds one 1.4 MB storage buffer (per-object transforms / skinning) to most draws of a frame; read live,
 // animated meshes and props tore into wedges (2026-10-28, F9 geom8/f6333).
-enum { UBO_MAX = 65536, OTHER_MAX = 1 << 20, SSBO_MAX = 4 << 20, MERGE_MAX = 4 << 20 };
+enum { UBO_MAX = 65536, OTHER_MAX = 1 << 20, SSBO_MAX = 4 << 20, MERGE_MAX = 4 << 20,
+       SPARE_MAX_BYTES = 8 << 20 };   // a spare capture's bytes stay mapped up to this: a frame of TOTK needs 3-4 MiB
 
 typedef struct { uint64_t lo, hi; } rng;
-typedef struct { int n; rng *r; size_t *off; uint8_t *bytes; uint64_t done; } ucap;   // ranges sorted, disjoint; off: into bytes; done: the GPU had completed this submission at the capture
+typedef struct { int n; rng *r; size_t *off; uint8_t *bytes; uint64_t done;
+                 int capr; size_t capoff, capbytes; } ucap;   // ranges sorted, disjoint; off: into bytes; done: the GPU had completed this submission at the capture; cap*: kept for the next capture
 
 int vkb_ucap_on(void) {
     static int on = -1;
@@ -67,15 +69,48 @@ static void collect(rng **v, int *n, int *cap, const uint8_t *p, int depth) {
 }
 static int rng_cmp(const void *a, const void *b) { const rng *x = a, *y = b; return x->lo < y->lo ? -1 : x->lo > y->lo; }
 
-static _Atomic uint64_t g_cap_bytes, g_cap_ns, g_caps;
+static _Atomic uint64_t g_cap_bytes, g_cap_ns, g_caps, g_scan_ns, g_copy_ns, g_ranges;
+
+// One capture per submission, and the replay of the next submission is what stops the bytes of the previous one being
+// read (mtl_sub_snapshot_ubos_cap), so the buffers of a finished capture go to a spare list and are reused: glibc maps a
+// malloc of this size with mmap and unmaps it at free, which costs a page fault per 4 KiB copied and a TLB shootdown
+// every frame (the Deck: 3.44 MiB and 2.43 ms a frame in this call, 2026-11-26).
+static pthread_mutex_t g_spare_mu = PTHREAD_MUTEX_INITIALIZER;
+static ucap *g_spare[3];   // a few, so the memory held here stays above a frame's need and below a tenth of it
+static int g_nspare;
+
+static ucap *ucap_take(void) {
+    pthread_mutex_lock(&g_spare_mu);
+    ucap *c = g_nspare ? g_spare[--g_nspare] : NULL;
+    pthread_mutex_unlock(&g_spare_mu);
+    if (!c) {
+        if (!(c = calloc(1, sizeof *c))) die("uniform capture");
+    }
+    c->n = 0;
+    c->done = 0;
+    return c;
+}
+static void ucap_free(ucap *c) {
+    free(c->r); free(c->off); free(c->bytes); free(c);
+}
+static void ucap_give(ucap *c) {   // its bytes are no longer read: keep them for the next capture
+    if (!c) return;
+    if (c->capbytes > SPARE_MAX_BYTES) { ucap_free(c); return; }   // far above a frame's: do not hold it
+    pthread_mutex_lock(&g_spare_mu);
+    int keep = g_nspare < (int)(sizeof g_spare / sizeof *g_spare);
+    if (keep) g_spare[g_nspare++] = c;
+    pthread_mutex_unlock(&g_spare_mu);
+    if (!keep) ucap_free(c);
+}
+
 void *mtl_sub_capture_ubos(const uint64_t *h, int n) {   // game thread, in the submit call
     if (!vkb_ucap_on()) return NULL;
     uint64_t t0 = runtime_now_ns();
-    rng *v = NULL;
-    int nv = 0, cv = 0;
+    ucap *c = ucap_take();
+    rng *v = c->r;
+    int nv = 0, cv = c->capr;
     for (int i = 0; i < n; i++) collect(&v, &nv, &cv, (const uint8_t *)(uintptr_t)h[i], 0);
-    ucap *c = calloc(1, sizeof *c);
-    if (!c) die("uniform capture");
+    uint64_t t_walk = runtime_now_ns();
     c->done = mtl_done();   // before the bytes: a submission completing meanwhile only makes this conservative
     if (nv) {
         qsort(v, (size_t)nv, sizeof *v, rng_cmp);
@@ -90,17 +125,26 @@ void *mtl_sub_capture_ubos(const uint64_t *h, int n) {   // game thread, in the 
             v[++k] = v[i];
         }
         c->n = k + 1;
-        c->off = malloc(sizeof *c->off * (size_t)(c->n ? c->n : 1));
-        if (!c->off) die("uniform capture");
+        if ((size_t)c->n > c->capoff) {
+            if (!(c->off = realloc(c->off, sizeof *c->off * (size_t)c->n))) die("uniform capture");
+            c->capoff = (size_t)c->n;
+        }
         size_t total = 0;
         for (int i = 0; i < c->n; i++) { c->off[i] = total; total += (size_t)(v[i].hi - v[i].lo); }
-        c->bytes = malloc(total ? total : 1);
-        if (!c->bytes) die("uniform capture bytes");
+        if (total > c->capbytes) {
+            if (!(c->bytes = realloc(c->bytes, total))) die("uniform capture bytes");
+            c->capbytes = total;
+        }
         for (int i = 0; i < c->n; i++) memcpy(c->bytes + c->off[i], (const void *)(uintptr_t)v[i].lo, (size_t)(v[i].hi - v[i].lo));
         c->r = v; v = NULL;
+        c->capr = cv;
+        atomic_fetch_add(&g_ranges, (uint64_t)c->n);
         atomic_fetch_add(&g_cap_bytes, total);
+        atomic_fetch_add(&g_copy_ns, runtime_now_ns() - t_walk);
+    } else {
+        c->capr = cv;
     }
-    free(v);
+    atomic_fetch_add(&g_scan_ns, t_walk - t0);
     atomic_fetch_add(&g_cap_ns, runtime_now_ns() - t0);
     atomic_fetch_add(&g_caps, 1);
     return c;
@@ -153,7 +197,8 @@ static int arena_get(int slot, VkDeviceSize need) {
 
 void mtl_sub_snapshot_ubos_cap(const uint64_t *h, int n, void *capv) {   // replay thread, the submission just begun
     ucap *c = capv ? capv : mtl_sub_capture_ubos(h, n);   // without the translation thread: the replay is in the submit call
-    if (g_cur) { free(g_cur->r); free(g_cur->off); free(g_cur->bytes); free(g_cur); g_cur = NULL; }
+    ucap_give(g_cur);   // the replay above read its bytes: kept for the next capture
+    g_cur = NULL;
     g_nu = 0; g_uslot = -1; g_ubytes = NULL; g_uoff = NULL;
     if (!c) return;
     g_cur = c;
@@ -225,6 +270,8 @@ void vkb_ucap_drop(uint64_t addr, uint64_t len) {   // a GPU write to [addr, add
     if (g_npend == g_cappend) { g_cappend = g_cappend ? g_cappend * 2 : 1024; if (!(g_pend = realloc(g_pend, sizeof *g_pend * (size_t)g_cappend))) die("pending GPU writes"); }
     g_pend[g_npend++] = (pend_t){addr, addr + len, mtl_last_fence() + 1};
 }
-void vkb_ucap_stats(uint64_t *caps, uint64_t *bytes, uint64_t *ns, uint64_t *hits, uint64_t *drops) {
+void vkb_ucap_stats(uint64_t *caps, uint64_t *bytes, uint64_t *ns, uint64_t *hits, uint64_t *drops,
+                    uint64_t *walk_ns, uint64_t *copy_ns, uint64_t *ranges) {
     *caps = g_caps; *bytes = g_cap_bytes; *ns = g_cap_ns; *hits = vkb_cnt_sum(g_hits); *drops = g_drops;
+    *walk_ns = g_scan_ns; *copy_ns = g_copy_ns; *ranges = g_ranges;
 }

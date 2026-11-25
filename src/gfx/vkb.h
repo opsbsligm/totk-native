@@ -150,7 +150,10 @@ int vkb_ucap_range(uint64_t addr, uint64_t size, VkBuffer *buf, VkDeviceSize *of
 void vkb_ucap_read(uint64_t addr, void *out, size_t n);   // CPU read of uniform memory, from the copy where there is one
 void vkb_ucap_drop(uint64_t addr, uint64_t len);
 int vkb_ucap_why(uint64_t addr, uint64_t size);          // a GPU write: copies it overlaps are no longer used
-void vkb_ucap_stats(uint64_t *caps, uint64_t *bytes, uint64_t *ns, uint64_t *hits, uint64_t *drops);
+// caps/bytes/ns: captures taken, bytes copied, total ns on the game thread. walk_ns: the command walk of the ranges,
+// copy_ns: the copies themselves, ranges: ranges captured. Development: the per-frame log line.
+void vkb_ucap_stats(uint64_t *caps, uint64_t *bytes, uint64_t *ns, uint64_t *hits, uint64_t *drops,
+                    uint64_t *walk_ns, uint64_t *copy_ns, uint64_t *ranges);
 
 // ---- vkb_bc7.c: ASTC textures as BC7, from a cache by the contents of the ASTC blocks
 typedef struct { uint64_t a, b; } vkb_bc7_key;
