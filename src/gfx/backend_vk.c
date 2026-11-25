@@ -1901,27 +1901,37 @@ int vkb_rt_count(void) { return g_rt.n < 0 ? 0 : g_rt.n > 8 ? 8 : g_rt.n; }
 VkExtent2D vkb_rt_extent(void) { return g_pass_extent; }
 int vkb_ready(void) { return g_ok == 1; }
 
-// ---- TOTK_GPU_PASSPROF=<present>: GPU time of every render pass of that frame (a timestamp at its start and end; work
-// between passes - copies, dispatches, barriers - as gaps). One timestamp pair per pass, not per draw: per-draw
-// timestamps serialise the GPU and inflate small draws. The report names each pass by its targets, draws and first
-// fragment shader, sorted by time (development).
-enum { PP_MAX = 4096 };
-typedef struct { uint32_t w, h, ncolor, fmt0, depth, draws; uint64_t draws0; char key[16]; } pp_info;
+// ---- TOTK_GPU_PASSPROF=<seconds>: GPU time of every render pass of a window of PP_FRAMES presents that opens
+// <seconds> after the game first presents (a timestamp at a pass's start and end; work between passes - copies,
+// dispatches, barriers - as gaps). One timestamp pair per pass, not per draw: per-draw timestamps serialise the GPU and
+// inflate small draws. Naming one present in advance proved uncatchable twice, because nothing knows which present lands
+// in the scene the harness walked to, so the window is a delay from play and the report aggregates it by pass kind -
+// extent, formats and first fragment shader - ranked by total GPU time, with the per-frame totals beside it
+// (development).
+enum { PP_MAX = 8192, PP_FRAMES = 4, PP_KINDS = 256 };
+typedef struct { uint32_t w, h, ncolor, fmt0, depth, draws; uint64_t draws0, frame; char key[16]; } pp_info;
+typedef struct { char kind[80]; uint32_t count; uint64_t draws; double ms, max_ms; } pp_kind;
 static VkQueryPool g_ppq;
 static pp_info g_pp[PP_MAX];
-static int g_ppn, g_pp_done;
+static pp_kind g_ppk[PP_KINDS];
+static int g_ppn, g_ppkn, g_pp_done;
+static uint64_t g_pp_t0;        // first present: the window opens pp_after_s() after this
+static uint64_t g_pp_present0;  // the present that closed the first profiled frame, and the last
+static uint64_t g_pp_present1;
+static int g_pp_started;        // window open: the passes recorded from here are timed
+static int g_pp_frames;         // profiled presents closed so far
 // The profiled frame is recorded by several threads at once (the pass profile no longer forces one thread,
 // vkb_mt_on), so the table is shared: its bookkeeping is under a lock, and which pass this thread opened is
 // per thread. A pass's "draws" is then the draws of the thread that recorded it, and the pass order is the
 // order of the BeginRendering calls across threads - right for the sum and the ranking, not for spacing.
 static __thread int g_pp_open = -1;
 static pthread_mutex_t g_pp_mu = PTHREAD_MUTEX_INITIALIZER;
-static long long pp_frame(void) {
-    static long long at = -1;
-    if (at < 0) { const char *e = getenv("TOTK_GPU_PASSPROF"); at = e ? atoll(e) : 0; }
+static long pp_after_s(void) {   // start the window this many seconds after the first present
+    static long at = -1;
+    if (at < 0) { const char *e = getenv("TOTK_GPU_PASSPROF"); at = e ? atol(e) : 0; }
     return at;
 }
-static int pp_on(void) { return pp_frame() > 0 && !g_pp_done && vkb_frame() == (uint64_t)pp_frame(); }
+static int pp_on(void) { return g_pp_started && !g_pp_done && g_pp_frames < PP_FRAMES; }
 void vkb_passprof_note(const char *key) {   // vkb_draw.c: the first fragment shader of the open pass
     if (g_pp_open < 0 || !key) return;
     pthread_mutex_lock(&g_pp_mu);
@@ -1933,7 +1943,8 @@ static void pp_begin(VkCommandBuffer cb, VkExtent2D ext) {
     pthread_mutex_lock(&g_pp_mu);
     if (g_pp_done || g_ppn >= PP_MAX / 2) { pthread_mutex_unlock(&g_pp_mu); return; }
     if (!g_ppq) {
-        VkQueryPoolCreateInfo ci = {VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, .queryType = VK_QUERY_TYPE_TIMESTAMP, .queryCount = PP_MAX};
+        VkQueryPoolCreateInfo ci = {VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO, .queryType = VK_QUERY_TYPE_TIMESTAMP,
+                                            .queryCount = PP_MAX};
         if (!vk_check(vk.vkCreateQueryPool(vkc.device, &ci, NULL, &g_ppq), "pass timestamp pool")) { g_pp_done = 1; pthread_mutex_unlock(&g_pp_mu); return; }
         vk.vkResetQueryPool(vkc.device, g_ppq, 0, PP_MAX);
     }
@@ -1943,6 +1954,7 @@ static void pp_begin(VkCommandBuffer cb, VkExtent2D ext) {
     p->ncolor = (uint32_t)(g_rt.n < 0 ? 0 : g_rt.n);
     p->fmt0 = g_rt.n > 0 && g_rt.color[0] ? (uint32_t)g_rt.color[0]->d.format : 0;
     p->depth = g_rt.depth ? (uint32_t)g_rt.depth->d.format : 0;
+    p->frame = vkb_frame();
     p->draws0 = vkb_draw_count();
     vk.vkCmdWriteTimestamp2(cb, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, g_ppq, (uint32_t)(2 * g_ppn));
     g_pp_open = g_ppn++;
@@ -1958,37 +1970,76 @@ static void pp_end(VkCommandBuffer cb) {
     pthread_mutex_unlock(&g_pp_mu);
 }
 static int pp_cmp(const void *a, const void *b) {
-    double x = ((const double *)a)[0], y = ((const double *)b)[0];
+    double x = ((const pp_kind *)a)->ms, y = ((const pp_kind *)b)->ms;
     return x < y ? 1 : x > y ? -1 : 0;
 }
-static void pp_report(void) {   // at a present after the frame: wait for the GPU, read, print
-    if (!g_ppn || g_pp_done || pp_frame() <= 0 || vkb_frame() <= (uint64_t)pp_frame()) return;
+static void pp_report(void) {   // once the window is full: wait for the GPU, read, group by kind, print
     g_pp_done = 1;
     mtl_finish();
     uint64_t *ts = malloc(sizeof *ts * 2 * (size_t)g_ppn);
-    double (*row)[2] = malloc(sizeof *row * (size_t)g_ppn);
-    if (!ts || !row) goto cleanup;
+    if (!ts) return;
     VkResult r = vk.vkGetQueryPoolResults(vkc.device, g_ppq, 0, (uint32_t)(2 * g_ppn), sizeof *ts * 2 * (size_t)g_ppn, ts, sizeof *ts,
-                                          VK_QUERY_RESULT_64_BIT);
-    if (r != VK_SUCCESS) { VLOG("pass profile: results %d", (int)r); goto cleanup; }
-    double per = vkc.props.limits.timestampPeriod / 1e6, inpass = 0, gaps = 0;
+                                         VK_QUERY_RESULT_64_BIT);
+    if (r != VK_SUCCESS) { VLOG("pass profile: results %d", (int)r); free(ts); return; }
+    double per = vkc.props.limits.timestampPeriod / 1e6, inpass = 0, gaps = 0, span = 0;
+    uint64_t frame = UINT64_MAX, run_first = 0, run_last = 0;
     for (int i = 0; i < g_ppn; i++) {
-        row[i][0] = ts[2 * i + 1] > ts[2 * i] ? (double)(ts[2 * i + 1] - ts[2 * i]) * per : 0;
-        row[i][1] = i;
-        inpass += row[i][0];
-        if (i && ts[2 * i] > ts[2 * i - 1]) gaps += (double)(ts[2 * i] - ts[2 * i - 1]) * per;
+        pp_info *p = &g_pp[i];
+        double ms = ts[2 * i + 1] > ts[2 * i] ? (double)(ts[2 * i + 1] - ts[2 * i]) * per : 0;
+        inpass += ms;
+        // The passes of the window sit in one table in the order they were begun, so a gap and a span only mean
+        // something inside one present: where the frame changes, the run is closed and its span banked.
+        if (p->frame != frame) {
+            if (frame != UINT64_MAX && run_last > run_first) span += (double)(run_last - run_first) * per;
+            frame = p->frame;
+            run_first = ts[2 * i];
+        } else if (ts[2 * i] > ts[2 * i - 1]) {
+            gaps += (double)(ts[2 * i] - ts[2 * i - 1]) * per;
+        }
+        if (ts[2 * i + 1] > run_last) run_last = ts[2 * i + 1];
+        char kind[80];
+        // No spaces in the kind: one field, and the log line stays parseable as it is read back.
+        snprintf(kind, sizeof kind, "%ux%u/%uc/fmt%x/d%x/%s", p->w, p->h, p->ncolor, p->fmt0, p->depth,
+                 p->key[0] ? p->key : "-");
+        pp_kind *k = NULL;
+        for (int j = 0; j < g_ppkn; j++)
+            if (!strcmp(g_ppk[j].kind, kind)) { k = &g_ppk[j]; break; }
+        if (!k && g_ppkn < PP_KINDS) {
+            k = &g_ppk[g_ppkn++];
+            memset(k, 0, sizeof *k);
+            snprintf(k->kind, sizeof k->kind, "%s", kind);
+        }
+        if (k) { k->count++; k->draws += p->draws; k->ms += ms; if (ms > k->max_ms) k->max_ms = ms; }
     }
-    double span = (double)(ts[2 * g_ppn - 1] - ts[0]) * per;
-    VLOG("pass profile of present %lld: %d passes, %.2f ms in passes, %.2f ms between them, %.2f ms first to last",
-         pp_frame(), g_ppn, inpass, gaps, span);
-    qsort(row, (size_t)g_ppn, sizeof *row, pp_cmp);
-    for (int k = 0; k < g_ppn && k < 30; k++) {
-        const pp_info *p = &g_pp[(int)row[k][1]];
-        VLOG("  %7.3f ms  pass %4d  %ux%u  %u colour (fmt %#x) depth %#x  %u draws  fs %s", row[k][0], (int)row[k][1], p->w, p->h,
-             p->ncolor, p->fmt0, p->depth, p->draws, p->key[0] ? p->key : "-");
+    if (frame != UINT64_MAX && run_last > run_first) span += (double)(run_last - run_first) * per;
+    int frames = g_pp_frames ? g_pp_frames : 1;
+    VLOG("pass profile of presents %llu..%llu: %d passes over %d presents, %.2f ms in passes, %.2f ms between them, "
+         "%.2f ms first to last (%.2f ms in passes per present)",
+         (unsigned long long)g_pp_present0, (unsigned long long)g_pp_present1, g_ppn, g_pp_frames, inpass, gaps, span,
+         inpass / frames);
+    qsort(g_ppk, (size_t)g_ppkn, sizeof *g_ppk, pp_cmp);
+    for (int k = 0; k < g_ppkn && k < 25; k++) {
+        pp_kind *r = &g_ppk[k];
+        VLOG("  %7.3f ms x%u  %s  %u draws avg  per present %.2f ms  peak %.3f ms", r->ms, r->count, r->kind,
+             (unsigned)(r->draws / (r->count ? r->count : 1)), r->ms / frames, r->max_ms);
     }
-cleanup:
-    free(ts); free(row);
+    free(ts);
+}
+// Called once per present at the report point: anchors the clock at the first present, counts the presents inside the
+// window, and takes the report when the window is full. Runs whether or not the window is visible, so a frame the game
+// drops cannot leave the profile waiting for a present that never comes.
+static void pp_window(void) {
+    if (g_pp_done || vkb_frame() < 1) return;
+    if (!g_pp_t0) { g_pp_t0 = runtime_now_ns(); return; }
+    if (!g_pp_started) {   // the window opens at a present, never mid-frame: a frame half in the window is not measurable
+        if ((runtime_now_ns() - g_pp_t0) / 1000000000ull < (uint64_t)pp_after_s()) return;
+        g_pp_started = 1;
+        return;
+    }
+    if (!g_pp_present0) g_pp_present0 = vkb_frame();
+    g_pp_present1 = vkb_frame();
+    if (++g_pp_frames < PP_FRAMES) return;
+    pp_report();
 }
 
 static void pass_end(void) {
@@ -2596,7 +2647,7 @@ uint64_t mtl_present(const tex_t *t, double period_s, const int crop[4]) {
     vkb_audit_present(n);
     dump_check(n);
     vkb_gprof_report();
-    pp_report();
+    pp_window();
     static int shot_wanted = -1;
     if (shot_wanted < 0) shot_wanted = getenv("TOTK_SHOT") || getenv("TOTK_DUMP");
     vkb_image *im = g_ok == 1 && (vkp_active() || shot_wanted) ? vkb_image_of(t) : NULL;   // headless: only for TOTK_SHOT
