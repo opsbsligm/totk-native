@@ -1214,6 +1214,48 @@ static int deck_prompt_upload(VkCommandBuffer cb,vkb_image *im,const uint8_t *sr
     return 1;
 }
 
+// A CPU texel write is the only change we can see in a pool without write watch, and WriteTexels names the rectangle it
+// wrote, so an upload can take just that rectangle instead of the level. Two textures in TOTK's title screen showed why
+// that matters: its map (5120x5120 BC1, 17 MiB) is rewritten in a small area every frame, and re-laying out and re-uploading
+// the level took 20-36 ms and made the top-left corner flash -- 105 of those in one Deck session, 2026-11-25.
+// The rectangle is trusted only while nothing else could have changed the bytes: no write watch (its pages would say what
+// changed by themselves), no flush notice covering the texture, no virtual pool remap, and no source of changes beyond
+// WriteTexels. Small textures are left to the paths below (they hash the whole level to recognise the art they replace,
+// and a partial upload would hide the game's own bytes from that check).
+static int region_upload(VkCommandBuffer cb, vkb_image *im, const nvn_texlayout *L, const uint8_t *src, int from_texel_write) {
+    const nvn_texdesc *d = &im->d;
+    if (!from_texel_write || !im->wr_valid || im->wr_level >= im->levels || im->wr_layer >= im->layers ||
+        im->vpool_gen || im->astc || im->aspect != VK_IMAGE_ASPECT_COLOR_BIT || L->size < (1u << 20)) return 0;
+    // Tracked pages would name the changed bytes themselves and are coarser than a rectangle; a flush notice says the game
+    // wrote here without saying where. Neither may be outstanding: 0 = nothing reported, -1 = the pool is not watched at all.
+    if (nvn_dirty_tracked(im->storage, L->size) || nvn_dirty_marked_since(im->storage, L->size, im->upload_stamp) > 0) return 0;
+    int bw = 1, bh = 1, bpb = nvn_fmt_bpb(d->format, &bw, &bh);
+    if (!bpb || (d->format >= 0x19 && d->format <= 0x24)) return 0;
+    uint32_t lw = im->width >> im->wr_level ? im->width >> im->wr_level : 1;
+    uint32_t lh = im->height >> im->wr_level ? im->height >> im->wr_level : 1;
+    uint32_t bx = (im->wrw + bw - 1) / bw, by = (im->wrh + bh - 1) / bh;
+    uint32_t sx = im->wrx0 / bw, sy = im->wry0 / bh, pitch = bx * (uint32_t)bpb;
+    if (!bx || !by || sx * bw > lw || sy * bh > lh || bx * (uint32_t)bw > lw - sx * bw || by * (uint32_t)bh > lh - sy * bh)
+        return 0;
+    // The region's rows, straight into upload memory: block-linear is a byte permutation, so the rectangle's own bytes are
+    // the whole truth about it and nothing else in the level has to be read or written.
+    VkBuffer buf; VkDeviceSize off;
+    uint8_t *rows = vkb_ring_alloc((VkDeviceSize)pitch * by, 16, &buf, &off);
+    if (nvn_deswizzle_region(d, im->wr_level, im->wr_layer, src, rows, pitch, sx * (uint32_t)bpb, sy, pitch, by)) return 0;
+    vkb_image_use(cb, im, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    VkBufferImageCopy r = {.bufferOffset = off, .bufferRowLength = bx * (uint32_t)bw, .bufferImageHeight = by * (uint32_t)bh,
+        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, im->wr_level, im->wr_layer, 1},
+        .imageOffset = {(int32_t)im->wrx0, (int32_t)im->wry0, 0}, .imageExtent = {bx * (uint32_t)bw, by * (uint32_t)bh, 1}};
+    vkb_checkpoint("upload texture region", NULL, NULL);
+    vk.vkCmdCopyBufferToImage(cb, buf, im->img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
+    im->wr_valid = 0;   // the game's writes so far are in the image
+    static _Atomic int said;
+    if (atomic_fetch_add(&said, 1) < 32)
+        VLOG("[texregion] texture %llu level %u: %ux%u texels, %.2f MiB instead of %.1f MiB", (unsigned long long)im->serial,
+             im->wr_level, im->wrw, im->wrh, (double)((size_t)pitch * by) / 1048576.0, L->size / 1048576.0);
+    return 1;
+}
+
 static int tex_upload(VkCommandBuffer cb, vkb_image *im) {
     if (!im->storage || im->gpu_written) return 0;
     const nvn_texdesc *d = &im->d;
@@ -1224,8 +1266,10 @@ static int tex_upload(VkCommandBuffer cb, vkb_image *im) {
     const char *why = !im->upload_stamp ? "first" : im->cpu_written ? "CPU texel write"
                     : im->vpool_gen && im->vpool_gen != totk_vpool_generation() ? "virtual pool remapped" : "pages written";
     uint64_t up_t0 = runtime_now_ns();
+    int why_cpu = im->cpu_written && !im->stale;   // the game's WriteTexels is the only change reported for this texture
     im->stale = 0;
     im->cpu_written = 0;
+    im->wr_valid = 0;   // whatever the game wrote so far is in the image after this upload
     if (vkb_rt_log_d(d)) VLOG("[rtlog] image %llu uploaded from game memory %p, present %llu", (unsigned long long)im->serial, (const void *)im->storage,
                               (unsigned long long)vkb_frame());
     int bw = 1, bh = 1, bpb = nvn_fmt_bpb(d->format, &bw, &bh);
@@ -1285,6 +1329,12 @@ static int tex_upload(VkCommandBuffer cb, vkb_image *im) {
     }
     int srgb = d->format >= 0x87 && d->format <= 0x94;
     if (deck_prompt_upload(cb, im, src, bw, bh, bpb) || deck_controller_upload(cb, im, src, bw, bh, bpb)) {
+        slow_upload_log(im, why, up_t0, L.size, gathered != NULL);
+        free(gathered);
+        __atomic_store_n(&im->uploading, 0, __ATOMIC_RELEASE);
+        return 1;
+    }
+    if (region_upload(cb, im, &L, src, why_cpu)) {
         slow_upload_log(im, why, up_t0, L.size, gathered != NULL);
         free(gathered);
         __atomic_store_n(&im->uploading, 0, __ATOMIC_RELEASE);
@@ -1417,19 +1467,28 @@ int mtl_write_texels_mem(const tex_t *t, unsigned level, unsigned layer0, const 
     uint32_t lbx = (lw + bw - 1) / bw, lby = (lh + bh - 1) / bh, pitch = lbx * (uint32_t)bpb;
     uint32_t sx = (uint32_t)r->xoffset / bw, sy = (uint32_t)r->yoffset / bh;
     if (sx + bx > lbx || sy + by > lby) { VLOG("WriteTexels: region outside texture %llu", (unsigned long long)t->serial); return 0; }
-    uint8_t *lin = malloc((size_t)pitch * lby * ld);
+    // 只搬这一次写入的矩形：块线性是字节置换，改写矩形自己的字节与「整级解出来、改、再整级排回去」逐字节相同，
+    // 但不必为游戏写的几 KB 复制整级。王国之泪每帧这样写它的地图（5120x5120 BC1，本级 13.1 MiB），旧路径在游戏线程上
+    // malloc 并来回排布 26 MiB，左上角小地图因此每帧闪一下（真机日志 105 次、每次 20-26 ms，2026-11-25）。
+    // Move only the rectangle this write covers: block-linear is a byte permutation, so rewriting the rectangle's own bytes
+    // is byte-identical to a whole-level round trip -- without copying a level for a few KB. TOTK writes its map
+    // (5120x5120 BC1) this way every frame; the old path permuted 26 MiB on the game thread and its minimap flickered.
+    uint8_t *lin = malloc((size_t)wb * by * (is3d ? ld : nz));
     if (!lin) die("WriteTexels");
     uint8_t *storage = (uint8_t *)t->mem;
     for (uint32_t z = 0; z < (is3d ? 1 : nz); z++) {   // 3D: one pass over the level's slices
         uint32_t layer = is3d ? 0 : layer0 + (uint32_t)r->zoffset + z;
-        if (nvn_deswizzle(&t->d, level, layer, storage, lin, pitch)) { VLOG("WriteTexels: texture %llu layout not supported", (unsigned long long)t->serial); break; }
+        if (nvn_deswizzle_region(&t->d, level, layer, storage, lin, (size_t)wb, sx * (uint32_t)bpb, sy, (uint32_t)wb, by)) {
+            VLOG("WriteTexels: texture %llu layout not supported", (unsigned long long)t->serial);
+            break;
+        }
         for (uint32_t s = 0; s < (is3d ? nz : 1); s++) {
             uint32_t slice = is3d ? (uint32_t)r->zoffset + s : 0;
             if (slice >= ld) break;
-            for (uint32_t y = 0; y < by; y++)
-                memcpy(lin + ((size_t)slice * lby + sy + y) * pitch + (size_t)sx * bpb, src + (is3d ? s : z) * img + y * row, wb);
+            uint8_t *d = lin + (is3d ? (size_t)slice * by * wb : 0);
+            for (uint32_t y = 0; y < by; y++) memcpy(d + (size_t)y * wb, src + (is3d ? s : z) * img + y * row, wb);
         }
-        nvn_swizzle(&t->d, level, layer, lin, pitch, storage);
+        if (nvn_swizzle_region(&t->d, level, layer, lin, (size_t)wb, storage, sx * (uint32_t)bpb, sy, (uint32_t)wb, by)) break;
     }
     free(lin);
     return 1;
@@ -1444,6 +1503,23 @@ void mtl_write_texels_image(const tex_t *t, unsigned level, unsigned layer0, con
     int is3d = t->d.target == NVN_TEXTURE_TARGET_3D;
     vkb_image *im = vkb_image_of(t);
     if (im && !im->gpu_written) im->cpu_written = 1;   // the pool may not be write-watched: say so directly
+    int aligned = bw == 1 || (r->xoffset % bw == 0 && r->width % bw == 0 && r->yoffset % bh == 0 && r->height % bh == 0);
+    if (im && !im->gpu_written && aligned && r->width > 0 && r->height > 0 && level < im->levels &&
+        !is3d && r->depth <= 1 && layer0 < im->layers) {
+        // The rectangle this write covered, so the upload can take just it (region_upload). Two writes before one upload
+        // widen it to cover both; a write of another level or layer starts a new one, and the level the old one referred
+        // to is then uploaded whole rather than guessed at (region_upload only runs while the rectangle is the whole story).
+        uint32_t x0 = (uint32_t)r->xoffset, y0 = (uint32_t)r->yoffset;
+        uint32_t x1 = x0 + (uint32_t)r->width, y1 = y0 + (uint32_t)r->height;
+        if (im->wr_level == level && im->wr_layer == layer0 && im->wr_valid) {
+            uint32_t ox0 = im->wrx0, oy0 = im->wry0, ox1 = ox0 + im->wrw, oy1 = oy0 + im->wrh;
+            im->wrx0 = ox0 < x0 ? ox0 : x0; im->wry0 = oy0 < y0 ? oy0 : y0;
+            im->wrw = (ox1 > x1 ? ox1 : x1) - im->wrx0; im->wrh = (oy1 > y1 ? oy1 : y1) - im->wry0;
+        } else if (!im->wr_valid) {
+            im->wrx0 = x0; im->wry0 = y0; im->wrw = (uint32_t)r->width; im->wrh = (uint32_t)r->height;
+            im->wr_level = level; im->wr_layer = layer0; im->wr_valid = 1;
+        } else im->wr_valid = 0;   // another level or layer too: no single rectangle tells the whole story
+    }
     if (im && im->gpu_written && !im->astc && im->aspect == VK_IMAGE_ASPECT_COLOR_BIT && !(t->d.format >= 0x19 && t->d.format <= 0x24)) {
         mtl_sub_begin();
         VkCommandBuffer cb = vkb_cmd();

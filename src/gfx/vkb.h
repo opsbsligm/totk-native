@@ -75,6 +75,12 @@ typedef struct vkb_image {
     uint64_t dirty_checked;        // the submission in which the game memory was last checked for CPU writes
     int stale;                     // that check found CPU writes: upload before the next use
     int cpu_written;               // WriteTexels changed its game memory: upload before the next use (any pool)
+    // The rectangle of the game's CPU texel writes since the last upload, in texels of wr_level / wr_layer (one layer).
+    // It lets an upload take just those texels when WriteTexels is the only way this texture could have changed
+    // (vkb_tex.c region_upload); anything else that touches the texture or its memory clears it.
+    int wr_valid;
+    uint32_t wrx0, wry0, wrw, wrh;
+    unsigned wr_level, wr_layer;
     int not_uploadable;            // contents in game memory that the upload cannot take (depth / 3-component formats)
     uint64_t vpool_gen;            // in a virtual pool: the mapping generation of the last upload (0: not in one)
     const uint8_t *storage;        // the texture's storage in game memory (block-linear / linear)

@@ -21,6 +21,22 @@ int nvn_swizzle(const nvn_texdesc *d, unsigned level, unsigned layer, const void
 // Single-point address: within this level and layer, linear (x byte, y block row, z slice) → block-linear byte offset relative to the start of this level and layer (unit tests verify against hand calculation)
 uint64_t nvn_bl_offset(uint32_t x, uint32_t y, uint32_t z, uint32_t row_bytes, uint32_t rows, unsigned tileH, unsigned tileD);
 
+// 只搬第 level 级、第 layer 层里的一个矩形：x0/y0 是本级内的线性字节列与块行（压缩格式 = 块坐标），
+// 宽 row_bytes 字节、高 rows 块行；dst_linear 行距 dst_pitch（≥ row_bytes）。正向解排布、反向回排布各一个入口，
+// 反向只改矩形内的块线性字节（布局是置换，不需要读改写周边数据）。
+// 游戏每次 WriteTexels 都只改地图的一小块，但整级搬运是 13 MiB 级：王国之泪左上角小地图因此每次闪一下
+// （5120x5120 BC1，2026-11-25 真机日志 105 次、每次 20-26 ms）。
+// Move only one rectangle of level `level`, layer `layer`: x0/y0 are the linear byte column and block row within the
+// level (block coordinates for compressed formats), row_bytes wide and rows block rows high; dst rows are dst_pitch
+// bytes apart (≥ row_bytes). The reverse direction rewrites only the rectangle's block-linear bytes — the layout is a
+// permutation, so no read-modify-write of the surroundings is needed.
+// LINEAR 存储、多重采样、BUFFER 与未知格式返回 -1；成功返回 0。
+// LINEAR storage, multisampling, BUFFER and unknown formats return -1; success returns 0.
+int nvn_deswizzle_region(const nvn_texdesc *d, unsigned level, unsigned layer, const void *src_storage,
+                         void *dst_linear, size_t dst_pitch, uint32_t x0, uint32_t y0, uint32_t row_bytes, uint32_t rows);
+int nvn_swizzle_region(const nvn_texdesc *d, unsigned level, unsigned layer, const void *src_linear, size_t src_pitch,
+                       void *dst_storage, uint32_t x0, uint32_t y0, uint32_t row_bytes, uint32_t rows);
+
 int nvn_deswizzle_geom(const nvn_texdesc *d, unsigned level, unsigned layer,
                        uint32_t *row_bytes, uint32_t *rows, uint32_t *slices,
                        uint64_t *base, unsigned *tileH, unsigned *tileD, uint32_t *bpb);
