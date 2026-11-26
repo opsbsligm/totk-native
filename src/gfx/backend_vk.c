@@ -1853,6 +1853,7 @@ void mtl_sub_copy(uint64_t src, uint64_t dst, uint64_t n) {
     full_barrier(cb);
 }
 
+static uint64_t g_updates_skipped;   // TOTK_VK_UPDATE=skip: updates left out, for the measurement line
 static void update_buffer(uint64_t dst, uint64_t n, const uint8_t *data) {
     if (watched(dst, n)) {
         static int said;
@@ -1864,6 +1865,12 @@ static void update_buffer(uint64_t dst, uint64_t n, const uint8_t *data) {
     }
     if (g_ok != 1) { memcpy((void *)(uintptr_t)dst, data, n); return; }
     if (!n) return;
+    // TOTK_VK_UPDATE=skip (measurement only): the update is left out altogether -- no pass break, no pair of barriers, no
+    // command -- so the frame says what the 236 breaks a frame cost. Draws read the submit-call capture of the bytes
+    // (vkb_ucap.c), which is what the game wrote before the update, so the frame renders with those uniforms a step old.
+    static int skip_update = -1;
+    if (skip_update < 0) { const char *e = getenv("TOTK_VK_UPDATE"); skip_update = e && !strcmp(e, "skip"); }
+    if (skip_update) { g_updates_skipped++; return; }
     pass_end_why(PE_UPDATE);
     vkb_mirrors_evict(dst, n);
     vkb_pool_use(dst, n, 1);
@@ -2639,6 +2646,12 @@ uint64_t mtl_present(const tex_t *t, double period_s, const int crop[4]) {
                 prev[k] = ended;
             }
             if (at) VLOG("passes ended per frame by:%s", line);
+            static uint64_t p_skip;
+            if (g_updates_skipped > p_skip) {
+                VLOG("uniform updates left out: %.0f/frame (%llu total): the frame renders with those uniforms as of"
+                     " the submit call", (double)(g_updates_skipped - p_skip) / f, (unsigned long long)g_updates_skipped);
+                p_skip = g_updates_skipped;
+            }
         }
         pb = vkb_cnt_sum(g_n_barriers); pi = vkb_cnt_sum(g_n_img_barriers); pp = vkb_cnt_sum(g_n_passes); pd = dn; pn = n;
     }
