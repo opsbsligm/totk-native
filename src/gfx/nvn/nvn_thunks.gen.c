@@ -3,1690 +3,2957 @@
 #include "include/nvn.h"
 #include "../../runtime/cpu.h"
 void *nvn_impl_fn(const char *name, int extra);
+// DM_NVN_PROF: the hooks that time one implemented call (hle_nvn.c)
+unsigned nvn_prof_index(const char *name);
+uint64_t nvn_prof_now(void);
+void nvn_prof_take(unsigned idx, uint64_t t0);
 
 static void T_nvnBlendStateGetBlendEquation(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateGetBlendEquation", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateGetBlendEquation");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBlendStateGetBlendFunc(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateGetBlendFunc", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateGetBlendFunc");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBlendStateGetBlendTarget(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateGetBlendTarget", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateGetBlendTarget");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBlendStateSetAdvancedMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateSetAdvancedMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateSetAdvancedMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNblendAdvancedMode))f)((void *)(uintptr_t)c->x[0], (NVNblendAdvancedMode)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBlendStateSetAdvancedNormalizedDst(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateSetAdvancedNormalizedDst", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateSetAdvancedNormalizedDst");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBlendStateSetAdvancedOverlap(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateSetAdvancedOverlap", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateSetAdvancedOverlap");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNblendAdvancedOverlap))f)((void *)(uintptr_t)c->x[0], (NVNblendAdvancedOverlap)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBlendStateSetAdvancedPremultipliedSrc(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateSetAdvancedPremultipliedSrc", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateSetAdvancedPremultipliedSrc");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBlendStateSetBlendEquation(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateSetBlendEquation", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateSetBlendEquation");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNblendEquation, NVNblendEquation))f)((void *)(uintptr_t)c->x[0], (NVNblendEquation)c->x[1], (NVNblendEquation)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBlendStateSetBlendFunc(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateSetBlendFunc", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateSetBlendFunc");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNblendFunc, NVNblendFunc, NVNblendFunc, NVNblendFunc))f)((void *)(uintptr_t)c->x[0], (NVNblendFunc)c->x[1], (NVNblendFunc)c->x[2], (NVNblendFunc)c->x[3], (NVNblendFunc)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBlendStateSetBlendTarget(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateSetBlendTarget", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateSetBlendTarget");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBlendStateSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBlendStateSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBlendStateSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferBuilderSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferBuilderSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferBuilderSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferBuilderSetDevice(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferBuilderSetDevice", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferBuilderSetDevice");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferBuilderSetStorage(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferBuilderSetStorage", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferBuilderSetStorage");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, ptrdiff_t, size_t))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (ptrdiff_t)c->x[2], (size_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferFlushMappedRange(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferFlushMappedRange", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferFlushMappedRange");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, ptrdiff_t, size_t))f)((void *)(uintptr_t)c->x[0], (ptrdiff_t)c->x[1], (size_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferGetAddress(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferGetAddress", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferGetAddress");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNbufferAddress (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferGetMemoryOffset(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferGetMemoryOffset", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferGetMemoryOffset");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((ptrdiff_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferGetMemoryPool(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferGetMemoryPool", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferGetMemoryPool");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferGetSize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferGetSize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferGetSize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferInvalidateMappedRange(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferInvalidateMappedRange", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferInvalidateMappedRange");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, ptrdiff_t, size_t))f)((void *)(uintptr_t)c->x[0], (ptrdiff_t)c->x[1], (size_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferMap(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferMap", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferMap");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnBufferSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnBufferSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnBufferSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnChannelMaskStateGetChannelMask(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnChannelMaskStateGetChannelMask", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnChannelMaskStateGetChannelMask");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4], (void *)(uintptr_t)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnChannelMaskStateSetChannelMask(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnChannelMaskStateSetChannelMask", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnChannelMaskStateSetChannelMask");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, uint32_t, uint32_t, uint32_t, uint32_t))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (uint32_t)c->x[2], (uint32_t)c->x[3], (uint32_t)c->x[4], (uint32_t)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnChannelMaskStateSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnChannelMaskStateSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnChannelMaskStateSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnColorStateGetAlphaTest(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnColorStateGetAlphaTest", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnColorStateGetAlphaTest");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNalphaFunc (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnColorStateGetBlendEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnColorStateGetBlendEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnColorStateGetBlendEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnColorStateGetLogicOp(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnColorStateGetLogicOp", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnColorStateGetLogicOp");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNlogicOp (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnColorStateSetAlphaTest(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnColorStateSetAlphaTest", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnColorStateSetAlphaTest");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNalphaFunc))f)((void *)(uintptr_t)c->x[0], (NVNalphaFunc)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnColorStateSetBlendEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnColorStateSetBlendEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnColorStateSetBlendEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, uint32_t))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (uint32_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnColorStateSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnColorStateSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnColorStateSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnColorStateSetLogicOp(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnColorStateSetLogicOp", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnColorStateSetLogicOp");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNlogicOp))f)((void *)(uintptr_t)c->x[0], (NVNlogicOp)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferAddCommandMemory(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferAddCommandMemory", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferAddCommandMemory");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, ptrdiff_t, size_t))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (ptrdiff_t)c->x[2], (size_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferAddControlMemory(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferAddControlMemory", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferAddControlMemory");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, size_t))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (size_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBarrier(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBarrier", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBarrier");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBeginRecording(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBeginRecording", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBeginRecording");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindBlendState(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindBlendState", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindBlendState");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindChannelMaskState(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindChannelMaskState", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindChannelMaskState");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindColorState(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindColorState", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindColorState");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindDepthStencilState(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindDepthStencilState", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindDepthStencilState");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindImage(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindImage", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindImage");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, NVNimageHandle))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (NVNimageHandle)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindImages(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindImages", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindImages");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindImagesDeferred(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindImagesDeferred", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindImagesDeferred");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindMultisampleState(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindMultisampleState", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindMultisampleState");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindPolygonState(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindPolygonState", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindPolygonState");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindProgram(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindProgram", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindProgram");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, int))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindSeparateSampler(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindSeparateSampler", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindSeparateSampler");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, NVNseparateSamplerHandle))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], ({ NVNseparateSamplerHandle v_; memcpy(&v_, &c->x[3], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindSeparateSamplers(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindSeparateSamplers", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindSeparateSamplers");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindSeparateSamplersDeferred(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindSeparateSamplersDeferred", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindSeparateSamplersDeferred");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindSeparateTexture(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindSeparateTexture", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindSeparateTexture");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, NVNseparateTextureHandle))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], ({ NVNseparateTextureHandle v_; memcpy(&v_, &c->x[3], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindSeparateTextures(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindSeparateTextures", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindSeparateTextures");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindSeparateTexturesDeferred(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindSeparateTexturesDeferred", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindSeparateTexturesDeferred");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindStorageBuffer(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindStorageBuffer", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindStorageBuffer");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, NVNbufferAddress, size_t))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (NVNbufferAddress)c->x[3], (size_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindStorageBuffers(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindStorageBuffers", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindStorageBuffers");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindStorageBuffersDeferred(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindStorageBuffersDeferred", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindStorageBuffersDeferred");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindTexture(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindTexture", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindTexture");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, NVNtextureHandle))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (NVNtextureHandle)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindTextures(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindTextures", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindTextures");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindTexturesDeferred(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindTexturesDeferred", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindTexturesDeferred");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindUniformBuffer(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindUniformBuffer", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindUniformBuffer");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, NVNbufferAddress, size_t))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (NVNbufferAddress)c->x[3], (size_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindUniformBuffers(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindUniformBuffers", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindUniformBuffers");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindUniformBuffersDeferred(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindUniformBuffersDeferred", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindUniformBuffersDeferred");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNshaderStage, int, int, void *))f)((void *)(uintptr_t)c->x[0], (NVNshaderStage)c->x[1], (int)c->x[2], (int)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindVertexAttribState(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindVertexAttribState", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindVertexAttribState");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindVertexBuffer(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindVertexBuffer", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindVertexBuffer");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, NVNbufferAddress, size_t))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (NVNbufferAddress)c->x[2], (size_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindVertexBuffers(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindVertexBuffers", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindVertexBuffers");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2], (void *)(uintptr_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferBindVertexStreamState(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferBindVertexStreamState", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferBindVertexStreamState");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferCallCommands(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferCallCommands", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferCallCommands");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferClearColor(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferClearColor", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferClearColor");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2], (int)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferClearDepthStencil(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferClearDepthStencil", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferClearDepthStencil");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float, uint32_t, int, int))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }), (uint32_t)c->x[1], (int)c->x[2], (int)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferClearTexture(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferClearTexture", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferClearTexture");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *, void *, int))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4], (int)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferClearTextureui(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferClearTextureui", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferClearTextureui");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *, void *, int))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4], (int)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferCopyBufferToBuffer(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferCopyBufferToBuffer", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferCopyBufferToBuffer");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNbufferAddress, NVNbufferAddress, size_t, int))f)((void *)(uintptr_t)c->x[0], (NVNbufferAddress)c->x[1], (NVNbufferAddress)c->x[2], (size_t)c->x[3], (int)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferCopyBufferToTexture(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferCopyBufferToTexture", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferCopyBufferToTexture");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNbufferAddress, void *, void *, void *, int))f)((void *)(uintptr_t)c->x[0], (NVNbufferAddress)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4], (int)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferCopyCommands(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferCopyCommands", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferCopyCommands");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferCopyTextureToBuffer(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferCopyTextureToBuffer", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferCopyTextureToBuffer");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *, NVNbufferAddress, int))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (NVNbufferAddress)c->x[4], (int)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferCopyTextureToTexture(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferCopyTextureToTexture", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferCopyTextureToTexture");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *, void *, void *, void *, int))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4], (void *)(uintptr_t)c->x[5], (void *)(uintptr_t)c->x[6], (int)c->x[7]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferDiscardColor(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferDiscardColor", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferDiscardColor");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferDiscardDepthStencil(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferDiscardDepthStencil", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferDiscardDepthStencil");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferDispatchCompute(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferDispatchCompute", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferDispatchCompute");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2], (int)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferDrawArrays(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferDrawArrays", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferDrawArrays");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNdrawPrimitive, int, int))f)((void *)(uintptr_t)c->x[0], (NVNdrawPrimitive)c->x[1], (int)c->x[2], (int)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferDrawArraysInstanced(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferDrawArraysInstanced", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferDrawArraysInstanced");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNdrawPrimitive, int, int, int, int))f)((void *)(uintptr_t)c->x[0], (NVNdrawPrimitive)c->x[1], (int)c->x[2], (int)c->x[3], (int)c->x[4], (int)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferDrawElements(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferDrawElements", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferDrawElements");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNdrawPrimitive, NVNindexType, int, NVNbufferAddress))f)((void *)(uintptr_t)c->x[0], (NVNdrawPrimitive)c->x[1], (NVNindexType)c->x[2], (int)c->x[3], (NVNbufferAddress)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferDrawElementsBaseVertex(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferDrawElementsBaseVertex", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferDrawElementsBaseVertex");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNdrawPrimitive, NVNindexType, int, NVNbufferAddress, int))f)((void *)(uintptr_t)c->x[0], (NVNdrawPrimitive)c->x[1], (NVNindexType)c->x[2], (int)c->x[3], (NVNbufferAddress)c->x[4], (int)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferDrawElementsInstanced(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferDrawElementsInstanced", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferDrawElementsInstanced");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNdrawPrimitive, NVNindexType, int, NVNbufferAddress, int, int, int))f)((void *)(uintptr_t)c->x[0], (NVNdrawPrimitive)c->x[1], (NVNindexType)c->x[2], (int)c->x[3], (NVNbufferAddress)c->x[4], (int)c->x[5], (int)c->x[6], (int)c->x[7]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferEndRecording(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferEndRecording", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferEndRecording");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNcommandHandle (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferGetCommandMemoryFree(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferGetCommandMemoryFree", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferGetCommandMemoryFree");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferGetCommandMemorySize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferGetCommandMemorySize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferGetCommandMemorySize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferGetCommandMemoryUsed(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferGetCommandMemoryUsed", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferGetCommandMemoryUsed");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferGetControlMemoryFree(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferGetControlMemoryFree", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferGetControlMemoryFree");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferGetControlMemorySize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferGetControlMemorySize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferGetControlMemorySize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferGetControlMemoryUsed(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferGetControlMemoryUsed", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferGetControlMemoryUsed");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferGetMemoryCallback(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferGetMemoryCallback", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferGetMemoryCallback");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((PFNNVNCOMMANDBUFFERMEMORYCALLBACKPROC (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferGetMemoryCallbackData(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferGetMemoryCallbackData", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferGetMemoryCallbackData");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferInsertCheckpointDynamic(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferInsertCheckpointDynamic", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferInsertCheckpointDynamic");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t, void *))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferInsertCheckpointStatic(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferInsertCheckpointStatic", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferInsertCheckpointStatic");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t, void *))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferInsertDebugMarker(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferInsertDebugMarker", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferInsertDebugMarker");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferInsertDebugMarkerDynamic(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferInsertDebugMarkerDynamic", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferInsertDebugMarkerDynamic");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t, void *))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferInsertDebugMarkerStatic(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferInsertDebugMarkerStatic", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferInsertDebugMarkerStatic");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t, void *))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferIsRecording(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferIsRecording", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferIsRecording");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferOverrideSubtileSize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferOverrideSubtileSize", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferOverrideSubtileSize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferPopDebugGroup(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferPopDebugGroup", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferPopDebugGroup");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferPopDebugGroupId(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferPopDebugGroupId", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferPopDebugGroupId");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferPushDebugGroup(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferPushDebugGroup", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferPushDebugGroup");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t, void *))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferPushDebugGroupDynamic(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferPushDebugGroupDynamic", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferPushDebugGroupDynamic");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t, void *))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferPushDebugGroupStatic(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferPushDebugGroupStatic", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferPushDebugGroupStatic");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t, void *))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferReportCounter(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferReportCounter", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferReportCounter");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNcounterType, NVNbufferAddress))f)((void *)(uintptr_t)c->x[0], (NVNcounterType)c->x[1], (NVNbufferAddress)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferResetCounter(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferResetCounter", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferResetCounter");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNcounterType))f)((void *)(uintptr_t)c->x[0], (NVNcounterType)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferRestoreZCullData(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferRestoreZCullData", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferRestoreZCullData");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNbufferAddress, size_t))f)((void *)(uintptr_t)c->x[0], (NVNbufferAddress)c->x[1], (size_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSaveZCullData(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSaveZCullData", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSaveZCullData");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNbufferAddress, size_t))f)((void *)(uintptr_t)c->x[0], (NVNbufferAddress)c->x[1], (size_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetAlphaRef(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetAlphaRef", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetAlphaRef");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetBlendColor(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetBlendColor", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetBlendColor");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetCommandMemoryCallbackEnabled(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetCommandMemoryCallbackEnabled", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetCommandMemoryCallbackEnabled");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNboolean))f)((void *)(uintptr_t)c->x[0], (NVNboolean)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetConservativeRasterDilate(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetConservativeRasterDilate", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetConservativeRasterDilate");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetConservativeRasterEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetConservativeRasterEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetConservativeRasterEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetControlMemoryCallbackEnabled(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetControlMemoryCallbackEnabled", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetControlMemoryCallbackEnabled");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNboolean))f)((void *)(uintptr_t)c->x[0], (NVNboolean)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetCopyRowStride(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetCopyRowStride", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetCopyRowStride");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, ptrdiff_t))f)((void *)(uintptr_t)c->x[0], (ptrdiff_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetDepthBounds(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetDepthBounds", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetDepthBounds");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t, float, float))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }), ({ float v_; memcpy(&v_, &c->v[1], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetDepthClamp(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetDepthClamp", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetDepthClamp");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetDepthRange(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetDepthRange", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetDepthRange");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float, float))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }), ({ float v_; memcpy(&v_, &c->v[1], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetDepthRanges(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetDepthRanges", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetDepthRanges");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2], (void *)(uintptr_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetLineWidth(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetLineWidth", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetLineWidth");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetMemoryCallback(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetMemoryCallback", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetMemoryCallback");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, PFNNVNCOMMANDBUFFERMEMORYCALLBACKPROC))f)((void *)(uintptr_t)c->x[0], (PFNNVNCOMMANDBUFFERMEMORYCALLBACKPROC)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetMemoryCallbackData(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetMemoryCallbackData", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetMemoryCallbackData");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetPointSize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetPointSize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetPointSize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetPolygonOffsetClamp(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetPolygonOffsetClamp", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetPolygonOffsetClamp");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float, float, float))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }), ({ float v_; memcpy(&v_, &c->v[1], sizeof v_); v_; }), ({ float v_; memcpy(&v_, &c->v[2], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetPrimitiveRestart(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetPrimitiveRestart", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetPrimitiveRestart");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t, int))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetProvokingVertexMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetProvokingVertexMode", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetProvokingVertexMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetRasterizerDiscard(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetRasterizerDiscard", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetRasterizerDiscard");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetRenderEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetRenderEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetRenderEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetRenderEnableConditional(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetRenderEnableConditional", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetRenderEnableConditional");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNconditionalRenderMode, NVNbufferAddress))f)((void *)(uintptr_t)c->x[0], (NVNconditionalRenderMode)c->x[1], (NVNbufferAddress)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetRenderTargets(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetRenderTargets", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetRenderTargets");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4], (void *)(uintptr_t)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetSampleMask(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetSampleMask", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetSampleMask");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetSamplerPool(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetSamplerPool", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetSamplerPool");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetScissor(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetScissor", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetScissor");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2], (int)c->x[3], (int)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetScissors(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetScissors", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetScissors");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2], (void *)(uintptr_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetStencilMask(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetStencilMask", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetStencilMask");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNface, int))f)((void *)(uintptr_t)c->x[0], (NVNface)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetStencilRef(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetStencilRef", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetStencilRef");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNface, int))f)((void *)(uintptr_t)c->x[0], (NVNface)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetStencilValueMask(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetStencilValueMask", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetStencilValueMask");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNface, int))f)((void *)(uintptr_t)c->x[0], (NVNface)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetSubpixelPrecisionBias(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetSubpixelPrecisionBias", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetSubpixelPrecisionBias");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetTexturePool(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetTexturePool", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetTexturePool");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetTiledCacheAction(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetTiledCacheAction", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetTiledCacheAction");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNtiledCacheAction))f)((void *)(uintptr_t)c->x[0], (NVNtiledCacheAction)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetTiledCacheTileSize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetTiledCacheTileSize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetTiledCacheTileSize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetViewport(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetViewport", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetViewport");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2], (int)c->x[3], (int)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetViewports(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetViewports", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetViewports");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2], (void *)(uintptr_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSetZCullZF32CompressionEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSetZCullZF32CompressionEnable", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSetZCullZF32CompressionEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNboolean))f)((void *)(uintptr_t)c->x[0], (NVNboolean)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferSignalEvent(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferSignalEvent", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferSignalEvent");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, NVNeventSignalMode, NVNeventSignalLocation, int, uint32_t))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (NVNeventSignalMode)c->x[2], (NVNeventSignalLocation)c->x[3], (int)c->x[4], (uint32_t)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnCommandBufferUpdateUniformBuffer(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnCommandBufferUpdateUniformBuffer", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnCommandBufferUpdateUniformBuffer");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNbufferAddress, size_t, ptrdiff_t, size_t, void *))f)((void *)(uintptr_t)c->x[0], (NVNbufferAddress)c->x[1], (size_t)c->x[2], (ptrdiff_t)c->x[3], (size_t)c->x[4], (void *)(uintptr_t)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateGetDepthFunc(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateGetDepthFunc", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateGetDepthFunc");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNdepthFunc (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateGetDepthTestEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateGetDepthTestEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateGetDepthTestEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateGetDepthWriteEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateGetDepthWriteEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateGetDepthWriteEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateGetStencilFunc(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateGetStencilFunc", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateGetStencilFunc");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNstencilFunc (*)(void *, NVNface))f)((void *)(uintptr_t)c->x[0], (NVNface)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateGetStencilOp(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateGetStencilOp", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateGetStencilOp");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNface, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (NVNface)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateGetStencilTestEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateGetStencilTestEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateGetStencilTestEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateSetDepthFunc(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateSetDepthFunc", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateSetDepthFunc");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNdepthFunc))f)((void *)(uintptr_t)c->x[0], (NVNdepthFunc)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateSetDepthTestEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateSetDepthTestEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateSetDepthTestEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateSetDepthWriteEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateSetDepthWriteEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateSetDepthWriteEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateSetStencilFunc(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateSetStencilFunc", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateSetStencilFunc");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNface, NVNstencilFunc))f)((void *)(uintptr_t)c->x[0], (NVNface)c->x[1], (NVNstencilFunc)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateSetStencilOp(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateSetStencilOp", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateSetStencilOp");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNface, NVNstencilOp, NVNstencilOp, NVNstencilOp))f)((void *)(uintptr_t)c->x[0], (NVNface)c->x[1], (NVNstencilOp)c->x[2], (NVNstencilOp)c->x[3], (NVNstencilOp)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDepthStencilStateSetStencilTestEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDepthStencilStateSetStencilTestEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDepthStencilStateSetStencilTestEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceBuilderSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceBuilderSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceBuilderSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceBuilderSetFlags(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceBuilderSetFlags", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceBuilderSetFlags");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceFinalizeCommandHandle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceFinalizeCommandHandle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceFinalizeCommandHandle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNcommandHandle))f)((void *)(uintptr_t)c->x[0], (NVNcommandHandle)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceGetCurrentTimestampInNanoseconds(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceGetCurrentTimestampInNanoseconds", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceGetCurrentTimestampInNanoseconds");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((uint64_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceGetImageHandle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceGetImageHandle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceGetImageHandle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNimageHandle (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceGetInteger(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceGetInteger", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceGetInteger");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNdeviceInfo, void *))f)((void *)(uintptr_t)c->x[0], (NVNdeviceInfo)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceGetProcAddress(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceGetProcAddress", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceGetProcAddress");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((PFNNVNGENERICFUNCPTRPROC (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceGetSeparateSamplerHandle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceGetSeparateSamplerHandle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceGetSeparateSamplerHandle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     NVNseparateSamplerHandle r_ = ((NVNseparateSamplerHandle (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]); uint64_t v_ = 0; memcpy(&v_, &r_, sizeof r_); c->x[0] = v_;
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceGetSeparateTextureHandle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceGetSeparateTextureHandle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceGetSeparateTextureHandle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     NVNseparateTextureHandle r_ = ((NVNseparateTextureHandle (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]); uint64_t v_ = 0; memcpy(&v_, &r_, sizeof r_); c->x[0] = v_;
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceGetTexelFetchHandle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceGetTexelFetchHandle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceGetTexelFetchHandle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNtextureHandle (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceGetTextureHandle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceGetTextureHandle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceGetTextureHandle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNtextureHandle (*)(void *, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceGetTimestampInNanoseconds(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceGetTimestampInNanoseconds", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceGetTimestampInNanoseconds");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((uint64_t (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceInstallDebugCallback(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceInstallDebugCallback", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceInstallDebugCallback");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, const PFNNVNDEBUGCALLBACKPROC, void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (const PFNNVNDEBUGCALLBACKPROC)c->x[1], (void *)(uintptr_t)c->x[2], (uint32_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceIsExternalDebuggerAttached(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceIsExternalDebuggerAttached", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceIsExternalDebuggerAttached");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceRegisterFastClearColor(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceRegisterFastClearColor", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceRegisterFastClearColor");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *, NVNformat))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (NVNformat)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceRegisterFastClearColori(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceRegisterFastClearColori", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceRegisterFastClearColori");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *, NVNformat))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (NVNformat)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceRegisterFastClearColorui(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceRegisterFastClearColorui", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceRegisterFastClearColorui");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *, NVNformat))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (NVNformat)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceRegisterFastClearDepth(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceRegisterFastClearDepth", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceRegisterFastClearDepth");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceSetAutomaticCheckpointsMask(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceSetAutomaticCheckpointsMask", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceSetAutomaticCheckpointsMask");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceSetDepthMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceSetDepthMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceSetDepthMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNdepthMode))f)((void *)(uintptr_t)c->x[0], (NVNdepthMode)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnDeviceSetWindowOriginMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnDeviceSetWindowOriginMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnDeviceSetWindowOriginMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNwindowOriginMode))f)((void *)(uintptr_t)c->x[0], (NVNwindowOriginMode)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnEventBuilderSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnEventBuilderSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnEventBuilderSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnEventBuilderSetStorage(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnEventBuilderSetStorage", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnEventBuilderSetStorage");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, int64_t))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (int64_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnEventFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnEventFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnEventFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnEventGetValue(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnEventGetValue", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnEventGetValue");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((uint32_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnEventInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnEventInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnEventInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnEventSignal(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnEventSignal", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnEventSignal");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNeventSignalMode, uint32_t))f)((void *)(uintptr_t)c->x[0], (NVNeventSignalMode)c->x[1], (uint32_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolBuilderSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolBuilderSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolBuilderSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolBuilderSetDevice(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolBuilderSetDevice", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolBuilderSetDevice");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolBuilderSetFlags(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolBuilderSetFlags", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolBuilderSetFlags");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolBuilderSetStorage(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolBuilderSetStorage", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolBuilderSetStorage");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, size_t))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (size_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolFlushMappedRange(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolFlushMappedRange", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolFlushMappedRange");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, ptrdiff_t, size_t))f)((void *)(uintptr_t)c->x[0], (ptrdiff_t)c->x[1], (size_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolGetBufferAddress(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolGetBufferAddress", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolGetBufferAddress");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNbufferAddress (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolGetFlags(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolGetFlags", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolGetFlags");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNmemoryPoolFlags (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolGetSize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolGetSize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolGetSize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolInvalidateMappedRange(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolInvalidateMappedRange", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolInvalidateMappedRange");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, ptrdiff_t, size_t))f)((void *)(uintptr_t)c->x[0], (ptrdiff_t)c->x[1], (size_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolMap(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolMap", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolMap");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolMapVirtual(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolMapVirtual", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolMapVirtual");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMemoryPoolSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMemoryPoolSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMemoryPoolSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateGetAlphaToCoverageEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateGetAlphaToCoverageEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateGetAlphaToCoverageEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateGetMultisampleEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateGetMultisampleEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateGetMultisampleEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateGetRasterSamples(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateGetRasterSamples", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateGetRasterSamples");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateGetSamples(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateGetSamples", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateGetSamples");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateSetAlphaToCoverageDither(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateSetAlphaToCoverageDither", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateSetAlphaToCoverageDither");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateSetAlphaToCoverageEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateSetAlphaToCoverageEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateSetAlphaToCoverageEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateSetMultisampleEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateSetMultisampleEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateSetMultisampleEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateSetRasterSamples(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateSetRasterSamples", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateSetRasterSamples");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateSetSampleLocations(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateSetSampleLocations", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateSetSampleLocations");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2], (void *)(uintptr_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateSetSampleLocationsEnable(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateSetSampleLocationsEnable", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateSetSampleLocationsEnable");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, uint32_t))f)((void *)(uintptr_t)c->x[0], (uint32_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnMultisampleStateSetSamples(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnMultisampleStateSetSamples", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnMultisampleStateSetSamples");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnPolygonStateGetCullFace(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnPolygonStateGetCullFace", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnPolygonStateGetCullFace");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNface (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnPolygonStateGetFrontFace(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnPolygonStateGetFrontFace", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnPolygonStateGetFrontFace");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNfrontFace (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnPolygonStateGetPolygonMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnPolygonStateGetPolygonMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnPolygonStateGetPolygonMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNpolygonMode (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnPolygonStateGetPolygonOffsetEnables(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnPolygonStateGetPolygonOffsetEnables", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnPolygonStateGetPolygonOffsetEnables");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNpolygonOffsetEnable (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnPolygonStateSetCullFace(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnPolygonStateSetCullFace", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnPolygonStateSetCullFace");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNface))f)((void *)(uintptr_t)c->x[0], (NVNface)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnPolygonStateSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnPolygonStateSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnPolygonStateSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnPolygonStateSetFrontFace(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnPolygonStateSetFrontFace", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnPolygonStateSetFrontFace");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNfrontFace))f)((void *)(uintptr_t)c->x[0], (NVNfrontFace)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnPolygonStateSetPolygonMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnPolygonStateSetPolygonMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnPolygonStateSetPolygonMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNpolygonMode))f)((void *)(uintptr_t)c->x[0], (NVNpolygonMode)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnPolygonStateSetPolygonOffsetEnables(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnPolygonStateSetPolygonOffsetEnables", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnPolygonStateSetPolygonOffsetEnables");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnProgramFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnProgramFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnProgramFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnProgramGetSubtileSize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnProgramGetSubtileSize", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnProgramGetSubtileSize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnProgramInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnProgramInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnProgramInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnProgramSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnProgramSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnProgramSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnProgramSetShaders(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnProgramSetShaders", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnProgramSetShaders");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnProgramSetShadersExt(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnProgramSetShadersExt", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnProgramSetShadersExt");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueBuilderGetQueueMemorySize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueBuilderGetQueueMemorySize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueBuilderGetQueueMemorySize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueBuilderSetCommandFlushThreshold(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueBuilderSetCommandFlushThreshold", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueBuilderSetCommandFlushThreshold");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, size_t))f)((void *)(uintptr_t)c->x[0], (size_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueBuilderSetCommandMemorySize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueBuilderSetCommandMemorySize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueBuilderSetCommandMemorySize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, size_t))f)((void *)(uintptr_t)c->x[0], (size_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueBuilderSetComputeMemorySize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueBuilderSetComputeMemorySize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueBuilderSetComputeMemorySize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, size_t))f)((void *)(uintptr_t)c->x[0], (size_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueBuilderSetControlMemorySize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueBuilderSetControlMemorySize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueBuilderSetControlMemorySize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, size_t))f)((void *)(uintptr_t)c->x[0], (size_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueBuilderSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueBuilderSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueBuilderSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueBuilderSetDevice(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueBuilderSetDevice", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueBuilderSetDevice");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueBuilderSetFlags(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueBuilderSetFlags", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueBuilderSetFlags");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueBuilderSetQueueMemory(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueBuilderSetQueueMemory", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueBuilderSetQueueMemory");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, size_t))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (size_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueFenceSync(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueFenceSync", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueFenceSync");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, NVNsyncCondition, int))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (NVNsyncCondition)c->x[2], (int)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueFinish(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueFinish", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueFinish");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueFlush(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueFlush", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueFlush");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueGetError(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueGetError", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueGetError");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNqueueGetErrorResult (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueuePresentTexture(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueuePresentTexture", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueuePresentTexture");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, int))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnQueueSubmitCommands(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnQueueSubmitCommands", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnQueueSubmitCommands");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetBorderColor(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetBorderColor", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetBorderColor");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetBorderColori(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetBorderColori", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetBorderColori");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetBorderColorui(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetBorderColorui", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetBorderColorui");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetCompare(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetCompare", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetCompare");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetDevice(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetDevice", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetDevice");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetLodBias(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetLodBias", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetLodBias");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     float r_ = ((float (*)(void *))f)((void *)(uintptr_t)c->x[0]); memset(&c->v[0], 0, sizeof c->v[0]); memcpy(&c->v[0], &r_, sizeof r_);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetLodClamp(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetLodClamp", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetLodClamp");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetLodSnap(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetLodSnap", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetLodSnap");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     float r_ = ((float (*)(void *))f)((void *)(uintptr_t)c->x[0]); memset(&c->v[0], 0, sizeof c->v[0]); memcpy(&c->v[0], &r_, sizeof r_);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetMaxAnisotropy(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetMaxAnisotropy", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetMaxAnisotropy");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     float r_ = ((float (*)(void *))f)((void *)(uintptr_t)c->x[0]); memset(&c->v[0], 0, sizeof c->v[0]); memcpy(&c->v[0], &r_, sizeof r_);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetMinMagFilter(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetMinMagFilter", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetMinMagFilter");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetReductionFilter(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetReductionFilter", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetReductionFilter");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNsamplerReduction (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderGetWrapMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderGetWrapMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderGetWrapMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetBorderColor(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetBorderColor", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetBorderColor");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetBorderColori(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetBorderColori", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetBorderColori");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetBorderColorui(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetBorderColorui", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetBorderColorui");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetCompare(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetCompare", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetCompare");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNcompareMode, NVNcompareFunc))f)((void *)(uintptr_t)c->x[0], (NVNcompareMode)c->x[1], (NVNcompareFunc)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetDevice(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetDevice", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetDevice");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetLodBias(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetLodBias", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetLodBias");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetLodClamp(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetLodClamp", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetLodClamp");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float, float))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }), ({ float v_; memcpy(&v_, &c->v[1], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetLodSnap(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetLodSnap", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetLodSnap");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetMaxAnisotropy(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetMaxAnisotropy", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetMaxAnisotropy");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, float))f)((void *)(uintptr_t)c->x[0], ({ float v_; memcpy(&v_, &c->v[0], sizeof v_); v_; }));
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetMinMagFilter(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetMinMagFilter", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetMinMagFilter");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNminFilter, NVNmagFilter))f)((void *)(uintptr_t)c->x[0], (NVNminFilter)c->x[1], (NVNmagFilter)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetReductionFilter(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetReductionFilter", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetReductionFilter");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNsamplerReduction))f)((void *)(uintptr_t)c->x[0], (NVNsamplerReduction)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerBuilderSetWrapMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerBuilderSetWrapMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerBuilderSetWrapMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNwrapMode, NVNwrapMode, NVNwrapMode))f)((void *)(uintptr_t)c->x[0], (NVNwrapMode)c->x[1], (NVNwrapMode)c->x[2], (NVNwrapMode)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerCompare(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerCompare", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerCompare");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetBorderColor(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetBorderColor", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetBorderColor");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetBorderColori(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetBorderColori", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetBorderColori");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetBorderColorui(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetBorderColorui", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetBorderColorui");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetCompare(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetCompare", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetCompare");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetDebugID(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetDebugID", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetDebugID");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((uint64_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetLodBias(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetLodBias", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetLodBias");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     float r_ = ((float (*)(void *))f)((void *)(uintptr_t)c->x[0]); memset(&c->v[0], 0, sizeof c->v[0]); memcpy(&c->v[0], &r_, sizeof r_);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetLodClamp(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetLodClamp", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetLodClamp");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetMaxAnisotropy(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetMaxAnisotropy", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetMaxAnisotropy");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     float r_ = ((float (*)(void *))f)((void *)(uintptr_t)c->x[0]); memset(&c->v[0], 0, sizeof c->v[0]); memcpy(&c->v[0], &r_, sizeof r_);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetMinMagFilter(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetMinMagFilter", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetMinMagFilter");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetReductionFilter(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetReductionFilter", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetReductionFilter");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNsamplerReduction (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerGetWrapMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerGetWrapMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerGetWrapMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerPoolFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerPoolFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerPoolFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerPoolInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerPoolInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerPoolInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *, ptrdiff_t, int))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (ptrdiff_t)c->x[2], (int)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerPoolRegisterSampler(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerPoolRegisterSampler", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerPoolRegisterSampler");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerPoolSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerPoolSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerPoolSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSamplerSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSamplerSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSamplerSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSyncFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSyncFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSyncFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSyncInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSyncInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSyncInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSyncSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSyncSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSyncSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnSyncWait(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnSyncWait", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnSyncWait");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNsyncWaitResult (*)(void *, uint64_t))f)((void *)(uintptr_t)c->x[0], (uint64_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetDepth(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetDepth", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetDepth");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetDepthStencilMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetDepthStencilMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetDepthStencilMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNtextureDepthStencilMode (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetDevice(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetDevice", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetDevice");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetFlags(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetFlags", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetFlags");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNtextureFlags (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetFormat(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetFormat", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetFormat");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNformat (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetHeight(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetHeight", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetHeight");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetLevels(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetLevels", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetLevels");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetMemoryOffset(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetMemoryOffset", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetMemoryOffset");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((ptrdiff_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetMemoryPool(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetMemoryPool", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetMemoryPool");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetPackagedTextureData(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetPackagedTextureData", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetPackagedTextureData");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetSamples(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetSamples", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetSamples");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetStorageAlignment(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetStorageAlignment", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetStorageAlignment");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetStorageClass(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetStorageClass", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetStorageClass");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNstorageClass (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetStorageSize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetStorageSize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetStorageSize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetStride(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetStride", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetStride");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((ptrdiff_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetSwizzle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetSwizzle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetSwizzle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetTarget(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetTarget", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetTarget");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNtextureTarget (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetViewOffset(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetViewOffset", 1);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetViewOffset");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((ptrdiff_t (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetWidth(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetWidth", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetWidth");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderGetZCullStorageSize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderGetZCullStorageSize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderGetZCullStorageSize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetDepth(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetDepth", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetDepth");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetDepthStencilMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetDepthStencilMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetDepthStencilMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNtextureDepthStencilMode))f)((void *)(uintptr_t)c->x[0], (NVNtextureDepthStencilMode)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetDevice(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetDevice", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetDevice");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetFlags(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetFlags", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetFlags");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetFormat(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetFormat", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetFormat");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNformat))f)((void *)(uintptr_t)c->x[0], (NVNformat)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetHeight(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetHeight", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetHeight");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetLevels(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetLevels", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetLevels");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetPackagedTextureData(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetPackagedTextureData", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetPackagedTextureData");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetPackagedTextureLayout(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetPackagedTextureLayout", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetPackagedTextureLayout");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetSamples(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetSamples", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetSamples");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetSize1D(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetSize1D", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetSize1D");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetSize2D(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetSize2D", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetSize2D");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetSize3D(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetSize3D", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetSize3D");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2], (int)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetStorage(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetStorage", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetStorage");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, ptrdiff_t))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (ptrdiff_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetStride(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetStride", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetStride");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, ptrdiff_t))f)((void *)(uintptr_t)c->x[0], (ptrdiff_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetSwizzle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetSwizzle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetSwizzle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNtextureSwizzle, NVNtextureSwizzle, NVNtextureSwizzle, NVNtextureSwizzle))f)((void *)(uintptr_t)c->x[0], (NVNtextureSwizzle)c->x[1], (NVNtextureSwizzle)c->x[2], (NVNtextureSwizzle)c->x[3], (NVNtextureSwizzle)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetTarget(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetTarget", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetTarget");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNtextureTarget))f)((void *)(uintptr_t)c->x[0], (NVNtextureTarget)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureBuilderSetWidth(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureBuilderSetWidth", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureBuilderSetWidth");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureCompare(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureCompare", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureCompare");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureFlushTexels(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureFlushTexels", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureFlushTexels");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetDebugID(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetDebugID", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetDebugID");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((uint64_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetDepth(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetDepth", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetDepth");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetDepthStencilMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetDepthStencilMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetDepthStencilMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNtextureDepthStencilMode (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetFlags(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetFlags", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetFlags");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNtextureFlags (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetFormat(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetFormat", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetFormat");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNformat (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetHeight(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetHeight", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetHeight");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetLevels(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetLevels", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetLevels");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetMemoryOffset(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetMemoryOffset", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetMemoryOffset");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((ptrdiff_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetMemoryPool(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetMemoryPool", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetMemoryPool");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetRawStorageClass(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetRawStorageClass", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetRawStorageClass");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetSamples(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetSamples", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetSamples");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetStorageClass(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetStorageClass", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetStorageClass");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNstorageClass (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetStorageSize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetStorageSize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetStorageSize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetStride(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetStride", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetStride");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((ptrdiff_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetSwizzle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetSwizzle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetSwizzle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetTarget(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetTarget", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetTarget");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNtextureTarget (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetTextureAddress(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetTextureAddress", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetTextureAddress");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNtextureAddress (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetViewOffset(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetViewOffset", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetViewOffset");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((ptrdiff_t (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetWidth(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetWidth", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetWidth");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureGetZCullStorageSize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureGetZCullStorageSize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureGetZCullStorageSize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((size_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureInvalidateTexels(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureInvalidateTexels", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureInvalidateTexels");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTexturePoolFinalize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTexturePoolFinalize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTexturePoolFinalize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTexturePoolInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTexturePoolInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTexturePoolInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *, ptrdiff_t, int))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (ptrdiff_t)c->x[2], (int)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTexturePoolRegisterTexture(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTexturePoolRegisterTexture", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTexturePoolRegisterTexture");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTexturePoolSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTexturePoolSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTexturePoolSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureReadTexels(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureReadTexels", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureReadTexels");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureReadTexelsStrided(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureReadTexelsStrided", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureReadTexelsStrided");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *, ptrdiff_t, ptrdiff_t))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (ptrdiff_t)c->x[4], (ptrdiff_t)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewCompare(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewCompare", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewCompare");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewGetDepthStencilMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewGetDepthStencilMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewGetDepthStencilMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewGetFormat(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewGetFormat", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewGetFormat");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewGetLayers(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewGetLayers", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewGetLayers");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewGetLevels(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewGetLevels", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewGetLevels");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewGetSwizzle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewGetSwizzle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewGetSwizzle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (void *)(uintptr_t)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewGetTarget(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewGetTarget", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewGetTarget");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewSetDepthStencilMode(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewSetDepthStencilMode", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewSetDepthStencilMode");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNtextureDepthStencilMode))f)((void *)(uintptr_t)c->x[0], (NVNtextureDepthStencilMode)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewSetFormat(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewSetFormat", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewSetFormat");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNformat))f)((void *)(uintptr_t)c->x[0], (NVNformat)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewSetLayers(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewSetLayers", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewSetLayers");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewSetLevels(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewSetLevels", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewSetLevels");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewSetSwizzle(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewSetSwizzle", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewSetSwizzle");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNtextureSwizzle, NVNtextureSwizzle, NVNtextureSwizzle, NVNtextureSwizzle))f)((void *)(uintptr_t)c->x[0], (NVNtextureSwizzle)c->x[1], (NVNtextureSwizzle)c->x[2], (NVNtextureSwizzle)c->x[3], (NVNtextureSwizzle)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureViewSetTarget(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureViewSetTarget", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureViewSetTarget");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNtextureTarget))f)((void *)(uintptr_t)c->x[0], (NVNtextureTarget)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureWriteTexels(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureWriteTexels", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureWriteTexels");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnTextureWriteTexelsStrided(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnTextureWriteTexelsStrided", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnTextureWriteTexelsStrided");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *, void *, ptrdiff_t, ptrdiff_t))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2], (void *)(uintptr_t)c->x[3], (ptrdiff_t)c->x[4], (ptrdiff_t)c->x[5]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnVertexAttribStateGetFormat(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnVertexAttribStateGetFormat", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnVertexAttribStateGetFormat");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnVertexAttribStateGetStreamIndex(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnVertexAttribStateGetStreamIndex", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnVertexAttribStateGetStreamIndex");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnVertexAttribStateSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnVertexAttribStateSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnVertexAttribStateSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnVertexAttribStateSetFormat(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnVertexAttribStateSetFormat", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnVertexAttribStateSetFormat");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNformat, ptrdiff_t))f)((void *)(uintptr_t)c->x[0], (NVNformat)c->x[1], (ptrdiff_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnVertexAttribStateSetStreamIndex(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnVertexAttribStateSetStreamIndex", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnVertexAttribStateSetStreamIndex");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnVertexStreamStateGetDivisor(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnVertexStreamStateGetDivisor", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnVertexStreamStateGetDivisor");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnVertexStreamStateGetStride(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnVertexStreamStateGetStride", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnVertexStreamStateGetStride");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((ptrdiff_t (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnVertexStreamStateSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnVertexStreamStateSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnVertexStreamStateSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnVertexStreamStateSetDivisor(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnVertexStreamStateSetDivisor", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnVertexStreamStateSetDivisor");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnVertexStreamStateSetStride(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnVertexStreamStateSetStride", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnVertexStreamStateSetStride");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, ptrdiff_t))f)((void *)(uintptr_t)c->x[0], (ptrdiff_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowAcquireTexture(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowAcquireTexture", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowAcquireTexture");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNwindowAcquireTextureResult (*)(void *, void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderGetDevice(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderGetDevice", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderGetDevice");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderGetNativeWindow(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderGetNativeWindow", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderGetNativeWindow");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNnativeWindow (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderGetNumActiveTextures(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderGetNumActiveTextures", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderGetNumActiveTextures");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderGetNumTextures(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderGetNumTextures", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderGetNumTextures");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderGetPresentInterval(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderGetPresentInterval", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderGetPresentInterval");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderGetTexture(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderGetTexture", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderGetTexture");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)(uintptr_t)((void * (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderSetDefaults(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderSetDefaults", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderSetDefaults");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderSetDevice(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderSetDevice", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderSetDevice");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderSetNativeWindow(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderSetNativeWindow", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderSetNativeWindow");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, NVNnativeWindow))f)((void *)(uintptr_t)c->x[0], (NVNnativeWindow)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderSetNumActiveTextures(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderSetNumActiveTextures", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderSetNumActiveTextures");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderSetPresentInterval(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderSetPresentInterval", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderSetPresentInterval");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowBuilderSetTextures(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowBuilderSetTextures", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowBuilderSetTextures");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, void *))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (void *)(uintptr_t)c->x[2]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowGetCrop(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowGetCrop", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowGetCrop");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowGetNativeWindow(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowGetNativeWindow", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowGetNativeWindow");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNnativeWindow (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowGetNumActiveTextures(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowGetNumActiveTextures", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowGetNumActiveTextures");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowGetNumTextures(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowGetNumTextures", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowGetNumTextures");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowGetPresentInterval(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowGetPresentInterval", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowGetPresentInterval");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((int (*)(void *))f)((void *)(uintptr_t)c->x[0]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowInitialize(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowInitialize", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowInitialize");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     c->x[0] = (uint64_t)((NVNboolean (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowSetCrop(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowSetCrop", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowSetCrop");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int, int, int, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1], (int)c->x[2], (int)c->x[3], (int)c->x[4]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowSetDebugLabel(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowSetDebugLabel", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowSetDebugLabel");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, void *))f)((void *)(uintptr_t)c->x[0], (void *)(uintptr_t)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowSetNumActiveTextures(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowSetNumActiveTextures", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowSetNumActiveTextures");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 static void T_nvnWindowSetPresentInterval(Cpu *c) {
     static void *f; if (!f) f = nvn_impl_fn("nvnWindowSetPresentInterval", 0);
+    static unsigned idx = 0xffffffffu; if (idx == 0xffffffffu) idx = nvn_prof_index("nvnWindowSetPresentInterval");
+    uint64_t t0_ = 0; if (idx) t0_ = nvn_prof_now();
     ((void (*)(void *, int))f)((void *)(uintptr_t)c->x[0], (int)c->x[1]);
+    if (idx) nvn_prof_take(idx, t0_);
 }
 const struct { const char *name; void (*fn)(Cpu *); } nvn_thunks[] = {
     {"nvnBlendStateGetBlendEquation", T_nvnBlendStateGetBlendEquation},
