@@ -1918,6 +1918,9 @@ void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
     {   // TOTK_LUMGRID=<cols>x<rows>: the same frame in cells, and how many of its pixels are the red the game's hearts are
         // drawn with (the marks that visibly flicker are smaller than a whole-image mean can report; see above)
         static int gc = -1, gr;
+        // the back-buffer is BGRA on Deck: the byte order of the readback follows the image's own format,
+        // else a red HUD mark was counted as blue and reported zero (2026-11-27, the hearts' count never rose)
+        const int bgra = im->format == VK_FORMAT_B8G8R8A8_UNORM || im->format == VK_FORMAT_B8G8R8A8_SRGB;
         if (gc < 0) {
             const char *e = getenv("TOTK_LUMGRID");
             gc = e ? atoi(e) : 0;
@@ -1934,13 +1937,56 @@ void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
                 const uint8_t *s = px + (size_t)p * 4;
                 cell[k] += (s[0] + s[1] + s[2]) / 3.0;
                 cell_n[k]++;
-                if (s[0] > 200 && s[1] < 110 && s[2] < 110) red[k]++;   // the hearts' own colour (255,102,53 in a screenshot)
+                const uint8_t *rgb = bgra ? s + 2 : s;                   // red, green, blue in that order
+                if (rgb[0] > 200 && rgb[1] < 110 && rgb[2] < 110) red[k]++;   // the hearts' own colour (255,102,53 in a screenshot)
             }
             char line[1024];
             int ln = snprintf(line, sizeof line, "[lumg] present %llu:", (unsigned long long)present);
             for (int k = 0; k < gc * gr && ln < (int)sizeof line - 16; k++)
                 ln += snprintf(line + ln, sizeof line - (size_t)ln, " %.3f/%lld", cell_n[k] ? cell[k] / cell_n[k] : 0.0, red[k]);
             VLOG("%s", line);
+        }
+        // TOTK_LUMBOX=x:y:w:h[,...]: the same for exact rectangles in pixels (up to 4). A cell grid averages a whole
+        // screen, so a 60px HUD mark that alternates between two frames hid inside it; the hash says whether a region
+        // is byte-identical to an earlier frame (A,B,A,B: the game memory kept an old copy while the image moved on).
+        {
+            static int nb = -1;
+            static uint32_t box[4][4];
+            if (nb < 0) {
+                const char *e = getenv("TOTK_LUMBOX");
+                nb = 0;
+                while (e && nb < 4) {
+                    char *end;
+                    unsigned v[4];
+                    for (int c = 0; c < 4; c++) {
+                        v[c] = (unsigned)strtoul(e, &end, 10);
+                        if (end == e || v[c] > im->width || v[c] > im->height) { v[1] = 0; break; }
+                        e = (*end == ':') ? end + 1 : end;
+                    }
+                    if (v[1] && v[2] && v[3] && v[0] + v[2] <= im->width && v[1] + v[3] <= im->height)
+                        memcpy(box[nb++], v, sizeof v);
+                    e = strchr(e, ',');
+                    if (e) e++;
+                }
+            }
+            for (int b = 0; b < nb; b++) {
+                const uint32_t x0 = box[b][0], y0 = box[b][1], w = box[b][2], h = box[b][3];
+                double s = 0;
+                long long nr = 0, np = 0;
+                uint64_t hash = 1469598103934665603ull;
+                for (uint32_t y = 0; y < h; y++) {
+                    const uint8_t *row = px + ((size_t)(y0 + y) * im->width + x0) * 4;
+                    for (uint32_t x = 0; x < w; x++, np++) {
+                        const uint8_t *t = bgra ? row + 2 : row;
+                        s += (row[0] + row[1] + row[2]) / 3.0;
+                        if (t[0] > 180 && t[1] < 110 && t[2] < 110) nr++;   // the hearts' red, in the byte order of this image
+                        hash = (hash * 1099511628211ull) ^ row[0] ^ row[1] ^ row[2];
+                        row += 4;
+                    }
+                }
+                VLOG("[lumbox] present %llu box %u:%u:%u:%u mean %.4f red %lld hash %016llx", (unsigned long long)present,
+                     x0, y0, w, h, np ? s / np / 255.0 : 0.0, nr, (unsigned long long)hash);
+            }
         }
     }
     memlog(present);   // the GPU has finished this frame (waited for above)
