@@ -1391,8 +1391,60 @@ static int g_npost, g_capost;
 static uint64_t g_op_count[OP_COUNT_];
 static int g_op_said[OP_COUNT_];
 
-typedef struct job { uint64_t fence; post_op *ops; int n; int slot; uint64_t *wb; int nwb; struct job *next; struct wb_snap_s *snaps; int nsnaps; } job;
+typedef struct job { uint64_t fence; post_op *ops; int n; int slot; uint64_t *wb; int nwb; struct job *next; struct wb_snap_s *snaps; int nsnaps; uint64_t frame; } job;
 static job *g_jobs, **g_jobs_tail = &g_jobs;
+
+// ---------------- per-frame GPU time (mtl_gpu_ms / mtl_gpu_span) ----------------
+// One row per frame: the GPU span of all its submissions added up, plus the window they covered. The front end
+// reads it 8 frames late (hle_nvn.c), by which time the retire thread has had 8 presents to fill the row, and a
+// frame still on the GPU reads as -1 / 0 rather than as a partial sum. Submissions land in the row of the frame
+// tagged by mtl_set_frame, which the front end sets at every present, so a row's frame is the front end's own
+// frame number. The ring only has to cover the read lag: a frame's submissions are recorded back to back.
+typedef struct { uint64_t fence, frame, dur_ns, beg_ns, end_ns; } sub_gpu_t;
+enum { GFR = 128 };
+static sub_gpu_t g_frgpu[GFR];
+static unsigned g_frn;                                        // rows written so far (monotonic)
+static pthread_mutex_t g_frgpu_mu = PTHREAD_MUTEX_INITIALIZER;
+static _Atomic uint64_t g_record_frame;                        // the frame whose work is being recorded
+void mtl_set_frame(uint64_t f) {
+    // The front end calls this at the end of a present, with the frame whose work starts now: what is recorded
+    // from here lands in f's row, the one its own log line reads. Work before the first present (initialization)
+    // stays in frame 0, which is where its log line is.
+    atomic_store_explicit(&g_record_frame, f, memory_order_relaxed);
+}
+
+// The frame's row: its submissions merged. A slot's queries are read after its wait and stay valid: they are
+// overwritten only by that slot's next submission, which is queued after complete(), below. Returns the merged
+// row once every submission of the frame has retired, NULL while any of them is still on the GPU.
+static const sub_gpu_t *gpu_frame_row(uint64_t f) {
+    static sub_gpu_t row;
+    // A frame whose recording is still open can gain submissions: report nothing rather than a partial frame.
+    if (atomic_load_explicit(&g_record_frame, memory_order_relaxed) <= f) return NULL;
+    uint64_t done = mtl_done();
+    int found = 0;
+    pthread_mutex_lock(&g_frgpu_mu);
+    for (unsigned k = g_frn < GFR ? 0 : g_frn - GFR; k < g_frn; k++) {
+        const sub_gpu_t *r = &g_frgpu[k % GFR];
+        if (r->frame != f) continue;
+        if (r->fence > done) { found = 0; break; }             // nothing rather than a partial frame
+        if (!found) row = *r, found = 1;
+        else { row.dur_ns += r->dur_ns;
+               if (r->beg_ns < row.beg_ns) row.beg_ns = r->beg_ns;
+               if (r->end_ns > row.end_ns) row.end_ns = r->end_ns; }
+    }
+    pthread_mutex_unlock(&g_frgpu_mu);
+    return found ? &row : NULL;
+}
+double mtl_gpu_ms(uint64_t f) {
+    const sub_gpu_t *r = gpu_frame_row(f);
+    return r ? (double)r->dur_ns / 1e6 : -1;
+}
+int mtl_gpu_span(uint64_t f, uint64_t *t0, uint64_t *t1) {
+    const sub_gpu_t *r = gpu_frame_row(f);
+    if (!r) return 0;
+    *t0 = r->beg_ns; *t1 = r->end_ns;
+    return 1;
+}
 
 static void run_posts(const post_op *ops, int n) {
     for (int i = 0; i < n; i++) {
@@ -1591,6 +1643,7 @@ static void dead_reap(uint64_t done) {   // the GPU finished up to `done`
 }
 
 static void gpu_span(int slot, uint64_t fence);
+static void gpu_account(const job *j);
 // Retires submissions in order: waits for the GPU, writes their events and counters, completes their fence.
 static void *retire_thread(void *unused) {
     (void)unused;
@@ -1608,6 +1661,7 @@ static void *retire_thread(void *unused) {
         VkResult r = vk.vkWaitSemaphores(vkc.device, &wi, UINT64_MAX);
         if (r != VK_SUCCESS) { vk_check(r, "vkWaitSemaphores"); checkpoint_report(); die("GPU submission %llu lost", (unsigned long long)j->fence); }
         if (totk_tl_on()) gpu_span(j->slot, j->fence);   // TOTK_TIMELINE: when the GPU ran this command buffer
+        gpu_account(j);   // per-frame GPU time: this submission's span into its frame's row (mtl_gpu_ms)
         if (j->wb) { wb_merge(j->wb, j->nwb, g_wbst[j->slot].map, (const wb_snap_t *)j->snaps, j->nsnaps); free(j->wb); }   // GPU writes into game memory
         for (int k = 0; k < j->nsnaps; k++) if (((wb_snap_t *)j->snaps)[k].owned) free(((wb_snap_t *)j->snaps)[k].data);
         free(j->snaps);
@@ -1659,6 +1713,24 @@ static void gpu_time_end(int slot, VkCommandBuffer cb) {   // into the submissio
     if (!g_tsq) return;
     vk.vkCmdWriteTimestamp2(cb, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, g_tsq, (uint32_t)(2 * slot + 1));
     g_ts_used[slot] = 1;
+}
+
+// A retired submission into its frame's row: the two timestamps give its GPU duration, the retire thread's own
+// clock where it ran (the thread waits on fences in order, so the submission ended about now). Read after the
+// wait, before the slot can be reused, so the queries are still this submission's.
+static void gpu_account(const job *j) {
+    uint64_t t[2];
+    if (!g_tsq || j->slot < 0) return;
+    if (vk.vkGetQueryPoolResults(vkc.device, g_tsq, (uint32_t)(2 * j->slot), 2, sizeof t, t, sizeof t[0],
+                                 VK_QUERY_RESULT_64_BIT) != VK_SUCCESS || t[1] <= t[0]) return;
+    uint64_t dur = (uint64_t)((double)(t[1] - t[0]) * vkc.props.limits.timestampPeriod), end = runtime_now_ns();
+    pthread_mutex_lock(&g_frgpu_mu);
+    sub_gpu_t *row = NULL;
+    for (unsigned k = g_frn < GFR ? 0 : g_frn - GFR; k < g_frn; k++)
+        if (g_frgpu[k % GFR].frame == j->frame) { row = &g_frgpu[k % GFR]; break; }
+    if (row) { row->dur_ns += dur; if (end - dur < row->beg_ns) row->beg_ns = end - dur; if (end > row->end_ns) row->end_ns = end; }
+    else g_frgpu[g_frn++ % GFR] = (sub_gpu_t){j->fence, j->frame, dur, end - dur, end};
+    pthread_mutex_unlock(&g_frgpu_mu);
 }
 
 // A submission whose recording took over 100 ms: where the time went (log line "long submission"). The game waits for
@@ -2855,7 +2927,9 @@ uint64_t mtl_sub_commit(void) {
     if (r != VK_SUCCESS) { vk_check(r, "vkQueueSubmit2"); die("GPU submission failed"); }
     job *j = malloc(sizeof *j);
     if (!j) die("retire job");
-    *j = (job){fence, ops, n, g_cur, g_wb_ranges, g_wb_nranges, NULL, (struct wb_snap_s *)g_wb_snaps, g_wb_nsnaps};   // g_wb_ranges: in the slot's copy back memory
+    // frame: the one being presented while this was recorded (g_wb_ranges: in the slot's copy back memory)
+    *j = (job){fence, ops, n, g_cur, g_wb_ranges, g_wb_nranges, NULL, (struct wb_snap_s *)g_wb_snaps, g_wb_nsnaps,
+               atomic_load_explicit(&g_record_frame, memory_order_relaxed)};
     g_wb_ranges = NULL; g_wb_snaps = NULL; g_wb_nsnaps = 0;
     totk_tl(TL_COMMIT, fence, 1);
     pthread_mutex_lock(&g_mu);

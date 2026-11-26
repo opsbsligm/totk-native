@@ -63,10 +63,24 @@ _Static_assert(sizeof(nvn_slot_t) == 16, "thunks use a 16-byte stride");
 extern void *nvn_thunk[NVN_NFUNC];
 extern const char *nvn_names[NVN_NFUNC];
 extern void nvn_unimpl_entry(void);
-extern void nvn_prof_entry(void);
-void *nvn_real[NVN_NFUNC];               // DM_NVN_PROF：计时包装调用的真实现 | DM_NVN_PROF: the real implementation called by the timing wrapper
+void *nvn_real[NVN_NFUNC];               // DM_NVN_PROF: 已实现的入口（计时范围的依据） | implemented entries: what DM_NVN_PROF times
 _Atomic uint64_t nvn_prof_ticks[NVN_NFUNC]; // DM_NVN_PROF：各函数累计耗时（cntvct 计数） | DM_NVN_PROF: cumulative time of each function (cntvct counts)
 static uint8_t g_unimpl_seen[NVN_NFUNC];
+
+// DM_NVN_PROF: the hooks the generated thunks (nvn_thunks.gen.c) call around every implemented NVN call.
+// index resolves a name to its slot once per thunk (0 = not measured: profiling off, or this name is a stub /
+// present, whose wait is display-link pacing, not translation work); now reads the same host clock the frame
+// log uses; take adds the elapsed time to that slot. The clock is read only when a slot was found.
+unsigned nvn_prof_index(const char *name) {
+    if (!getenv("DM_NVN_PROF")) return 0;
+    for (unsigned i = 0; i < NVN_NFUNC; i++)
+        if (!strcmp(nvn_names[i], name)) return nvn_real[i] ? i + 1 : 0;
+    return 0;
+}
+uint64_t nvn_prof_now(void) { return runtime_now_ns(); }
+void nvn_prof_take(unsigned i, uint64_t t0) {
+    if (i) atomic_fetch_add_explicit(&nvn_prof_ticks[i - 1], runtime_now_ns() - t0, memory_order_relaxed);
+}
 
 uint64_t nvn_unimpl_c(nvn_slot_t *slot, uint64_t x0, uint64_t x1, uint64_t x2) {
     unsigned i = (unsigned)(slot - nvn_slot);
@@ -2356,11 +2370,12 @@ __attribute__((constructor)) static void nvn_nops_register(void) {
         nvn_slot[i].fn = (void *)nvn_nop;
     }
     unsigned nnop = sizeof g_nops / sizeof *g_nops;
-    // DM_NVN_PROF=1：已实现的函数（未实现桩与出图除外：出图含节拍等待，单独计）套计时包装，用于拆「翻译层录制期」耗时
-    // DM_NVN_PROF=1: implemented functions (except unimplemented stubs and present: present includes the display-link wait and is counted separately) get a timing wrapper, used to break down the time spent in the "translation layer recording phase"
+    // DM_NVN_PROF=1: the generated thunks time every implemented call themselves
+    // (nvn_prof_index / nvn_prof_take). Nothing to wrap here; present and the
+    // unimplemented stubs stay unprofiled (nvn_prof_index returns 0 for them).
     if (getenv("DM_NVN_PROF"))
         for (unsigned i = 0; i < NVN_NFUNC; i++)
-            if (nvn_slot[i].fn != (void *)nvn_unimpl_entry && strcmp(nvn_names[i], "nvnQueuePresentTexture")) { nvn_real[i] = nvn_slot[i].fn; nvn_slot[i].fn = (void *)nvn_prof_entry; }
+            if (nvn_slot[i].fn != (void *)nvn_unimpl_entry && strcmp(nvn_names[i], "nvnQueuePresentTexture")) nvn_real[i] = nvn_slot[i].fn;
     LOG("[nvn] null device: %u names, %u implemented (%u semantic + %u stubs), %u routed to reporting stubs",
         NVN_NFUNC, g_nsem + nnop, g_nsem, nnop, NVN_NFUNC - g_nsem - nnop);
 }
