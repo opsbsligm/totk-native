@@ -1786,6 +1786,11 @@ static void samemem_report(uint64_t present) {
 
 // TOTK_LUMLOG=<present>:<count>: the mean of the presented image for count presents from that one (development:
 // frame-to-frame flicker). Waits for the GPU at each of those presents.
+// TOTK_LUMGRID=<cols>x<rows>: within those presents, one more line with the mean of each cell. The corner marks the game
+// draws itself (its hearts and equipment slots, 56 px of a 1280x800 frame) move less than a whole-image mean can show:
+// measured, a frame whose top-left corner visibly changed moved the whole-image mean by 0.0006 of 255 (2026-11-26), so
+// the report that found nothing was too coarse rather than wrong. Cells, not a region, because the corner is where several
+// separate marks sit next to each other and which one changed is the question being asked.
 // TOTK_TEXLOG=<address>,...: within the TOTK_LUMLOG presents, the mean of every layer (level 0) of the images at those
 // memory addresses (development: how a GPU-built texture, such as an environment probe, evolves frame by frame).
 static void texlog(uint64_t present) {
@@ -1910,6 +1915,34 @@ void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
     VLOG("[lum] present %llu: mean %.3f %.3f %.3f, lower half %.3f, draws %llu", (unsigned long long)present, sum[0] / n, sum[1] / n, sum[2] / n,
          low / (n * 1.5), (unsigned long long)(draws - last_draws));
     last_draws = draws;
+    {   // TOTK_LUMGRID=<cols>x<rows>: the same frame in cells, and how many of its pixels are the red the game's hearts are
+        // drawn with (the marks that visibly flicker are smaller than a whole-image mean can report; see above)
+        static int gc = -1, gr;
+        if (gc < 0) {
+            const char *e = getenv("TOTK_LUMGRID");
+            gc = e ? atoi(e) : 0;
+            gr = e && strchr(e, 'x') ? atoi(strchr(e, 'x') + 1) : 0;
+            if (gc < 1 || gr < 1 || gc * gr > 64) gc = gr = 0;
+        }
+        if (gc) {
+            static double cell[64];
+            static long long cell_n[64], red[64];
+            for (int k = 0; k < gc * gr; k++) cell[k] = 0, cell_n[k] = 0, red[k] = 0;
+            for (uint32_t p = 0; p < im->width * im->height; p += 7) {
+                uint32_t x = p % im->width, y = p / im->width;
+                int k = (int)((y * (uint32_t)gr / im->height) * (uint32_t)gc + x * (uint32_t)gc / im->width);
+                const uint8_t *s = px + (size_t)p * 4;
+                cell[k] += (s[0] + s[1] + s[2]) / 3.0;
+                cell_n[k]++;
+                if (s[0] > 200 && s[1] < 110 && s[2] < 110) red[k]++;   // the hearts' own colour (255,102,53 in a screenshot)
+            }
+            char line[1024];
+            int ln = snprintf(line, sizeof line, "[lumg] present %llu:", (unsigned long long)present);
+            for (int k = 0; k < gc * gr && ln < (int)sizeof line - 16; k++)
+                ln += snprintf(line + ln, sizeof line - (size_t)ln, " %.3f/%lld", cell_n[k] ? cell[k] / cell_n[k] : 0.0, red[k]);
+            VLOG("%s", line);
+        }
+    }
     memlog(present);   // the GPU has finished this frame (waited for above)
     // and each of those frames as <dir>/f<present>_<serial>...bmp; with TOTK_LUMLOG_JUMP=<delta> only frames where the lower
     // half's mean jumps by more than delta, with the frame before and the two after (catching a short drop-out)
