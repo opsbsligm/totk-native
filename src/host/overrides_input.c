@@ -217,6 +217,17 @@ static uint32_t style(const uint32_t *id) {
     pthread_mutex_unlock(&input_lock);
     return v;
 }
+/* A/B for one sample, from every source at once.
+
+   The physical pad and the window layer's keyboard (which the development FIFO shares) both land in the
+   same two Switch bits, so both go through the menu policy: routing only the controller's through it would
+   make one A confirm in a menu while a pad is connected and cancel with just the keyboard. The other
+   buttons pass through. `held` is the pressed A/B after the policy, and a key that was already down when
+   the menu opened stays blocked until it is released, so leaving a menu cannot fire a world action. */
+static uint64_t nd_pad_route_a_b(NdMenuConfirm *state, bool menu, uint64_t from_keys, uint64_t from_pad) {
+    uint64_t sources = from_keys | from_pad;
+    return (sources & ~3ull) | nd_menu_confirm(state, menu, (unsigned)sources & 3u, 1, 2);
+}
 static int pad_states(NpadState *out, int max, const uint32_t *id, uint32_t want_style) {
     if (max <= 0) return 0;
     if (!out || !id) runtime_fail("controller output pointer");
@@ -238,7 +249,7 @@ static int pad_states(NpadState *out, int max, const uint32_t *id, uint32_t want
         const char *opt=getenv("TOTK_MENU_CONFIRM");
         bool active=(!opt || strcmp(opt,"0")) && nd_totk_menu_context(menu_read,NULL);
         atomic_store(&nd_menu_active,active);
-        state.buttons |= (pad.buttons&~3ull) | nd_menu_confirm(&confirm_state,active,(unsigned)pad.buttons&3,1,2);
+        state.buttons = nd_pad_route_a_b(&confirm_state, active, state.buttons, pad.buttons);
 #else
         state.buttons |= pad.buttons;
 #endif

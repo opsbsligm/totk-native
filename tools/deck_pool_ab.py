@@ -155,8 +155,12 @@ class Deck:
         finally:
             os.close(fd)
 
-    def send(self, sequence, key='J'):
-        """One confirmed click through a private owner-only FIFO; the game maps it to its A button."""
+    def send(self, sequence, key='K'):
+        """One confirmed click through a private owner-only FIFO.
+
+        K is the keyboard's A: on the Deck that is the confirm button, because the menu policy routes a
+        physical A to the click the game itself confirms with. Key J is the game's own B, which the same
+        policy turned into cancel, so a harness that still sent J sat on the save-selection screen."""
         self.write_command(f'{sequence}:{key}*3\n')
 
     def stick(self, sequence, lx=0, ly=0, rx=0, ry=0, hold=60):
