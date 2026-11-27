@@ -37,6 +37,8 @@ APPID = 4131851805          # this game's Deck library entry (the signed value i
 MAX_LOG_BYTES = 20 * 2**20  # a runaway log aborts the sample rather than filling the volume
 MAX_TSV_BYTES = 32 * 2**20
 MIN_FREE_BYTES = 2 * 2**30
+MENU_SETTLE_FRAMES = 100
+WORLD_MIN_DRAWS = 2001
 # The Deck's panel size, which is also the size the game is played at. The presenting window is a measured
 # variable (run --window-size), but it is NOT the scene size: with the game's dynamic resolution patched off
 # (tools/lifter/patches.py drs_off) the scene targets stay at the mode's fixed size, so a smaller window only
@@ -158,10 +160,9 @@ class Deck:
     def send(self, sequence, key='K'):
         """One confirmed click through a private owner-only FIFO.
 
-        K is the keyboard's A: on the Deck that is the confirm button, because the menu policy routes a
-        physical A to the click the game itself confirms with. Key J is the game's own B, which the same
-        policy turned into cancel, so a harness that still sent J sat on the save-selection screen."""
-        self.write_command(f'{sequence}:{key}*3\n')
+        K represents the Deck's south button. The menu policy maps it to the game's confirm bit.
+        Use J on older releases where the keyboard sends the game's original A bit directly."""
+        self.write_command(f'{sequence}:{key}*10\n')
 
     def stick(self, sequence, lx=0, ly=0, rx=0, ry=0, hold=60):
         """Hold the sticks (int16 units) for `hold` frames. TOTK walks Link with the left stick only —
@@ -276,6 +277,34 @@ def last_frame(path):
         tail = stream.read().decode('utf-8', 'replace')
     numbers = [int(line.split('\t', 1)[0]) for line in tail.splitlines() if line.split('\t', 1)[0].isdigit()]
     return max(numbers) if numbers else 0
+
+
+def render_window(path, offset):
+    if not path.is_file():
+        return None
+    if path.stat().st_size > MAX_LOG_BYTES:
+        raise RuntimeError('the render log passed its budget')
+    with path.open('rb') as stream:
+        stream.seek(offset)
+        counters = re.findall(rb'\[vk\] present (\d+): shaders loaded [^\n]*?; draws (\d+),', stream.read())
+    if len(counters) < 2:
+        return None
+    first, before = map(int, counters[-2])
+    last, after = map(int, counters[-1])
+    if last <= first or after < before:
+        return None
+    return dict(first_present=first, last_present=last, draws_per_frame=(after - before) / (last - first))
+
+
+def wait_until(child, deadline, probe, message):
+    while time.monotonic() < deadline:
+        if child.poll() is not None:
+            raise RuntimeError('the game exited while waiting for ' + message)
+        result = probe()
+        if result:
+            return result
+        time.sleep(.5)
+    raise RuntimeError('timed out waiting for ' + message)
 
 
 def thread_cpu_by_name(pid, previous):
@@ -443,6 +472,7 @@ def summarize(case):
                    window_size=session.get('window_size', [WINDOW_W, WINDOW_H]),
                    scope=session.get('scope', 'one scene; one window; foreground verified every sample'),
                    scene=session.get('scene', 'not labeled'),
+                   world_render_window=sampling.get('world_render_window'),
                    verified_focus_samples=sampling['samples'],
                    sample_seconds=sampling['sample_end_time'] - sampling['sample_start_time'],
                    first_exclusive_frame=first, last_exclusive_frame=last, selected_frames=len(frames),
@@ -535,6 +565,7 @@ def run(args):
                '--ro-bind', '/tmp/.X11-unix', '/tmp/.X11-unix', '--die-with-parent', str(release / 'run.sh')]
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     started = time.time()
+    sample_deadline = time.monotonic() + args.maximum_seconds - args.sample_seconds
     with (case / 'launch.log').open('xb') as log:
         child = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     (case / 'session.json').write_text(json.dumps(dict(
@@ -556,23 +587,31 @@ def run(args):
         assert os.getpgid(pid) == child.pid, "the game is not in this run's process group"
         deck.bind_game(pid, size)
         deck.capture('00-title.png')
-        deck.send(1)
-        time.sleep(4)
-        deck.capture('01-continue.png')
-        deck.send(2)
-        time.sleep(4)
-        deck.capture('02-select-save.png')
-        deck.send(3)
+        timing = case / 'frame-timing.tsv'
+        render_log = case / 'data/ultratears/ultratears.log'
+        for seq, capture in enumerate(('01-continue.png', '02-select-save.png', '03-confirm-load.png'), 1):
+            deck.send(seq, args.confirm_key)
+            target = last_frame(timing) + MENU_SETTLE_FRAMES
+            wait_until(child, sample_deadline, lambda: last_frame(timing) >= target, 'the next save menu')
+            deck.capture(capture)
+        deck.send(4, args.confirm_key)
+        offset = render_log.stat().st_size if render_log.is_file() else 0
         time.sleep(args.load_seconds)
-        deck.capture('03-world-before-sample.png')
+        if args.min_scene_draws:
+            def world_window():
+                row = render_window(render_log, offset)
+                return row if row and row['draws_per_frame'] >= args.min_scene_draws else None
+
+            sampling['world_render_window'] = wait_until(child, sample_deadline, world_window,
+                                                         'a full gameplay render window after loading the save')
+        deck.capture('03-world-before-sample.png' if args.min_scene_draws else '04-before-sample.png')
         # Deterministic scene driving (development FIFO only): every --stick entry runs here, in order, before the sample.
         for entry in getattr(args, 'stick', []):
             seq, lx, ly, hold = (int(value) for value in entry.split(','))
-            deck.stick(seq, lx=lx, ly=ly, hold=hold)
+            deck.stick(seq + 1, lx=lx, ly=ly, hold=hold)
             time.sleep(hold / 30 + 1)           # let the hold elapse at the game's own frame clock
         sampling.update(deck.device_state())
         sampling['thread_cpu_start'] = thread_cpu(pid)
-        timing = case / 'frame-timing.tsv'
         assert timing.is_file() and timing.stat().st_size < MAX_TSV_BYTES, 'no frame timing being written'
         sampling['timing_start_frame'] = max(int(line.split('\t', 1)[0])
                                              for line in timing.read_text().splitlines()
@@ -606,7 +645,7 @@ def run(args):
                                           if line.split('\t', 1)[0].isdigit())
         sampling['valid_foreground_sample'] = True
         sampling['thread_cpu_end'] = thread_cpu(pid)
-        deck.capture('04-world-after-sample.png')
+        deck.capture('04-world-after-sample.png' if args.min_scene_draws else '05-after-sample.png')
     except BaseException as error:              # the game is stopped and the focus restored either way
         sampling['error'] = str(error)
         raise
@@ -650,6 +689,11 @@ def main():
     run_parser.add_argument('--scene', required=True,
                             help='what the run is standing in, from this case\'s own screenshots '
                                  '(the harness cannot know the game\'s location)')
+    run_parser.add_argument('--confirm-key', choices=('K', 'J'), default='K',
+                            help='use J for an older release that does not route keyboard input through the menu policy')
+    run_parser.add_argument('--min-scene-draws', type=int, default=WORLD_MIN_DRAWS,
+                            help='minimum mean draws in a complete Vulkan report window after the final confirmation; '
+                                 'use 0 only for a deliberate menu diagnostic')
     run_parser.add_argument('--warmup-seconds', type=int, default=30)
     run_parser.add_argument('--load-seconds', type=int, default=30)
     run_parser.add_argument('--sample-seconds', type=int, default=50)
@@ -664,8 +708,8 @@ def main():
     run_parser.add_argument('--stick', action='append', default=[], metavar='SEQ,LX,LY,HOLD',
                             help='hold the left stick (int16 units) for HOLD frames, run after the load and before '
                                  'the sample; repeatable, run in order. TOTK moves Link with the stick only, so a '
-                                 'scene that explores (and redraws the map) needs these. Every command the game '
-                                 'accepts is logged; a rejected line fails the scene, not the run.')
+                                 'scene that explores (and redraws the map) needs these. Start SEQ at 4; the harness '
+                                 'adds one to leave room for the load confirmation in the FIFO log.')
     run_parser.add_argument('--env', action='append', default=[], metavar='KEY=VALUE',
                             help='extra environment variable for the game, repeatable, for an A/B arm of one '
                                  'development switch (e.g. TOTK_VK_NO_LOCAL_BARRIER=1). Names already set by the '
@@ -676,6 +720,8 @@ def main():
     if args.command == 'summarize':
         print(json.dumps(summarize(Path(args.dir).resolve()), indent=2))
     else:
+        if args.min_scene_draws < 0:
+            run_parser.error('--min-scene-draws must be nonnegative')
         run(args)
 
 

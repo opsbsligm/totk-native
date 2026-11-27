@@ -1784,8 +1784,8 @@ static void samemem_report(uint64_t present) {
     pthread_mutex_unlock(&g_mu);
 }
 
-// TOTK_LUMLOG=<present>:<count>: the mean of the presented image for count presents from that one (development:
-// frame-to-frame flicker). Waits for the GPU at each of those presents.
+// TOTK_LUMLOG=<present>:<count> or world:<count>: the mean of the presented image for count presents from the
+// requested frame or after a run of gameplay-sized frames. Waits for the GPU at each sampled present.
 // TOTK_LUMGRID=<cols>x<rows>: within those presents, one more line with the mean of each cell. The corner marks the game
 // draws itself (its hearts and equipment slots, 56 px of a 1280x800 frame) move less than a whole-image mean can show:
 // measured, a frame whose top-left corner visibly changed moved the whole-image mean by 0.0006 of 255 (2026-11-26), so
@@ -1889,16 +1889,44 @@ static void memlog(uint64_t present) {
 }
 
 void vkb_tex_dump(const char *dir);
+static int lumlog_window(uint64_t present) {
+    enum { WORLD_DRAWS = 2000, WORLD_SETTLE_FRAMES = 60 };
+    static int initialized, world;
+    static uint64_t start, count, last_present, last_draws;
+    static unsigned stable;
+    if (!initialized) {
+        initialized = 1;
+        const char *option = getenv("TOTK_LUMLOG");
+        if (option) {
+            const char *sep = strchr(option, ':');
+            long long length = sep ? atoll(sep + 1) : 0;
+            world = strncmp(option, "world:", 6) == 0;
+            long long first = world ? 0 : atoll(option);
+            if (length > 0 && (world || first > 0)) {
+                start = (uint64_t)first;
+                count = (uint64_t)length;
+            }
+        }
+    }
+    if (!count) return 0;
+    if (world && !start) {
+        uint64_t draws = vkb_draw_count();
+        if (last_present && present == last_present + 1 && draws >= last_draws && draws - last_draws > WORLD_DRAWS)
+            stable++;
+        else
+            stable = 0;
+        last_present = present;
+        last_draws = draws;
+        if (stable < WORLD_SETTLE_FRAMES) return 0;
+        start = present;
+    }
+    return present >= start && present - start < count;
+}
+
 void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
     samemem_report(present);
-    {
-        static long long at = -1, count;
-        if (at == -1) { const char *e = getenv("TOTK_LUMLOG"); at = e ? atoll(e) : 0; count = e && strchr(e, ':') ? atoll(strchr(e, ':') + 1) : 0; }
-        if (at > 0 && present >= (uint64_t)at && present < (uint64_t)(at + count)) { texlog(present); }
-    }
-    static long long at = -1, count;
-    if (at == -1) { const char *e = getenv("TOTK_LUMLOG"); at = e ? atoll(e) : 0; count = e && strchr(e, ':') ? atoll(strchr(e, ':') + 1) : 0; }
-    if (at <= 0 || present < (uint64_t)at || present >= (uint64_t)(at + count)) return;
+    if (!lumlog_window(present)) return;
+    texlog(present);
     vkb_image *im = vkb_image_of(t);
     if (!im) return;
     mtl_sub_begin();

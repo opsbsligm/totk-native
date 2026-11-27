@@ -36,6 +36,30 @@ def write_case(case, first, last, drop=(), frame_ms=lambda number: 16.0 + number
 
 
 class HarnessTest(unittest.TestCase):
+    def test_world_window_uses_two_counters_written_after_confirmation(self):
+        with tempfile.TemporaryDirectory() as name:
+            log = Path(name) / 'ultratears.log'
+
+            def write_counter(stream, present, draws):
+                stream.write(f'[totk-gfx] [vk] present {present}: shaders loaded 4000, '
+                             f'without translation 0; draws {draws}, skipped 0\n')
+
+            with log.open('w') as stream:
+                write_counter(stream, 300, 900000)
+                write_counter(stream, 600, 3000000)
+            offset = log.stat().st_size
+            self.assertIsNone(harness.render_window(log, offset))
+            with log.open('a') as stream:
+                write_counter(stream, 900, 3039000)
+            self.assertIsNone(harness.render_window(log, offset))
+            with log.open('a') as stream:
+                write_counter(stream, 1200, 3078000)
+            self.assertEqual(harness.render_window(log, offset)['draws_per_frame'], 130)
+            with log.open('a') as stream:
+                write_counter(stream, 1500, 5178000)
+            self.assertEqual(harness.render_window(log, offset),
+                             dict(first_present=1200, last_present=1500, draws_per_frame=7000))
+
     def test_percentiles_cover_only_the_sample_window(self):
         with tempfile.TemporaryDirectory() as name:
             case = Path(name)
