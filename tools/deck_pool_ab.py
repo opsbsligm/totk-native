@@ -47,6 +47,7 @@ WORLD_MIN_DRAWS = 2001
 WINDOW_W, WINDOW_H = 1280, 800
 REQUIRED_METRICS = ['@frame_ms', '@nvn_ms', '@sub_wall_ms', '@sub_cpu_ms',
                     '@queue_lock_ms', '@queue_api_ms', '@present_effective_ticks']
+OPTIONAL_METRICS = ['@work_ms', '@proc_cpu_ms', '@upload_ms', '@mprotect_ms', '@gpu_ms']
 # Variables the harness owns: the pool backing (which of the two is set defines the arm), the isolated save/cache
 # paths, the TSV output, the input fifo, and the profiling switches. They are cleared from the inherited environment
 # so a case measures the arm and nothing else, and an --env arm may not set them either.
@@ -420,7 +421,7 @@ def summarize(case):
     frames = frames_in(case, first, last)
     percentile = lambda values, fraction: values[max(0, math.ceil(len(values) * fraction) - 1)]
     metrics = {}
-    for key in REQUIRED_METRICS + ['@work_ms', '@proc_cpu_ms', '@upload_ms', '@mprotect_ms']:
+    for key in REQUIRED_METRICS + OPTIONAL_METRICS:
         values = sorted(row[key] for row in frames.values() if key in row and row[key] >= 0)
         if values:
             metrics[key] = dict(frames=len(values), mean=statistics.mean(values), p50=percentile(values, .5),
@@ -521,6 +522,9 @@ def summarize(case):
                            'queue timings are host submission intervals, not GPU execution'])
     summary['long_frame_attribution'] = attribute_long_frames(
         frames, json.loads((case / 'sampling-report.json').read_text()).get('device_samples') or [])
+    gpu_frames = metrics.get('@gpu_ms', {}).get('frames', 0)
+    if gpu_frames < len(frames):
+        summary['limits'].append(f'GPU timestamps available for {gpu_frames}/{len(frames)} sampled frames')
     if summary['long_frame_attribution'].get('attributed'):
         summary['limits'].append('long-frame thread attribution is per sample second: a candidate thread, not a cause')
     (case / 'timing-summary.json').write_text(json.dumps(summary, indent=2) + '\n')

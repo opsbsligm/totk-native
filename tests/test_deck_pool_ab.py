@@ -90,6 +90,17 @@ class HarnessTest(unittest.TestCase):
                           summary['limits'])
             self.assertIsNone(summary['gpu_pass_profile'])       # no log in this case: nothing invented
 
+    def test_late_gpu_timestamps_are_attributed_to_their_frame_when_available(self):
+        with tempfile.TemporaryDirectory() as name:
+            case = Path(name)
+            write_case(case, 100, 105)
+            with (case / 'frame-timing.tsv').open('a') as stream:
+                stream.write('100\t@gpu_ms\t900\n101\t@gpu_ms\t18\n102\t@gpu_ms\t-1\n104\t@gpu_ms\t22\n')
+            summary = harness.summarize(case)
+            self.assertEqual(summary['metrics_ms']['@gpu_ms']['mean'], 20)
+            self.assertEqual(summary['metrics_ms']['@gpu_ms']['frames'], 2)
+            self.assertIn('GPU timestamps available for 2/4 sampled frames', summary['limits'])
+
     def test_the_render_pass_breakdown_is_read_from_the_game_log(self):
         with tempfile.TemporaryDirectory() as name:
             case = Path(name)
