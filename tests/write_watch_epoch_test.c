@@ -22,7 +22,7 @@ static uint8_t *g_pool;
 static pthread_mutex_t g_fake_mu = PTHREAD_MUTEX_INITIALIZER;
 static int g_written[PAGES];              // the OS's watch bits
 static _Atomic int g_calls;               // kernel looks made
-static _Atomic int g_hold;                // pause inside a look, so threads race in it
+static _Atomic int g_hold, g_inside;      // pause after consuming the OS's bits, before returning the pages
 
 static void mark_written(int page) {
     pthread_mutex_lock(&g_fake_mu);
@@ -34,7 +34,7 @@ static void mark_written(int page) {
 // the last look, in order, with their watch bits cleared.
 int plat_written_pages(uint64_t addr, uint64_t size, uint64_t *pages, int max, uint64_t *page) {
     atomic_fetch_add(&g_calls, 1);
-    if (atomic_exchange(&g_hold, 0)) { struct timespec ts = {.tv_nsec = 40 * 1000000}; nanosleep(&ts, NULL); }
+    int hold = atomic_exchange(&g_hold, 0);
     *page = 4096;
     int n = 0;
     uint64_t base = (uint64_t)(uintptr_t)g_pool;
@@ -47,6 +47,11 @@ int plat_written_pages(uint64_t addr, uint64_t size, uint64_t *pages, int max, u
         g_written[p] = 0;
     }
     pthread_mutex_unlock(&g_fake_mu);
+    if (hold) {
+        atomic_store(&g_inside, 1);
+        struct timespec ts = {.tv_nsec = 75 * 1000000};
+        nanosleep(&ts, NULL);
+    }
     return n;
 }
 
@@ -97,18 +102,20 @@ static void test_a_late_join_sees_the_finished_answer(void) {
     atomic_store(&g_calls, 0);
     mark_written(5);
     nvn_dirty_epoch_begin();
+    atomic_store(&g_inside, 0);
     atomic_store(&g_hold, 1);
     pthread_t first, late;
-    worker_arg a = {.join = 1, .iterations = 1, .page = 5, .expect = -1};
+    worker_arg a = {.join = 1, .iterations = 1, .page = 5, .expect = 1};
     assert(pthread_create(&first, NULL, worker, &a) == 0);
-    struct timespec ts = {.tv_nsec = 10 * 1000000};
-    nanosleep(&ts, NULL);   // the first look is inside its kernel call
-    worker_arg b = {.join = 1, .iterations = 50, .page = 5, .expect = -1};
+    struct timespec ts = {.tv_nsec = 1000000};
+    for (int i = 0; i < 200 && !atomic_load(&g_inside); i++) nanosleep(&ts, NULL);
+    assert(atomic_load(&g_inside));
+    worker_arg b = {.join = 1, .iterations = 50, .page = 5, .expect = 1};
     assert(pthread_create(&late, NULL, worker, &b) == 0);
     pthread_join(first, NULL);
     pthread_join(late, NULL);
-    if (b.saw == 0) { fprintf(stderr, "epoch: the thread that joined a look in progress never saw the write\n"); exit(1); }
-    printf("epoch: a thread joining a look in progress still sees the write (%d looks)\n", calls());
+    assert(b.saw == b.iterations && calls() == 1);
+    printf("epoch: a thread joining a look in progress shared its first answer\n");
 }
 
 // A thread outside the submission (the retire thread copying GPU writes back) is not part of its epoch: every look of
