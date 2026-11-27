@@ -31,7 +31,7 @@ enum { UBO_MAX = 65536, OTHER_MAX = 1 << 20, SSBO_MAX = 4 << 20, MERGE_MAX = 4 <
 
 typedef struct { uint64_t lo, hi; } rng;
 typedef struct { int n; rng *r; size_t *off; uint8_t *bytes; uint64_t done;
-                 int capr; size_t capoff, capbytes; } ucap;   // ranges sorted, disjoint; off: into bytes; done: the GPU had completed this submission at the capture; cap*: kept for the next capture
+                 int capr; size_t capoff, capbytes; } ucap;   // ranges sorted by both endpoints; off: into bytes; done: the GPU had completed this submission at the capture; cap*: kept for the next capture
 
 int vkb_ucap_on(void) {
     static int on = -1;
@@ -178,8 +178,8 @@ static int first_range_after(uint64_t address, int count) {
     return lo;
 }
 
-// Only writes that had not retired at capture time can make the copied bytes stale. The captured ranges are
-// sorted and disjoint, so visit the ranges touched by each write instead of scanning the writes for every range.
+// Only writes that had not retired at capture time can make the copied bytes stale. Both range endpoints are sorted,
+// so visit the ranges touched by each write instead of scanning the writes for every range.
 static void drop_pending_ranges(int count, uint64_t capture_fence) {
     for (int i = 0; i < g_npend; i++) {
         const pend_t *p = &g_pend[i];

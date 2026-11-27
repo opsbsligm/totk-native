@@ -75,6 +75,8 @@ int main(void) {
     check(3, 2);
     check(0, 2);
     check(3, 5);
+    ranges[0].hi = 35;                      // ranges can overlap if the merged capture would exceed the cap
+    check(3, 2);
 
     for (int iteration = 0; iteration < 300; iteration++) {
         int count = (int)(random_word() % 65);
