@@ -32,6 +32,11 @@ int main(int argc, char **argv) {
     assert(!lumlog_is_red(blue_rgba, 0, 200));
     assert(lumlog_rgb_hash(12, red_rgba, 0) == lumlog_rgb_hash(12, red_bgra, 1));
     assert(lumlog_rgb_hash(12, red_rgba, 0) != lumlog_rgb_hash(12, blue_rgba, 0));
+    const uint32_t box[] = {1150, 610, 100, 75};
+    assert(lumlog_box_fits(box, 1280, 720));
+    assert(!lumlog_box_fits(box, 1200, 720));
+    assert(!lumlog_box_fits(box, 1280, 650));
+    assert(!lumlog_box_fits(box, 640, 360));
     for (uint64_t present = 1; present <= 240; ++present) {
         if ((present >= 101 && present <= 140) || present >= 142)
             draws += 7000;

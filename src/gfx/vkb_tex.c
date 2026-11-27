@@ -1933,6 +1933,11 @@ static uint64_t lumlog_rgb_hash(uint64_t hash, const uint8_t *pixel, int bgra) {
     return (hash ^ pixel[bgra ? 0 : 2]) * 1099511628211ull;
 }
 
+static int lumlog_box_fits(const uint32_t box[4], uint32_t width, uint32_t height) {
+    return box[2] && box[3] && box[0] < width && box[1] < height &&
+           box[2] <= width - box[0] && box[3] <= height - box[1];
+}
+
 void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
     samemem_report(present);
     if (!lumlog_window(present)) return;
@@ -2005,13 +2010,14 @@ void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
                         v[c] = (uint32_t)value;
                         part = end + (c < 3);
                     }
-                    if (valid && v[2] && v[3] && v[2] <= im->width - v[0] && v[3] <= im->height - v[1])
+                    if (valid && lumlog_box_fits(v, im->width, im->height))
                         memcpy(box[nb++], v, sizeof v);
                     e = strchr(e, ',');
                     if (e) e++;
                 }
             }
             for (int b = 0; b < nb; b++) {
+                if (!lumlog_box_fits(box[b], im->width, im->height)) continue;
                 const uint32_t x0 = box[b][0], y0 = box[b][1], w = box[b][2], h = box[b][3];
                 double s = 0;
                 long long nr = 0, np = 0;
