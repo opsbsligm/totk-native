@@ -24,6 +24,14 @@ static uint64_t vkb_draw_count(void) { return draws; }
         driver = r'''
 int main(int argc, char **argv) {
     assert(argc == 2);
+    const uint8_t red_rgba[] = {255, 102, 53, 255};
+    const uint8_t red_bgra[] = {53, 102, 255, 255};
+    const uint8_t blue_rgba[] = {53, 102, 255, 255};
+    assert(lumlog_is_red(red_rgba, 0, 200));
+    assert(lumlog_is_red(red_bgra, 1, 200));
+    assert(!lumlog_is_red(blue_rgba, 0, 200));
+    assert(lumlog_rgb_hash(12, red_rgba, 0) == lumlog_rgb_hash(12, red_bgra, 1));
+    assert(lumlog_rgb_hash(12, red_rgba, 0) != lumlog_rgb_hash(12, blue_rgba, 0));
     for (uint64_t present = 1; present <= 240; ++present) {
         if ((present >= 101 && present <= 140) || present >= 142)
             draws += 7000;

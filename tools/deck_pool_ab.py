@@ -426,6 +426,16 @@ def summarize(case):
             metrics[key] = dict(frames=len(values), mean=statistics.mean(values), p50=percentile(values, .5),
                                 p95=percentile(values, .95), p99=percentile(values, .99), max=values[-1])
     intervals = [row['@frame_ms'] for row in frames.values()]
+    workload = {}
+    for key in ('@draws', '@passes'):
+        values = [row[key] for row in frames.values() if key in row and row[key] >= 0]
+        if any(values):
+            workload[key[1:]] = dict(mean=statistics.mean(values), frames=len(values))
+    gpu_busy = {}
+    for row in sampling.get('device_samples', []):
+        for key, value in row.items():
+            if key.endswith('/gpu_busy_percent') and str(value).isdigit():
+                gpu_busy.setdefault(key, []).append(int(value))
     # The write-watch scan is booked per code location (nvn_dirty.h NVN_SCAN_WHO_*), so a frame budget spent in it can
     # be traced to the logic that asked. The rows are absent in a build without the attribution, so an empty report here
     # means "not measured", never "nothing to see".
@@ -450,9 +460,12 @@ def summarize(case):
     # The game's own log holds the render-pass breakdown of the profiled frame, if that run asked for one. It is a
     # GPU-side split of one frame, so it is reported apart from the sample-window numbers and never as a frame rate.
     passes = None
+    recording_threads = None
     log = case / 'data/ultratears/ultratears.log'
     if log.is_file():
         for line in log.read_text(errors='replace').splitlines():
+            if (thread_count := re.search(r'\[vk\] recording threads: (\d+)', line)):
+                recording_threads = int(thread_count[1])
             total = PASS_PROFILE.search(line)
             if total:
                 passes = dict(presents=[int(total['from']), int(total['to'])], profiled_presents=int(total['frames']),
@@ -472,6 +485,8 @@ def summarize(case):
                    window_size=session.get('window_size', [WINDOW_W, WINDOW_H]),
                    scope=session.get('scope', 'one scene; one window; foreground verified every sample'),
                    scene=session.get('scene', 'not labeled'),
+                   settings_sha256=session.get('settings_sha256'),
+                   hud_settle_seconds=session.get('hud_settle_seconds'),
                    world_render_window=sampling.get('world_render_window'),
                    verified_focus_samples=sampling['samples'],
                    sample_seconds=sampling['sample_end_time'] - sampling['sample_start_time'],
@@ -480,6 +495,10 @@ def summarize(case):
                    frame_threshold_counts={str(cutoff): sum(value > cutoff for value in intervals)
                                            for cutoff in (16.7, 25, 33.4, 50, 100)},
                    metrics_ms=metrics,
+                   workload=workload,
+                   recording_threads=recording_threads,
+                   gpu_busy_percent={key: dict(samples=len(values), median=statistics.median(values))
+                                     for key, values in gpu_busy.items()},
                    write_watch_scan=scan or None,
                    present_ticks={key: dict(Counter(row[key] for row in frames.values() if key in row))
                                   for key in ('@present_guest_ticks', '@present_effective_ticks')},
@@ -533,6 +552,16 @@ def run(args):
     if seed.is_file() and seed.stat().st_size < 200 * 2**20:      # a bounded seed, not game data
         shutil.copy2(seed, cache / 'compiled.bin')
     (case / 'config').mkdir()
+    settings_sha256 = None
+    if args.settings_fixture:
+        config = Path(args.settings_fixture).expanduser()
+        assert config.is_file() and not config.is_symlink() and config.stat().st_size <= 16 * 1024
+        contents = config.read_bytes()
+        assert len(contents) <= 16 * 1024
+        isolated = case / 'config' / 'totk-native'
+        isolated.mkdir()
+        (isolated / 'control.ini').write_bytes(contents)
+        settings_sha256 = hashlib.sha256(contents).hexdigest()
     os.mkfifo(case / 'input.fifo', 0o600)
 
     env = dict(os.environ, DISPLAY=':0', XDG_RUNTIME_DIR='/run/user/1000',
@@ -572,6 +601,7 @@ def run(args):
         pid=child.pid, started=started, source_commit=args.commit, pool_mode=args.pool_mode,
         pool_mem=pool_mem or 'cached (the default kind)',
         release=str(release), scene=args.scene, save_isolated=True, maximum_seconds=args.maximum_seconds,
+        settings_sha256=settings_sha256, hud_settle_seconds=args.hud_settle_seconds,
         window_size=list(size), gpu_passprof_after_s=passprof or None,
         extra_env=extra or None,
         command=command), indent=2) + '\n')
@@ -604,12 +634,14 @@ def run(args):
 
             sampling['world_render_window'] = wait_until(child, sample_deadline, world_window,
                                                          'a full gameplay render window after loading the save')
-        deck.capture('03-world-before-sample.png' if args.min_scene_draws else '04-before-sample.png')
         # Deterministic scene driving (development FIFO only): every --stick entry runs here, in order, before the sample.
         for entry in getattr(args, 'stick', []):
             seq, lx, ly, hold = (int(value) for value in entry.split(','))
             deck.stick(seq + 1, lx=lx, ly=ly, hold=hold)
             time.sleep(hold / 30 + 1)           # let the hold elapse at the game's own frame clock
+        ready = time.monotonic() + args.hud_settle_seconds
+        wait_until(child, sample_deadline, lambda: time.monotonic() >= ready, 'the HUD settle interval')
+        deck.capture('03-world-before-sample.png' if args.min_scene_draws else '04-before-sample.png')
         sampling.update(deck.device_state())
         sampling['thread_cpu_start'] = thread_cpu(pid)
         assert timing.is_file() and timing.stat().st_size < MAX_TSV_BYTES, 'no frame timing being written'
@@ -686,6 +718,7 @@ def main():
     run_parser.add_argument('--commit', required=True, help='source_commit the release must report')
     run_parser.add_argument('--save-fixture', default=str(Path.home() / '.local/share/ultratears/'
                                                           'test-profiles/v8-opening-20261102/ultratears/userdata'))
+    run_parser.add_argument('--settings-fixture', help='copy this control.ini into the isolated case before launch')
     run_parser.add_argument('--scene', required=True,
                             help='what the run is standing in, from this case\'s own screenshots '
                                  '(the harness cannot know the game\'s location)')
@@ -696,6 +729,8 @@ def main():
                                  'use 0 only for a deliberate menu diagnostic')
     run_parser.add_argument('--warmup-seconds', type=int, default=30)
     run_parser.add_argument('--load-seconds', type=int, default=30)
+    run_parser.add_argument('--hud-settle-seconds', type=int, default=12,
+                            help='wait this long after loading and optional movement before the start screenshot and sample')
     run_parser.add_argument('--sample-seconds', type=int, default=50)
     run_parser.add_argument('--maximum-seconds', type=int, default=240)
     run_parser.add_argument('--window-size', default=f'{WINDOW_W}x{WINDOW_H}',
@@ -722,6 +757,8 @@ def main():
     else:
         if args.min_scene_draws < 0:
             run_parser.error('--min-scene-draws must be nonnegative')
+        if args.hud_settle_seconds < 0:
+            run_parser.error('--hud-settle-seconds must be nonnegative')
         run(args)
 
 

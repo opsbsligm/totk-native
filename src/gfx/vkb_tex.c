@@ -1923,6 +1923,16 @@ static int lumlog_window(uint64_t present) {
     return present >= start && present - start < count;
 }
 
+static int lumlog_is_red(const uint8_t *pixel, int bgra, unsigned minimum) {
+    return pixel[bgra ? 2 : 0] > minimum && pixel[1] < 110 && pixel[bgra ? 0 : 2] < 110;
+}
+
+static uint64_t lumlog_rgb_hash(uint64_t hash, const uint8_t *pixel, int bgra) {
+    hash = (hash ^ pixel[bgra ? 2 : 0]) * 1099511628211ull;
+    hash = (hash ^ pixel[1]) * 1099511628211ull;
+    return (hash ^ pixel[bgra ? 0 : 2]) * 1099511628211ull;
+}
+
 void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
     samemem_report(present);
     if (!lumlog_window(present)) return;
@@ -1965,8 +1975,7 @@ void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
                 const uint8_t *s = px + (size_t)p * 4;
                 cell[k] += (s[0] + s[1] + s[2]) / 3.0;
                 cell_n[k]++;
-                const uint8_t *rgb = bgra ? s + 2 : s;                   // red, green, blue in that order
-                if (rgb[0] > 200 && rgb[1] < 110 && rgb[2] < 110) red[k]++;   // the hearts' own colour (255,102,53 in a screenshot)
+                if (lumlog_is_red(s, bgra, 200)) red[k]++;   // the hearts' own colour (255,102,53 in a screenshot)
             }
             char line[1024];
             int ln = snprintf(line, sizeof line, "[lumg] present %llu:", (unsigned long long)present);
@@ -1984,14 +1993,19 @@ void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
                 const char *e = getenv("TOTK_LUMBOX");
                 nb = 0;
                 while (e && nb < 4) {
+                    const char *part = e;
                     char *end;
-                    unsigned v[4];
+                    uint32_t v[4];
+                    int valid = 1;
                     for (int c = 0; c < 4; c++) {
-                        v[c] = (unsigned)strtoul(e, &end, 10);
-                        if (end == e || v[c] > im->width || v[c] > im->height) { v[1] = 0; break; }
-                        e = (*end == ':') ? end + 1 : end;
+                        unsigned long value = strtoul(part, &end, 10);
+                        uint32_t bound = (c & 1) ? im->height : im->width;
+                        if (*part < '0' || *part > '9' || value > bound ||
+                            (c < 3 ? *end != ':' : (*end && *end != ','))) { valid = 0; break; }
+                        v[c] = (uint32_t)value;
+                        part = end + (c < 3);
                     }
-                    if (v[1] && v[2] && v[3] && v[0] + v[2] <= im->width && v[1] + v[3] <= im->height)
+                    if (valid && v[2] && v[3] && v[2] <= im->width - v[0] && v[3] <= im->height - v[1])
                         memcpy(box[nb++], v, sizeof v);
                     e = strchr(e, ',');
                     if (e) e++;
@@ -2005,10 +2019,9 @@ void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
                 for (uint32_t y = 0; y < h; y++) {
                     const uint8_t *row = px + ((size_t)(y0 + y) * im->width + x0) * 4;
                     for (uint32_t x = 0; x < w; x++, np++) {
-                        const uint8_t *t = bgra ? row + 2 : row;
                         s += (row[0] + row[1] + row[2]) / 3.0;
-                        if (t[0] > 180 && t[1] < 110 && t[2] < 110) nr++;   // the hearts' red, in the byte order of this image
-                        hash = (hash * 1099511628211ull) ^ row[0] ^ row[1] ^ row[2];
+                        if (lumlog_is_red(row, bgra, 180)) nr++;
+                        hash = lumlog_rgb_hash(hash, row, bgra);
                         row += 4;
                     }
                 }
