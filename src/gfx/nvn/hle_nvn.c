@@ -2472,6 +2472,24 @@ int totk_drs_enabled(void) {
     return on;
 }
 
+/* Fixed internal scene scale as IEEE-754 bits (tools/lifter/patches.py, drs_scale): TOTK_SCENE_SCALE=<fraction>,
+   clamped to [0.5, 1.0]; unset or 1.0 returns 0 so the patched instruction keeps its own 1.0. Read once: the value is
+   a launch-time setting, not something to change under a live frame graph. */
+unsigned totk_scene_scale_bits(void) {
+    static int cached = -1;
+    if (cached < 0) {
+        const char *e = getenv("TOTK_SCENE_SCALE");
+        float f = e ? (float)atof(e) : 1.0f;
+        if (!(f >= 0.5f)) f = 1.0f;                       // also the unset case and NaN
+        if (f > 1.0f) f = 1.0f;
+        uint32_t bits;
+        memcpy(&bits, &f, sizeof bits);
+        cached = bits == 0x3f800000u ? 0 : (int)bits;      // 1.0: no change to the lifted instruction
+        LOG("[nvn] scene scale %.3f (%s)", f, cached ? "upscaled by FSR" : "the game's own fixed size");
+    }
+    return cached > 0 ? (unsigned)cached : 0;
+}
+
 #define FRAME_CONTROLLER_LR 0x8002db2ecull
 static uint64_t g_frame_ctl;   // the controller's state (guest address)
 uint64_t nvn_frame_ctl(void) { return g_frame_ctl; }
