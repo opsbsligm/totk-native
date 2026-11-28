@@ -1517,6 +1517,7 @@ static int reads_written(const vkb_shader *sh, int stage) {   // the shader read
     return 0;
 }
 uint64_t vkb_draw_count(void) { return vkb_cnt_sum(g_draws); }
+uint64_t vkb_worker_draw_count(void) { return g_draws[vkb_worker()].v; }
 int vkb_viewport0(float v[4]) { if (!S.nvp) return 0; memcpy(v, S.vp[0], 4 * sizeof *v); return 1; }   // x y w h (trace)
 int vkb_scissor(VkRect2D *r) {   // the game's scissor (clears are limited to it, as on NVN); 0: none set
     if (!S.has_sc) return 0;

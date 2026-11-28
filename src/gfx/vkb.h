@@ -30,6 +30,7 @@ int vkb_stores_take(void);
 int vkb_scissor(VkRect2D *r);
 int vkb_viewport0(float v[4]);   // the scissor set by the game (0: none)
 uint64_t vkb_draw_count(void);   // draws and dispatches recorded so far   // vkb_draw.c: storage writes since the last pass began (and forgets them)
+uint64_t vkb_worker_draw_count(void);   // draws and dispatches recorded by the calling worker
 // Destroys a view / an image and its memory once the GPU has finished every submission that may use them: the one being
 // recorded now included (its earlier commands may already refer to them).
 void vkb_destroy_later(VkImageView view, VkImage img, VkDeviceMemory mem);
