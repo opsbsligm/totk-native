@@ -35,11 +35,54 @@ static VkResult get_images(VkDevice d,VkSwapchainKHR s,uint32_t *n,VkImage *i) {
  return VK_SUCCESS;
 }
 static VkResult view(VkDevice d,const VkImageViewCreateInfo *c,const VkAllocationCallbacks *a,VkImageView *v) {(void)d;(void)c;(void)a;(void)v;view_calls++;return VK_ERROR_UNKNOWN;}
+static uint64_t copy_completed;
+static int destroyed_output;
+static VkResult wait_copy(VkDevice device, const VkSemaphoreWaitInfo *wait, uint64_t timeout) {
+    (void)device;
+    assert(timeout == 0 && wait->semaphoreCount == 1 && wait->pSemaphores[0] == (VkSemaphore)1);
+    return *wait->pValues <= copy_completed ? VK_SUCCESS : VK_TIMEOUT;
+}
+static void destroy_output(VkDevice device, VkImage image, const VkAllocationCallbacks *allocator) {
+    (void)device; (void)allocator;
+    assert(image == (VkImage)1 && copy_completed >= 9);
+    destroyed_output++;
+}
+static void free_output(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator) {
+    (void)device; (void)allocator;
+    assert(memory == (VkDeviceMemory)1 && destroyed_output == 1);
+}
+static VkResult fail_replacement(VkDevice device, const VkImageCreateInfo *info,
+                                 const VkAllocationCallbacks *allocator, VkImage *image) {
+    (void)device; (void)allocator; (void)image;
+    assert(info->extent.width == 1280 && destroyed_output == 1);
+    return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+}
+static void test_output_retirement(void) {
+    vk.vkWaitSemaphores = wait_copy;
+    vk.vkDestroyImage = destroy_output;
+    vk.vkFreeMemory = free_output;
+    vk.vkCreateImage = fail_replacement;
+    g_out[0] = (out_t){.img=(VkImage)1,.mem=(VkDeviceMemory)1,.w=640,.h=480,.timeline=(VkSemaphore)1,.value=9};
+    g_out[1] = (out_t){.img=(VkImage)2,.w=1280,.h=720,.state=OUT_PENDING,.seq=2,.timeline=(VkSemaphore)1,.value=8};
+    g_out[2].state = OUT_SHOWING;
+    VkImage image = VK_NULL_HANDLE;
+    copy_completed = 7;
+    assert(vkp_out_acquire(640, 480, &image) == -1 && !image);
+    assert(vkp_out_acquire(1280, 720, &image) == -1 && !destroyed_output);
+    copy_completed = 8;
+    // A completed pending slot stays usable even when an earlier free slot still has an in-flight copy.
+    assert(vkp_out_acquire(1280, 720, &image) == 1 && image == (VkImage)2);
+    assert(g_out[0].value == 9 && g_out[1].state == OUT_WRITING && !destroyed_output);
+    copy_completed = 9;
+    assert(vkp_out_acquire(1280, 720, &image) == -1 && destroyed_output == 1);
+    assert(g_out[0].state == OUT_FREE && !g_out[0].img && !g_out[0].value);
+}
 int main(void) {
  vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR=caps;vk.vkGetPhysicalDeviceSurfaceFormatsKHR=formats;
  vk.vkGetPhysicalDeviceSurfacePresentModesKHR=modes;vk.vkCreateSwapchainKHR=create;vk.vkDestroySwapchainKHR=destroy;
  vk.vkGetSwapchainImagesKHR=get_images;vk.vkCreateImageView=view;
  for(scenario=1;scenario<=5;scenario++) {created=destroyed=view_calls=0;assert(!create_swapchain());assert(!swapchain && !nimages && !view_calls);assert(created==destroyed);}
+ test_output_retirement();
  return 0;
 }
 ''')
