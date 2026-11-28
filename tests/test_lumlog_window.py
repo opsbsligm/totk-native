@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class LumlogWindow(unittest.TestCase):
     def test_world_capture_waits_through_menus_and_one_heavy_transition(self):
         source = (ROOT / 'src/gfx/vkb_tex.c').read_text()
-        body = source[source.index('static int lumlog_window('):source.index('void vkb_tex_lumlog(')]
+        body = source[source.index('static int lumlog_read_number('):source.index('void vkb_tex_lumlog(')]
         prefix = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -24,6 +24,12 @@ static uint64_t vkb_draw_count(void) { return draws; }
         driver = r'''
 int main(int argc, char **argv) {
     assert(argc == 2);
+    if (strcmp(argv[1], "last") == 0) {
+        assert(!lumlog_window(UINT64_MAX - 2));
+        assert(lumlog_window(UINT64_MAX - 1));
+        assert(lumlog_window(UINT64_MAX));
+        return 0;
+    }
     const uint8_t red_rgba[] = {255, 102, 53, 255};
     const uint8_t red_bgra[] = {53, 102, 255, 255};
     const uint8_t blue_rgba[] = {53, 102, 255, 255};
@@ -58,7 +64,11 @@ int main(int argc, char **argv) {
             probe.write_text(prefix + body + driver)
             subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', str(probe), '-o', str(binary)],
                            check=True, timeout=20)
-            for arg, value in (('world', 'world:2'), ('absolute', '130:2'), ('disabled', 'world:0')):
+            modes = [('world', 'world:2'), ('absolute', '130:2'), ('last', '18446744073709551614:2')]
+            invalid = ('world:0', 'world:2:3', 'world:18446744073709551616', '0:2', '-1:2', '130:-2',
+                       '130:18446744073709551616', '18446744073709551616:2', '130:2x', '130x:2', '130 :2', '130')
+            modes.extend(('disabled', value) for value in invalid)
+            for arg, value in modes:
                 with self.subTest(mode=arg):
                     subprocess.run([str(binary), arg], env=dict(os.environ, TOTK_LUMLOG=value),
                                    check=True, timeout=5)

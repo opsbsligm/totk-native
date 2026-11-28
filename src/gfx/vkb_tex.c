@@ -1889,6 +1889,21 @@ static void memlog(uint64_t present) {
 }
 
 void vkb_tex_dump(const char *dir);
+static int lumlog_read_number(const char **option, uint64_t *value) {
+    const char *p = *option;
+    uint64_t number = 0;
+    if (*p < '0' || *p > '9') return 0;
+    do {
+        unsigned digit = (unsigned)(*p++ - '0');
+        if (number > (UINT64_MAX - digit) / 10) return 0;
+        number = number * 10 + digit;
+    } while (*p >= '0' && *p <= '9');
+    if (!number) return 0;
+    *option = p;
+    *value = number;
+    return 1;
+}
+
 static int lumlog_window(uint64_t present) {
     enum { WORLD_DRAWS = 2000, WORLD_SETTLE_FRAMES = 60 };
     static int initialized, world;
@@ -1898,13 +1913,13 @@ static int lumlog_window(uint64_t present) {
         initialized = 1;
         const char *option = getenv("TOTK_LUMLOG");
         if (option) {
-            const char *sep = strchr(option, ':');
-            long long length = sep ? atoll(sep + 1) : 0;
+            uint64_t first = 0, length;
             world = strncmp(option, "world:", 6) == 0;
-            long long first = world ? 0 : atoll(option);
-            if (length > 0 && (world || first > 0)) {
-                start = (uint64_t)first;
-                count = (uint64_t)length;
+            if (!world && (!lumlog_read_number(&option, &first) || *option != ':')) return 0;
+            option += world ? 6 : 1;
+            if (lumlog_read_number(&option, &length) && !*option) {
+                start = first;
+                count = length;
             }
         }
     }
