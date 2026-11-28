@@ -1784,8 +1784,8 @@ static void samemem_report(uint64_t present) {
     pthread_mutex_unlock(&g_mu);
 }
 
-// TOTK_LUMLOG=<present>:<count>: the mean of the presented image for count presents from that one (development:
-// frame-to-frame flicker). Waits for the GPU at each of those presents.
+// TOTK_LUMLOG=<present>:<count> or world:<count>: the mean of the presented image for count presents from the
+// requested frame or after a run of gameplay-sized frames. Waits for the GPU at each sampled present.
 // TOTK_LUMGRID=<cols>x<rows>: within those presents, one more line with the mean of each cell. The corner marks the game
 // draws itself (its hearts and equipment slots, 56 px of a 1280x800 frame) move less than a whole-image mean can show:
 // measured, a frame whose top-left corner visibly changed moved the whole-image mean by 0.0006 of 255 (2026-11-26), so
@@ -1889,16 +1889,74 @@ static void memlog(uint64_t present) {
 }
 
 void vkb_tex_dump(const char *dir);
+static int lumlog_read_number(const char **option, uint64_t *value) {
+    const char *p = *option;
+    uint64_t number = 0;
+    if (*p < '0' || *p > '9') return 0;
+    do {
+        unsigned digit = (unsigned)(*p++ - '0');
+        if (number > (UINT64_MAX - digit) / 10) return 0;
+        number = number * 10 + digit;
+    } while (*p >= '0' && *p <= '9');
+    if (!number) return 0;
+    *option = p;
+    *value = number;
+    return 1;
+}
+
+static int lumlog_window(uint64_t present) {
+    enum { WORLD_DRAWS = 2000, WORLD_SETTLE_FRAMES = 60 };
+    static int initialized, world;
+    static uint64_t start, count, last_present, last_draws;
+    static unsigned stable;
+    if (!initialized) {
+        initialized = 1;
+        const char *option = getenv("TOTK_LUMLOG");
+        if (option) {
+            uint64_t first = 0, length;
+            world = strncmp(option, "world:", 6) == 0;
+            if (!world && (!lumlog_read_number(&option, &first) || *option != ':')) return 0;
+            option += world ? 6 : 1;
+            if (lumlog_read_number(&option, &length) && !*option) {
+                start = first;
+                count = length;
+            }
+        }
+    }
+    if (!count) return 0;
+    if (world && !start) {
+        uint64_t draws = vkb_draw_count();
+        if (last_present && present == last_present + 1 && draws >= last_draws && draws - last_draws > WORLD_DRAWS)
+            stable++;
+        else
+            stable = 0;
+        last_present = present;
+        last_draws = draws;
+        if (stable < WORLD_SETTLE_FRAMES) return 0;
+        start = present;
+    }
+    return present >= start && present - start < count;
+}
+
+static int lumlog_is_red(const uint8_t *pixel, int bgra, unsigned minimum) {
+    return pixel[bgra ? 2 : 0] > minimum && pixel[1] < 110 && pixel[bgra ? 0 : 2] < 110;
+}
+
+static uint64_t lumlog_rgb_hash(uint64_t hash, const uint8_t *pixel, int bgra) {
+    hash = (hash ^ pixel[bgra ? 2 : 0]) * 1099511628211ull;
+    hash = (hash ^ pixel[1]) * 1099511628211ull;
+    return (hash ^ pixel[bgra ? 0 : 2]) * 1099511628211ull;
+}
+
+static int lumlog_box_fits(const uint32_t box[4], uint32_t width, uint32_t height) {
+    return box[2] && box[3] && box[0] < width && box[1] < height &&
+           box[2] <= width - box[0] && box[3] <= height - box[1];
+}
+
 void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
     samemem_report(present);
-    {
-        static long long at = -1, count;
-        if (at == -1) { const char *e = getenv("TOTK_LUMLOG"); at = e ? atoll(e) : 0; count = e && strchr(e, ':') ? atoll(strchr(e, ':') + 1) : 0; }
-        if (at > 0 && present >= (uint64_t)at && present < (uint64_t)(at + count)) { texlog(present); }
-    }
-    static long long at = -1, count;
-    if (at == -1) { const char *e = getenv("TOTK_LUMLOG"); at = e ? atoll(e) : 0; count = e && strchr(e, ':') ? atoll(strchr(e, ':') + 1) : 0; }
-    if (at <= 0 || present < (uint64_t)at || present >= (uint64_t)(at + count)) return;
+    if (!lumlog_window(present)) return;
+    texlog(present);
     vkb_image *im = vkb_image_of(t);
     if (!im) return;
     mtl_sub_begin();
@@ -1937,8 +1995,7 @@ void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
                 const uint8_t *s = px + (size_t)p * 4;
                 cell[k] += (s[0] + s[1] + s[2]) / 3.0;
                 cell_n[k]++;
-                const uint8_t *rgb = bgra ? s + 2 : s;                   // red, green, blue in that order
-                if (rgb[0] > 200 && rgb[1] < 110 && rgb[2] < 110) red[k]++;   // the hearts' own colour (255,102,53 in a screenshot)
+                if (lumlog_is_red(s, bgra, 200)) red[k]++;   // the hearts' own colour (255,102,53 in a screenshot)
             }
             char line[1024];
             int ln = snprintf(line, sizeof line, "[lumg] present %llu:", (unsigned long long)present);
@@ -1956,20 +2013,26 @@ void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
                 const char *e = getenv("TOTK_LUMBOX");
                 nb = 0;
                 while (e && nb < 4) {
+                    const char *part = e;
                     char *end;
-                    unsigned v[4];
+                    uint32_t v[4];
+                    int valid = 1;
                     for (int c = 0; c < 4; c++) {
-                        v[c] = (unsigned)strtoul(e, &end, 10);
-                        if (end == e || v[c] > im->width || v[c] > im->height) { v[1] = 0; break; }
-                        e = (*end == ':') ? end + 1 : end;
+                        unsigned long value = strtoul(part, &end, 10);
+                        uint32_t bound = (c & 1) ? im->height : im->width;
+                        if (*part < '0' || *part > '9' || value > bound ||
+                            (c < 3 ? *end != ':' : (*end && *end != ','))) { valid = 0; break; }
+                        v[c] = (uint32_t)value;
+                        part = end + (c < 3);
                     }
-                    if (v[1] && v[2] && v[3] && v[0] + v[2] <= im->width && v[1] + v[3] <= im->height)
+                    if (valid && lumlog_box_fits(v, im->width, im->height))
                         memcpy(box[nb++], v, sizeof v);
                     e = strchr(e, ',');
                     if (e) e++;
                 }
             }
             for (int b = 0; b < nb; b++) {
+                if (!lumlog_box_fits(box[b], im->width, im->height)) continue;
                 const uint32_t x0 = box[b][0], y0 = box[b][1], w = box[b][2], h = box[b][3];
                 double s = 0;
                 long long nr = 0, np = 0;
@@ -1977,10 +2040,9 @@ void vkb_tex_lumlog(const tex_t *t, uint64_t present) {
                 for (uint32_t y = 0; y < h; y++) {
                     const uint8_t *row = px + ((size_t)(y0 + y) * im->width + x0) * 4;
                     for (uint32_t x = 0; x < w; x++, np++) {
-                        const uint8_t *t = bgra ? row + 2 : row;
                         s += (row[0] + row[1] + row[2]) / 3.0;
-                        if (t[0] > 180 && t[1] < 110 && t[2] < 110) nr++;   // the hearts' red, in the byte order of this image
-                        hash = (hash * 1099511628211ull) ^ row[0] ^ row[1] ^ row[2];
+                        if (lumlog_is_red(row, bgra, 180)) nr++;
+                        hash = lumlog_rgb_hash(hash, row, bgra);
                         row += 4;
                     }
                 }
