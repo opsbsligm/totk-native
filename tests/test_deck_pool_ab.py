@@ -130,6 +130,9 @@ class HarnessTest(unittest.TestCase):
                                                        extent='1280x720', shader='1606026991dc', draws_avg=3353,
                                                        ms_per_present=0.89, peak_ms=3.569))
             self.assertEqual(len(profile['kinds']), 2)
+            self.assertEqual(profile['timing_method'], 'legacy_recording_order')
+            log.write_text(log.read_text().replace('ms in passes per present)\n', 'ms in passes per present) [timestamp union]\n'))
+            self.assertEqual(harness.summarize(case)['gpu_pass_profile']['timing_method'], 'timestamp_union')
 
     def test_a_long_frame_is_attributed_to_the_thread_busy_in_its_second(self):
         """The clock tie is the load-bearing part: the TSV counts from process start, the samples from wall clock."""

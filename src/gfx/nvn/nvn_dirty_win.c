@@ -73,19 +73,29 @@ void nvn_dirty_epoch_leave(int saved) { t_epoch_thread = saved; }
 
 // Pages of [a, a+len) written since the last scan get a new generation; their watch bits are reset.
 static void scan_pages(range_t *r, uintptr_t a, size_t len, int count);
+enum { SCAN_LOCKS = 64 };
+static pthread_mutex_t g_scan_locks[SCAN_LOCKS];
+static pthread_once_t g_scan_locks_once = PTHREAD_ONCE_INIT;
+
+static void init_scan_locks(void) {
+    for (int i = 0; i < SCAN_LOCKS; i++)
+        if (pthread_mutex_init(&g_scan_locks[i], NULL)) die("dirty tracking: scan mutex");
+}
+
 static void scan(range_t *r, uintptr_t a, size_t len, int count) {
-    if (count && t_epoch_thread) {
-        uint64_t e = atomic_load(&g_epoch);
-        if (atomic_load(&r->epoch) == e) return;
-        a = r->base; len = r->end - r->base;
-        scan_pages(r, a, len, count);
-        // The generations of the whole range are in: a later look in this epoch, on any thread, may use them. Saying so
-        // before the scan let a second thread read generations that the first had not gathered yet and call a texture
-        // unchanged (the answer is shared since the dedup is, not thread-local).
-        atomic_store(&r->epoch, e);
-        return;
+    uint64_t epoch = count && t_epoch_thread ? atomic_load(&g_epoch) : 0;
+    if (epoch && atomic_load_explicit(&r->epoch, memory_order_acquire) == epoch) return;
+    if (pthread_once(&g_scan_locks_once, init_scan_locks)) die("dirty tracking: scan mutex initialization");
+    pthread_mutex_t *lock = &g_scan_locks[(size_t)(r - g_r) % SCAN_LOCKS];
+    pthread_mutex_lock(lock);
+    if (!epoch) scan_pages(r, a, len, count);
+    else if (atomic_load_explicit(&r->epoch, memory_order_relaxed) != epoch) {
+        // The OS clears watch bits as it returns them. A second scanner must wait until the first has recorded
+        // the generations, or it may observe cleared bits and unpublished generations at the same time.
+        scan_pages(r, r->base, r->end - r->base, count);
+        atomic_store_explicit(&r->epoch, epoch, memory_order_release);
     }
-    scan_pages(r, a, len, count);
+    pthread_mutex_unlock(lock);
 }
 static void scan_pages(range_t *r, uintptr_t a, size_t len, int count) {
     uint64_t pages[512], pg = 4096;

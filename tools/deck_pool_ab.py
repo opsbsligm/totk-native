@@ -345,7 +345,8 @@ def frames_in(case, first, last):
 # the GPU time it took over the window.
 PASS_PROFILE = re.compile(r'pass profile of presents (?P<from>\d+)\.\.(?P<to>\d+): (?P<passes>\d+) passes over '
                           r'(?P<frames>\d+) presents, (?P<inpass>[\d.]+) ms in passes, (?P<between>[\d.]+) ms between '
-                          r'them, (?P<span>[\d.]+) ms first to last \((?P<per_present>[\d.]+) ms in passes per present\)')
+                          r'them, (?P<span>[\d.]+) ms first to last \((?P<per_present>[\d.]+) ms in passes per present\)'
+                          r'(?P<timestamp_union> \[timestamp union\])?')
 PASS_LINE = re.compile(r'(?P<ms>[\d.]+) ms x(?P<count>\d+) +(?P<kind>\S+) +(?P<draws>\d+) draws avg +per present '
                        r'(?P<per_present>[\d.]+) ms + peak (?P<peak>[\d.]+) ms')
 
@@ -472,7 +473,9 @@ def summarize(case):
                 passes = dict(presents=[int(total['from']), int(total['to'])], profiled_presents=int(total['frames']),
                               passes=int(total['passes']), in_pass_ms=float(total['inpass']),
                               between_ms=float(total['between']), span_ms=float(total['span']),
-                              in_pass_ms_per_present=float(total['per_present']), kinds=[])
+                              in_pass_ms_per_present=float(total['per_present']),
+                              timing_method='timestamp_union' if total['timestamp_union'] else 'legacy_recording_order',
+                              kinds=[])
                 continue
             one = PASS_LINE.search(line)
             if one and passes is not None and len(passes['kinds']) < 12:   # the log already sorts them by time

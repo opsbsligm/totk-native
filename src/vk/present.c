@@ -143,9 +143,10 @@ static VkClearColorValue frame_colour(uint64_t n) {
 
 // ---- output images: written by the replay thread, shown by the present thread
 #define OUTS 3
+enum { OUT_FREE, OUT_PENDING, OUT_SHOWING, OUT_WRITING, OUT_UNAVAILABLE };
 typedef struct {
     VkImage img; VkImageView sampled_view; VkDeviceMemory mem; uint32_t w, h;
-    int state;                   // 0 free, 1 written (pending), 2 being shown
+    int state;
     uint64_t seq;                // when it was written (newest pending wins)
     VkSemaphore timeline; uint64_t value; int crop[4];
 } out_t;
@@ -160,13 +161,28 @@ static uint32_t memory_type(uint32_t bits, VkMemoryPropertyFlags want) {
 
 int vkp_active(void) { return swapchain != VK_NULL_HANDLE || g_window != NULL; }
 
+// A newer frame can supersede an output before the GPU has finished the copy into it. Neither overwriting
+// that image nor destroying it for a new size is safe until its producer retires.
+static int output_copy_done(const out_t *o) {
+    if (!o->value) return 1;
+    VkSemaphoreWaitInfo wi = {VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, .semaphoreCount = 1,
+                              .pSemaphores = &o->timeline, .pValues = &o->value};
+    VkResult r = vk.vkWaitSemaphores(vkc.device, &wi, 0);
+    return r != VK_TIMEOUT && vk_check(r, "output copy completion");
+}
+
 int vkp_out_acquire(uint32_t w, uint32_t h, VkImage *image) {
     pthread_mutex_lock(&mu);
     int pick = -1;
-    for (int i = 0; i < OUTS && pick < 0; i++) if (g_out[i].state == 0) pick = i;
-    if (pick < 0)   // none free: overwrite the oldest pending one (it was never shown; newer frames win)
-        for (int i = 0; i < OUTS; i++) if (g_out[i].state == 1 && (pick < 0 || g_out[i].seq < g_out[pick].seq)) pick = i;
-    if (pick >= 0) g_out[pick].state = 3;   // being written
+    for (int i = 0; i < OUTS && pick < 0; i++)
+        if (g_out[i].state == OUT_FREE && output_copy_done(&g_out[i])) pick = i;
+    if (pick < 0)   // none free: overwrite the oldest completed pending output that has not been shown
+        for (int i = 0; i < OUTS; i++)
+            if (g_out[i].state == OUT_PENDING && (pick < 0 || g_out[i].seq < g_out[pick].seq) && output_copy_done(&g_out[i])) pick = i;
+    if (pick >= 0) {
+        g_out[pick].state = OUT_WRITING;
+        g_out[pick].value = 0;
+    }
     pthread_mutex_unlock(&mu);
     if (pick < 0) return -1;
     out_t *o = &g_out[pick];
@@ -203,7 +219,7 @@ int vkp_out_acquire(uint32_t w, uint32_t h, VkImage *image) {
     return pick;
 fail:
     pthread_mutex_lock(&mu);
-    o->state = 0;
+    o->state = OUT_FREE;
     pthread_mutex_unlock(&mu);
     return -1;
 }
@@ -211,10 +227,10 @@ fail:
 void vkp_out_ready(int slot, VkSemaphore timeline, uint64_t value, const int crop[4]) {
     pthread_mutex_lock(&mu);
     out_t *o = &g_out[slot];
-    o->timeline = timeline; o->value = value; o->seq = ++g_out_seq; o->state = 1;
+    o->timeline = timeline; o->value = value; o->seq = ++g_out_seq; o->state = OUT_PENDING;
     if (crop) memcpy(o->crop, crop, sizeof o->crop); else memset(o->crop, 0, sizeof o->crop);
     for (int i = 0; i < OUTS; i++)   // older pending frames are never shown
-        if (i != slot && g_out[i].state == 1 && g_out[i].seq < o->seq) g_out[i].state = 0;
+        if (i != slot && g_out[i].state == OUT_PENDING && g_out[i].seq < o->seq) g_out[i].state = OUT_FREE;
     frames_in++;
     pthread_cond_signal(&cv);
     pthread_mutex_unlock(&mu);
@@ -284,9 +300,19 @@ static int present_one(uint64_t n, unsigned slot, out_t *out) {
     r = s == VK_SUCCESS ? vk.vkQueuePresentKHR(vkc.queue, &pi) : s;
     vk_queue_unlock();
     if (!vk_check(s, "vkQueueSubmit2")) return 0;
+    // The graphics submit can still be reading the output even if queuing the present failed.
+    if (out) {
+        VkResult complete = vk.vkWaitForFences(vkc.device, 1, &in_flight[slot], VK_TRUE, UINT64_MAX);
+        if (!vk_check(complete, "output presentation completion")) {
+            pthread_mutex_lock(&mu);
+            out->state = OUT_UNAVAILABLE;
+            pthread_mutex_unlock(&mu);
+            return 0;
+        }
+        out->value = 0;   // this submit waited for the producer, and the consumer has now retired too
+    }
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) atomic_store(&resized, 1);
     else if (r != VK_SUCCESS) { vk_check(r, "vkQueuePresentKHR"); return 0; }
-    if (out) vk.vkWaitForFences(vkc.device, 1, &in_flight[slot], VK_TRUE, UINT64_MAX);   // the output image is free again after this
     atomic_fetch_add(&presented, 1);
     return 1;
 }
@@ -300,13 +326,13 @@ static void *present_thread(void *unused) {
         while (frames_in == shown) pthread_cond_wait(&cv, &mu);
         shown = frames_in;   // frames that came while the last one was shown are skipped: only the newest counts
         int pick = -1;
-        for (int i = 0; i < OUTS; i++) if (g_out[i].state == 1 && (pick < 0 || g_out[i].seq > g_out[pick].seq)) pick = i;
-        if (pick >= 0) g_out[pick].state = 2;
+        for (int i = 0; i < OUTS; i++) if (g_out[i].state == OUT_PENDING && (pick < 0 || g_out[i].seq > g_out[pick].seq)) pick = i;
+        if (pick >= 0) g_out[pick].state = OUT_SHOWING;
         pthread_mutex_unlock(&mu);
         if (present_one(shown, slot, pick >= 0 ? &g_out[pick] : NULL)) slot = (slot + 1) % FRAMES;
         if (pick >= 0) {
             pthread_mutex_lock(&mu);
-            g_out[pick].state = 0;
+            if (g_out[pick].state == OUT_SHOWING) g_out[pick].state = OUT_FREE;
             pthread_mutex_unlock(&mu);
         }
     }

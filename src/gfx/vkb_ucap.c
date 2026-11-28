@@ -31,7 +31,7 @@ enum { UBO_MAX = 65536, OTHER_MAX = 1 << 20, SSBO_MAX = 4 << 20, MERGE_MAX = 4 <
 
 typedef struct { uint64_t lo, hi; } rng;
 typedef struct { int n; rng *r; size_t *off; uint8_t *bytes; uint64_t done;
-                 int capr; size_t capoff, capbytes; } ucap;   // ranges sorted, disjoint; off: into bytes; done: the GPU had completed this submission at the capture; cap*: kept for the next capture
+                 int capr; size_t capoff, capbytes; } ucap;   // ranges sorted by both endpoints; off: into bytes; done: the GPU had completed this submission at the capture; cap*: kept for the next capture
 
 int vkb_ucap_on(void) {
     static int on = -1;
@@ -168,6 +168,30 @@ typedef struct { uint64_t lo, hi, fence; } pend_t;
 static pend_t *g_pend;
 static int g_npend, g_cappend;
 
+static int first_range_after(uint64_t address, int count) {
+    int lo = 0, hi = count;
+    while (lo < hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (g_u[mid].hi <= address) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+
+// Only writes that had not retired at capture time can make the copied bytes stale. Both range endpoints are sorted,
+// so visit the ranges touched by each write instead of scanning the writes for every range.
+static void drop_pending_ranges(int count, uint64_t capture_fence) {
+    for (int i = 0; i < g_npend; i++) {
+        const pend_t *p = &g_pend[i];
+        if (p->fence <= capture_fence) continue;
+        for (int j = first_range_after(p->lo, count); j < count && g_u[j].lo < p->hi; j++) {
+            if (atomic_load_explicit(&g_u[j].drop_at, memory_order_relaxed) == 0) continue;
+            atomic_store_explicit(&g_u[j].drop_at, 0, memory_order_relaxed);
+            g_drops++;
+        }
+    }
+}
+
 static int arena_get(int slot, VkDeviceSize need) {
     arena_t *a = &g_arena[slot];
     if (a->cap >= need) return 1;
@@ -212,10 +236,9 @@ void mtl_sub_snapshot_ubos_cap(const uint64_t *h, int n, void *capv) {   // repl
     for (int i = 0; i < c->n; i++) {
         at = ((at + 255) & ~(VkDeviceSize)255) + (c->r[i].lo & 255);
         g_u[i] = (urng){c->r[i].lo, c->r[i].hi, at, UINT64_MAX};
-        for (int j = 0; j < g_npend && g_u[i].drop_at; j++)   // a GPU write the capture predates: read memory
-            if (g_pend[j].fence > c->done && g_pend[j].lo < c->r[i].hi && c->r[i].lo < g_pend[j].hi) { g_u[i].drop_at = 0; g_drops++; }
         at += c->r[i].hi - c->r[i].lo;
     }
+    drop_pending_ranges(c->n, c->done);
     int slot = vkb_slot();
     if (!arena_get(slot, at)) return;
     VkBuffer rb;
@@ -233,14 +256,9 @@ void mtl_sub_snapshot_ubos_cap(const uint64_t *h, int n, void *capv) {   // repl
 }
 
 static int dropped(const urng *u) { return atomic_load_explicit(&u->drop_at, memory_order_acquire) <= vkb_seq(); }
-static int find(uint64_t a) {   // the first range ending above a
-    int lo = 0, hi = g_nu;
-    while (lo < hi) { int m = (lo + hi) / 2; if (g_u[m].hi <= a) lo = m + 1; else hi = m; }
-    return lo;
-}
 int vkb_ucap_range(uint64_t addr, uint64_t size, VkBuffer *buf, VkDeviceSize *off) {
     if (!g_nu || g_uslot != vkb_slot()) return 0;   // another slot (a split submission): its copy is not this one's
-    int i = find(addr);
+    int i = first_range_after(addr, g_nu);
     if (i >= g_nu || addr < g_u[i].lo || addr + size > g_u[i].hi || dropped(&g_u[i])) return 0;
     *buf = g_arena[g_uslot].buf;
     *off = g_u[i].dev + (addr - g_u[i].lo);
@@ -250,13 +268,13 @@ int vkb_ucap_range(uint64_t addr, uint64_t size, VkBuffer *buf, VkDeviceSize *of
 int vkb_ucap_why(uint64_t addr, uint64_t size) {   // development: 0 in the copy, 1 not captured, 2 dropped by a GPU write, 3 other slot
     if (!g_nu) return 1;
     if (g_uslot != vkb_slot()) return 3;
-    int i = find(addr);
+    int i = first_range_after(addr, g_nu);
     if (i >= g_nu || addr < g_u[i].lo || addr + size > g_u[i].hi) return 1;
     return dropped(&g_u[i]) ? 2 : 0;
 }
 void vkb_ucap_read(uint64_t addr, void *out, size_t n) {   // CPU reads of uniform memory (pointers in uniform buffers)
     if (g_nu) {
-        int i = find(addr);
+        int i = first_range_after(addr, g_nu);
         if (i < g_nu && addr >= g_u[i].lo && addr + n <= g_u[i].hi && !dropped(&g_u[i])) { memcpy(out, g_ubytes + g_uoff[i] + (addr - g_u[i].lo), n); return; }
     }
     memcpy(out, (const void *)(uintptr_t)addr, n);
@@ -264,7 +282,7 @@ void vkb_ucap_read(uint64_t addr, void *out, size_t n) {   // CPU reads of unifo
 void vkb_ucap_drop(uint64_t addr, uint64_t len) {   // a GPU write to [addr, addr+len): copies it overlaps are dropped
     if (vkb_mt_recording()) return;   // the walk of the submission dropped it already (vkb_mt.c)
     uint64_t at = vkb_seq();
-    for (int i = find(addr); i < g_nu && g_u[i].lo < addr + len; i++)
+    for (int i = first_range_after(addr, g_nu); i < g_nu && g_u[i].lo < addr + len; i++)
         if (atomic_load(&g_u[i].drop_at) > at) { atomic_store_explicit(&g_u[i].drop_at, at, memory_order_release); g_drops++; }
     if (!vkb_ucap_on()) return;
     if (g_npend == g_cappend) { g_cappend = g_cappend ? g_cappend * 2 : 1024; if (!(g_pend = realloc(g_pend, sizeof *g_pend * (size_t)g_cappend))) die("pending GPU writes"); }
